@@ -1,0 +1,136 @@
+name: Validate uv314 migration
+on:
+  push:
+    branches: ['chore/stabilize-zly-baseline']
+    paths: ['.github/workflows/apply-uv314.yml']
+permissions:
+  contents: read
+jobs:
+  validate-source:
+    if: github.repository == 'salyvinagre/plazia-links'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: plazia_test
+          POSTGRES_PASSWORD: local-ci-only
+          POSTGRES_DB: plazia_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U plazia_test -d plazia_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      ENVIRONMENT: test
+      SECRET_KEY: ci-only-test-secret-not-for-production-0001
+      JWT_SECRET: ci-only-test-secret-not-for-production-0002
+      RATE_LIMIT_ENABLED: 'false'
+      REDIS_URL: redis://localhost:6379/15
+      UV_PYTHON: '3.14'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.12.21'
+      - name: Install target interpreter and reproducible formatter
+        run: |
+          uv python install 3.14
+          uv tool install --python 3.14 ruff==0.16.10
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+      - name: Apply reviewed deterministic source changes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import gzip, hashlib
+          data = b''.join(Path(f'.github/scripts/uv314.{i}.part').read_bytes() for i in range(1, 5))
+          source = gzip.decompress(data)
+          assert hashlib.sha256(source).hexdigest() == '4ee8eac2e20531a6ddefe868d3ef6f3705c53bf22ab05fc3ca0422d2289ce4f1'
+          Path('/tmp/apply_uv314.py').write_bytes(source)
+          PY
+          uv run --no-project --python 3.14 python /tmp/apply_uv314.py
+          rm .github/scripts/uv314.*.part
+          uv lock
+          uv sync --locked --all-extras
+      - name: Verify all quality checks
+        run: |
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+          uv run --locked mypy app/ worker/
+          git diff --check
+      - name: Run complete unit and API suite
+        run: uv run --locked pytest -q --junitxml=/tmp/pytest-uv314.xml
+      - name: Validate PostgreSQL 18 schema and application behavior
+        env:
+          DATABASE_URL: postgresql+asyncpg://plazia_test:local-ci-only@localhost:5432/plazia_test
+          POSTGRES_TEST_URL: postgresql+asyncpg://plazia_test:local-ci-only@localhost:5432/plazia_test
+        run: |
+          uv run --locked alembic upgrade head
+          uv run --locked alembic check
+          uv run --locked pytest -q tests/test_postgres_runtime.py
+      - name: Verify distributable and production image
+        run: |
+          uv build --no-sources
+          docker build -f infrastructure/Dockerfile -t plazia-links:uv314 .
+          docker run --rm plazia-links:uv314 python -c 'import os, sys; from pathlib import Path; assert sys.version_info[:2] == (3, 14); assert os.getuid() != 0; assert Path("app/templates/base.html").exists(); import app.main; import worker.run'
+      - name: Store validated source objects without moving any branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os, subprocess, urllib.request
+          def git(*args):
+              return subprocess.check_output(['git', *args]).decode().strip()
+          names = set(git('diff', '--name-only', 'HEAD').splitlines())
+          names.update(git('ls-files', '--others', '--exclude-standard').splitlines())
+          roots = {'app', 'worker', 'tests', 'migrations', 'infrastructure', 'docs'}
+          files = {'.env.example', '.python-version', 'pyproject.toml', 'uv.lock', 'README.md'}
+          entries, manifest = [], {}
+          for name in sorted(names):
+              p = Path(name)
+              if p.parts[0] not in roots and name not in files:
+                  continue
+              item = {'path': name, 'mode': '100644', 'type': 'blob'}
+              if p.exists():
+                  content = p.read_bytes()
+                  item['content'] = content.decode()
+                  manifest[name] = hashlib.sha256(content).hexdigest()
+              else:
+                  item['sha'] = None
+                  manifest[name] = None
+              entries.append(item)
+          assert len(entries) > 100
+          payload = json.dumps({'base_tree': git('rev-parse', 'HEAD^{tree}'), 'tree': entries}).encode()
+          request = urllib.request.Request('https://api.github.com/repos/salyvinagre/plazia-links/git/trees', data=payload, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'}, method='POST')
+          with urllib.request.urlopen(request) as response:
+              tree = json.load(response)
+          output = Path('/tmp/uv314-result')
+          output.mkdir()
+          result = {'tree_sha': tree['sha'], 'base_commit': git('rev-parse', 'HEAD'), 'file_count': len(entries)}
+          (output/'tree.json').write_text(json.dumps(result, indent=2))
+          (output/'manifest.json').write_text(json.dumps(manifest, indent=2))
+          (output/'uv.lock').write_bytes(Path('uv.lock').read_bytes())
+          (output/'ci.yml').write_bytes(Path('.github/workflows/ci.yml').read_bytes())
+          print(json.dumps(result))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: uv314-validated-source
+          path: |
+            /tmp/uv314-result/
+            /tmp/pytest-uv314.xml
+          if-no-files-found: warn
+          retention-days: 3
