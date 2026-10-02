@@ -52,6 +52,8 @@ jobs:
           data = base64.b64decode(''.join(parts), validate=True)
           assert hashlib.sha256(data).hexdigest() == '14a1125f64b04dec0c9ebdd1f172a62eb60b7f9342c71a7f084b63524c95d713'
           subprocess.run(['git', 'apply', '--index', '-'], input=lzma.decompress(data), check=True)
+          subprocess.run(['git', 'apply', '--index', '.github/identity-fixes.patch'], check=True)
+          pathlib.Path('.github/identity-fixes.patch').unlink()
           for path in pathlib.Path('.github').glob('identity-patch-*.b64'):
               path.unlink()
           for name in ('identity-apply.yml', 'identity-review.yml'):
