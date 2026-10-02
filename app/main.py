@@ -14,8 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.config import IdentitySettings, settings
-from app.contexts.access.domain.principal import AccessDeniedError
-from app.contexts.links.application.management import LinkConflictError, LinkNotFoundError
+from app.contexts.access.contracts import AccessDeniedError
+from app.contexts.links.contracts import InvalidLinkError, LinkConflictError, LinkNotFoundError
 from app.core.exceptions import (
     http_exception_handler,
     unhandled_exception_handler,
@@ -83,6 +83,10 @@ async def access_denied(request: Request, exc: Exception) -> JSONResponse:
 
 
 async def link_error(request: Request, exc: Exception) -> JSONResponse:
+    if isinstance(exc, InvalidLinkError):
+        return JSONResponse(
+            {"detail": "invalid_link"}, status_code=422, headers={"Cache-Control": "no-store"}
+        )
     conflict = isinstance(exc, LinkConflictError)
     return JSONResponse(
         {"detail": "short_code_unavailable" if conflict else "link_not_found"},
@@ -115,6 +119,7 @@ def create_app(
     application.add_exception_handler(AccessDeniedError, access_denied)
     application.add_exception_handler(LinkNotFoundError, link_error)
     application.add_exception_handler(LinkConflictError, link_error)
+    application.add_exception_handler(InvalidLinkError, link_error)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,

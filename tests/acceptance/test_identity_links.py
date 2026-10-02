@@ -7,7 +7,7 @@ import jwt
 import pytest
 from sqlalchemy import select
 
-from app.models.identity import WorkspaceIdentityBinding
+from app.contexts.access.adapters.models import WorkspaceIdentityBinding
 from tests.identity_support import ORG_A, ORG_B, RESOURCE
 
 
@@ -405,11 +405,11 @@ async def test_session_expiration_and_tenant_disable_take_effect(
 
 @pytest.mark.asyncio
 async def test_operator_binding_is_idempotent_and_never_retargets(identity_db, issuer):
-    from app.contexts.access.adapters.provisioning import WorkspaceProvisioning
     from app.models.user import User
     from app.models.workspace import Workspace
+    from app.platform.access import workspace_provisioning
 
-    provisioning = WorkspaceProvisioning(identity_db, issuer.url)
+    provisioning = workspace_provisioning(identity_db, issuer.url)
     first = await provisioning.bind(ORG_A, "First")
     assert await provisioning.bind(ORG_A, "Same tenant") == first
     second = await provisioning.bind(ORG_B, "Second")

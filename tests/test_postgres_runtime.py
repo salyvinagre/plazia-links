@@ -121,15 +121,14 @@ async def test_postgres_identity_binding_and_management(
     from unittest.mock import AsyncMock
     from uuid import uuid7
 
-    from app.contexts.access.adapters.provisioning import WorkspaceProvisioning
     from app.contexts.access.contracts import Principal
-    from app.contexts.links.application.management import LinkDraft, LinkNotFoundError
-    from app.platform.access import link_management
+    from app.contexts.links.contracts import LinkDraft, LinkNotFoundError
+    from app.platform.access import link_management, workspace_provisioning
 
     monkeypatch.setattr("app.services.link_service._invalidate_link_cache", AsyncMock())
     issuer = "https://issuer.example.test"
     organization = f"org_{uuid7()}"
-    operator = WorkspaceProvisioning(postgres_session, issuer)
+    operator = workspace_provisioning(postgres_session, issuer)
     workspace_id = await operator.bind(organization, "Identity PostgreSQL test")
     principal = Principal(
         issuer,
@@ -140,7 +139,7 @@ async def test_postgres_identity_binding_and_management(
         int(time()) + 300,
         str(uuid7()),
     )
-    manager = await link_management(postgres_session, principal)
+    manager = link_management(postgres_session, principal)
     link = await manager.create(LinkDraft("https://example.com/identity"))
     assert (await manager.get(link.id)).id == link.id
     loaded = await postgres_session.get(Workspace, workspace_id)
@@ -148,3 +147,65 @@ async def test_postgres_identity_binding_and_management(
     await manager.delete(link.id)
     with pytest.raises(LinkNotFoundError):
         await manager.get(link.id)
+
+
+@pytest.mark.asyncio
+async def test_postgres_managed_collision_keeps_request_transaction_usable(postgres_session):
+    from time import time
+    from uuid import uuid7
+
+    from app.contexts.access.contracts import Principal
+    from app.contexts.links.contracts import LinkConflictError, LinkDraft
+    from app.platform.access import link_management, workspace_provisioning
+
+    issuer, org = "https://issuer.example.test", f"org_{uuid7()}"
+    await workspace_provisioning(postgres_session, issuer).bind(org, "Collision test")
+    principal = Principal(
+        issuer,
+        "subject",
+        "client",
+        org,
+        frozenset({"create:links", "read:links"}),
+        int(time()) + 60,
+        "t",
+    )
+    manager = link_management(postgres_session, principal)
+    code = "c" + uuid7().hex[-8:]
+    draft = LinkDraft("https://example.com", short_code=code)
+    first = await manager.create(draft)
+    with pytest.raises(LinkConflictError):
+        await manager.create(draft)
+    assert (await manager.get(first.id)).id == first.id
+    second = await manager.create(LinkDraft("https://example.com/another"))
+    assert second.id != first.id
+
+
+@pytest.mark.asyncio
+async def test_postgres_audit_failure_rolls_back_the_managed_write(postgres_session):
+    from time import time
+    from unittest.mock import AsyncMock
+    from uuid import uuid7
+
+    from app.contexts.access.contracts import Principal
+    from app.contexts.links.adapters.repository import SqlLinkRepository
+    from app.contexts.links.application.management import LinkManagement
+    from app.contexts.links.contracts import LinkDraft
+    from app.models.link import Link
+    from app.platform.access import workspace_access, workspace_provisioning
+
+    issuer, org = "https://issuer.example.test", f"org_{uuid7()}"
+    await workspace_provisioning(postgres_session, issuer).bind(org, "Audit transaction test")
+    principal = Principal(
+        issuer, "subject", "client", org, frozenset({"create:links"}), int(time()) + 60, "t"
+    )
+    audit = AsyncMock()
+    audit.record.side_effect = RuntimeError("audit unavailable")
+    manager = LinkManagement(
+        principal, workspace_access(postgres_session), SqlLinkRepository(postgres_session), audit
+    )
+    code = "a" + uuid7().hex[-8:]
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        # Represents the atomic boundary owned by the outer command/request unit of work.
+        async with postgres_session.begin_nested():
+            await manager.create(LinkDraft("https://example.com", short_code=code))
+    assert await postgres_session.scalar(select(Link).where(Link.short_code == code)) is None

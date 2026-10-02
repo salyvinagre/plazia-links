@@ -176,3 +176,42 @@ jobs:
           name: identity-browser-${{ github.sha }}
           path: reports/identity-browser.*
           retention-days: 7
+
+  serverless-inputs:
+    name: Serverless build inputs (Python 3.14, native uv floor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ENVIRONMENT: production
+      AUTH_MODE: identity
+      DEPLOYMENT_MODE: serverless
+      DATABASE_URL: postgresql+asyncpg://ci:ci@database.example.invalid/preview?ssl=verify-full
+      REDIS_URL: rediss://redis.example.invalid:6379/0
+      IDENTITY_ISSUER: https://issuer.example.invalid
+      IDENTITY_AUDIENCE: https://links-api.example.invalid
+      IDENTITY_CLIENT_ID: ci-browser-client
+      IDENTITY_CLIENT_SECRET: ci-only-not-an-actual-client-secret
+      IDENTITY_PUBLIC_BASE_URL: https://preview.example.invalid
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          # Also check the manager version used by the native Python builder.
+          version: '0.10.11'
+      - run: uv python install 3.14
+      - name: Check native-builder lock compatibility
+        run: |
+          uv lock --check
+          uv sync --locked --no-dev
+      - name: Read-only build preflight and ASGI exports
+        run: |
+          uv run --locked --no-dev python -m app.platform.serverless
+          uv run --locked --no-dev python - <<'PY'
+          import importlib.util
+          from app.index import app
+          from app.main import app as container_app
+          from api.index import app as legacy_export
+          assert app is container_app is legacy_export
+          assert importlib.util.find_spec("playwright") is None
+          assert importlib.util.find_spec("pytest") is None
+          PY

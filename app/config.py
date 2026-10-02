@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     environment: str = "development"
+    deployment_mode: Literal["container", "serverless"] = "container"
     sentry_dsn: str = ""
     auth_mode: Literal["identity", "legacy"] = "identity"
     database_url: str = "sqlite+aiosqlite:///./zly.db"
@@ -43,10 +44,25 @@ class Settings(BaseSettings):
 
     def validate_runtime_profile(self, mode: Literal["identity", "legacy"] | None = None) -> None:
         production = self.environment.lower() in {"production", "prod"}
+        if self.deployment_mode == "serverless":
+            if (mode or self.auth_mode) != "identity":
+                raise RuntimeError("Serverless deployment requires Identity authentication")
+            if not self.database_url.startswith("postgresql+asyncpg://"):
+                raise RuntimeError("Serverless deployment requires an external PostgreSQL database")
+            if production:
+                from urllib.parse import parse_qs, urlsplit
+
+                ssl = parse_qs(urlsplit(self.database_url).query).get("ssl", [])
+                if ssl != ["verify-full"]:
+                    raise RuntimeError("Serverless PostgreSQL requires ssl=verify-full")
+                if not self.redis_url.startswith("rediss://"):
+                    raise RuntimeError("Serverless Redis requires TLS (rediss://)")
         if production and (mode or self.auth_mode) == "legacy":
             raise RuntimeError("Legacy authentication is forbidden in production")
         if production and (
-            self.secret_key == "change-me-in-production" or len(self.secret_key) < 32
+            self.secret_key == "change-me-in-production"
+            or self.secret_key.startswith("REPLACE_")
+            or len(self.secret_key) < 32
         ):
             raise RuntimeError("Production SECRET_KEY must contain at least 32 random characters")
 
@@ -73,7 +89,7 @@ if settings.secret_key == "change-me-in-production":
         stacklevel=2,
     )
 
-if settings.jwt_secret == "change-me-in-production":
+if settings.auth_mode == "legacy" and settings.jwt_secret == "change-me-in-production":
     warn(
         "JWT secret is still the default value 'change-me-in-production'. "
         "Set a strong JWT_SECRET in production (at least 32 bytes).",
@@ -139,6 +155,8 @@ class IdentitySettings(BaseSettings):
             raise ValueError(
                 "Identity issuer, audience and confidential browser client are required"
             )
+        if production and self.client_secret.get_secret_value().startswith("REPLACE_"):
+            raise ValueError("Replace the example Identity client secret before deployment")
         if self.audience == self.client_id:
             raise ValueError("Identity API audience and browser client ID must be distinct")
         if not 60 <= self.session_ttl <= 3600:

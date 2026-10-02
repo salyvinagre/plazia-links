@@ -5,7 +5,8 @@ Identity's private implementation packages. The shared `plazia-authlib` source
 was not available in the current public portfolio repository; Links does not
 introduce a sibling-checkout dependency or copy Identity internals.
 
-OAuthlib owns PKCE and the code/token form parsing; HTTPX performs the
+The application owns browser state, session lifetime and a random PKCE verifier.
+The OAuthlib adapter computes the S256 challenge and parses code/token forms; HTTPX performs the
 confidential exchange, and PyJWT with cryptography validates signatures. This is
 a service-specific adapter, not a generic identity-provider framework.
 
@@ -164,3 +165,10 @@ Plazia Identity deployment; that final issuer/client setup is operator-owned.
 
 There is no reserved-link, pool, subscription, notification or outbox feature in
 this slice. These will build on the verified principal and local tenant binding.
+
+## Context boundaries and previews
+
+[ARCHITECTURE.md](ARCHITECTURE.md) documents the access ports and pure session
+policy. [VERCEL.md](VERCEL.md) describes an isolated serverless test deployment,
+including the fixed origin/callback and externally provisioned PostgreSQL/Redis.
+The authentication contract is identical in both deployment profiles.

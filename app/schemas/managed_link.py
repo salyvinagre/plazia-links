@@ -2,12 +2,10 @@
 
 from datetime import datetime
 from typing import Self
-from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.contexts.links.application.management import LinkDraft, LinkPatch
-from app.core.security import validate_private_url
+from app.contexts.links.contracts import Destination, LinkDraft, LinkPatch, PublicCode
 
 
 class CreateLinkRequest(BaseModel):
@@ -21,41 +19,12 @@ class CreateLinkRequest(BaseModel):
     @field_validator("destination_url")
     @classmethod
     def destination(cls, value: str) -> str:
-        if any(ord(c) < 33 or ord(c) == 127 for c in value) or "\\" in value:
-            raise ValueError("Destination must be an HTTP(S) URL without whitespace")
-        try:
-            parsed = urlsplit(value)
-            _ = parsed.port
-        except ValueError as exc:
-            raise ValueError("Invalid destination URL") from exc
-        if (
-            parsed.scheme not in {"http", "https"}
-            or not parsed.hostname
-            or parsed.username
-            or parsed.password
-        ):
-            raise ValueError("Destination must be an absolute HTTP(S) URL without user info")
-        validate_private_url(value)
-        return value  # Preserve fragments/query ordering; do not deduplicate destinations.
+        return Destination(value).value
 
     @field_validator("short_code")
     @classmethod
     def public_code(cls, value: str | None) -> str | None:
-        if value and value.lower() in {
-            "api",
-            "auth",
-            "login",
-            "logout",
-            "dashboard",
-            "health",
-            "static",
-            "docs",
-            "redoc",
-            "register",
-            "signed-out",
-        }:
-            raise ValueError("This code is reserved for the application")
-        return value
+        return PublicCode(value).value if value is not None else None
 
     def draft(self) -> LinkDraft:
         return LinkDraft(self.destination_url, self.title, self.short_code, self.notes)

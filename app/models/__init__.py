@@ -48,4 +48,4 @@ __all__ = [
     "EmailCampaignClick",
 ]
 
-from app.models.identity import WorkspaceIdentityBinding as WorkspaceIdentityBinding
+from app.contexts.access.adapters.models import WorkspaceIdentityBinding as WorkspaceIdentityBinding

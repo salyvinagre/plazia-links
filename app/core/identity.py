@@ -2,7 +2,7 @@
 
 from fastapi import HTTPException, Request
 
-from app.contexts.access.domain.principal import (
+from app.contexts.access.contracts import (
     AccessUnavailableError,
     BrowserSession,
     InvalidCredentialsError,

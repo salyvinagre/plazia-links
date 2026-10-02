@@ -43,12 +43,12 @@ async def _list_superusers() -> None:
 
 async def _organization_command(args: argparse.Namespace) -> None:
     from app.config import IdentitySettings, settings
-    from app.contexts.access.adapters.provisioning import WorkspaceProvisioning
+    from app.platform.access import workspace_provisioning
 
     config = IdentitySettings()
     config.validate_deployment(production=settings.environment.lower() in {"production", "prod"})
     async with get_session_factory()() as db:
-        provisioning = WorkspaceProvisioning(db, config.issuer)
+        provisioning = workspace_provisioning(db, config.issuer)
         if args.command == "bind-organization":
             workspace_id = await provisioning.bind(args.organization, args.name, args.workspace_id)
             await db.commit()

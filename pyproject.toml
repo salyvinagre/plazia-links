@@ -74,7 +74,7 @@ geo = [
 ]
 
 [tool.uv]
-required-version = ">=0.12.21"
+required-version = ">=0.10.11"
 
 [tool.ruff]
 target-version = "py314"
@@ -92,3 +92,9 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.vercel]
+entrypoint = "app.index:app"
+
+[tool.vercel.scripts]
+build = "python -m app.platform.serverless"

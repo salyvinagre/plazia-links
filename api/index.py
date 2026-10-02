@@ -1,8 +1,3 @@
-"""Compatibility ASGI entry point retained for existing deployments."""
-
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
+"""ASGI alias for existing integrations; Vercel uses app/index.py natively."""
 
 from app.main import app as app

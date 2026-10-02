@@ -1,29 +1,24 @@
-"""Reuse Zly's link persistence without importing its local user/authentication model."""
+"""SQL adapter for the canonical link table. No HTTP schemas or legacy service calls."""
 
-from sqlalchemy import select
+from datetime import UTC, datetime
+
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.contexts.access.contracts import Principal
-from app.contexts.links.application.management import (
+from app.contexts.links.application.models import LinkPage, LinkView
+from app.contexts.links.domain.link import (
     LinkConflictError,
     LinkDraft,
     LinkNotFoundError,
-    LinkPage,
     LinkPatch,
-    LinkView,
 )
 from app.models.link import Link
-from app.schemas.link import LinkCreate, LinkUpdate
-from app.services import link_service
-from app.services.audit_service import log_audit_event
 
 
 class SqlLinkRepository:
-    def __init__(self, db: AsyncSession, workspace_id: str, actor: Principal) -> None:
+    def __init__(self, db: AsyncSession) -> None:
         self._db = db
-        self._workspace_id = workspace_id
-        self._actor = actor
 
     @staticmethod
     def _view(link: Link) -> LinkView:
@@ -38,71 +33,73 @@ class SqlLinkRepository:
             link.updated_at,
         )
 
-    async def _get(self, link_id: str) -> Link:
+    async def _get(self, workspace_id: str, link_id: str) -> Link:
         link = await self._db.scalar(
-            select(Link).where(Link.id == link_id, Link.workspace_id == self._workspace_id)
+            select(Link).where(Link.id == link_id, Link.workspace_id == workspace_id)
         )
         if link is None:
             raise LinkNotFoundError
         return link
 
-    async def _audit(self, action: str, link_id: str) -> None:
-        await log_audit_event(
-            self._db,
-            action=action,
-            resource_type="link",
-            resource_id=link_id,
-            workspace_id=self._workspace_id,
-            details=self._actor.actor_details(),
+    async def list(self, workspace_id: str, page: int, page_size: int) -> LinkPage:
+        total = (
+            await self._db.scalar(
+                select(func.count()).select_from(Link).where(Link.workspace_id == workspace_id)
+            )
+            or 0
+        )
+        offset = (page - 1) * page_size
+        links = (
+            await self._db.scalars(
+                select(Link)
+                .where(Link.workspace_id == workspace_id)
+                .order_by(Link.created_at.desc(), Link.id.desc())
+                .offset(offset)
+                .limit(page_size)
+            )
+        ).all()
+        return LinkPage(
+            [self._view(link) for link in links], total, page, page_size, offset + page_size < total
         )
 
-    async def list(self, page: int, page_size: int) -> LinkPage:
-        links, total, has_next = await link_service.get_links(
-            self._db, self._workspace_id, page, page_size
-        )
-        return LinkPage([self._view(link) for link in links], total, page, page_size, has_next)
+    async def get(self, workspace_id: str, link_id: str) -> LinkView:
+        return self._view(await self._get(workspace_id, link_id))
 
-    async def get(self, link_id: str) -> LinkView:
-        return self._view(await self._get(link_id))
+    async def create(self, workspace_id: str, draft: LinkDraft) -> LinkView:
+        try:
+            # A collision rolls back only this insert; the request transaction stays usable.
+            async with self._db.begin_nested():
+                link = Link(
+                    workspace_id=workspace_id,
+                    short_code=draft.short_code,
+                    destination_url=draft.destination_url,
+                    title=draft.title,
+                    notes=draft.notes,
+                    user_id=None,
+                )
+                self._db.add(link)
+                await self._db.flush()
+                await self._db.refresh(link)
+            return self._view(link)
+        except IntegrityError as exc:
+            cause = getattr(exc.orig, "__cause__", None)
+            constraint = getattr(cause, "constraint_name", None)
+            if (
+                getattr(exc.orig, "sqlstate", None) == "23505"
+                and constraint == "ix_links_short_code"
+            ) or "UNIQUE constraint failed: links.short_code" in str(exc.orig):
+                raise LinkConflictError from exc
+            raise
 
-    async def create(self, draft: LinkDraft) -> LinkView:
-        for _ in range(5):
-            try:
-                # A code collision rolls back only this insert; the outer UoW stays usable.
-                async with self._db.begin_nested():
-                    link = await link_service.create_link(
-                        self._db,
-                        LinkCreate(
-                            destination_url=draft.destination_url,
-                            title=draft.title,
-                            notes=draft.notes,
-                            short_code=draft.short_code,
-                            workspace_id=self._workspace_id,
-                        ),
-                        emit_webhooks=False,
-                    )
-                await self._audit("create", link.id)
-                return self._view(link)
-            except IntegrityError as exc:
-                sqlstate = getattr(exc.orig, "sqlstate", None)
-                if sqlstate != "23505" and "UNIQUE constraint failed: links.short_code" not in str(
-                    exc.orig
-                ):
-                    raise
-                if draft.short_code:
-                    raise LinkConflictError from exc
-        raise LinkConflictError
+    async def update(self, workspace_id: str, link_id: str, patch: LinkPatch) -> LinkView:
+        link = await self._get(workspace_id, link_id)
+        for field in patch.fields:
+            setattr(link, field, getattr(patch, field))
+        link.updated_at = datetime.now(UTC)
+        await self._db.flush()
+        await self._db.refresh(link)
+        return self._view(link)
 
-    async def update(self, link_id: str, patch: LinkPatch) -> LinkView:
-        link = await self._get(link_id)
-        values: dict[str, str | bool | None] = {
-            field: getattr(patch, field) for field in patch.fields
-        }
-        updated = await link_service.update_link(self._db, link, LinkUpdate.model_validate(values))
-        await self._audit("update", link_id)
-        return self._view(updated)
-
-    async def delete(self, link_id: str) -> None:
-        link = await self._get(link_id)
-        await link_service.delete_link(self._db, link, emit_webhooks=False)
-        await self._audit("delete", link_id)
+    async def delete(self, workspace_id: str, link_id: str) -> None:
+        await self._db.delete(await self._get(workspace_id, link_id))
+        await self._db.flush()

@@ -7,10 +7,10 @@ import hmac
 import threading
 from collections.abc import Mapping
 from typing import Any
-from uuid import UUID
 
 import jwt
 
+from app.contexts.access.domain.organization import OrganizationId
 from app.contexts.access.domain.principal import (
     AccessUnavailableError,
     InvalidCredentialsError,
@@ -75,12 +75,7 @@ class JwtVerifier:
     async def access_token(self, token: str) -> Principal:
         claims = await asyncio.to_thread(self._decode, token, self.audience, True)
         try:
-            organization = self._text(claims, "org")
-            if not organization.startswith("org_"):
-                raise InvalidCredentialsError
-            identifier = UUID(organization[4:])
-            if identifier.version != 7 or organization != f"org_{identifier}":
-                raise InvalidCredentialsError
+            organization = OrganizationId(self._text(claims, "org")).value
             scopes = claims.get("scope", "")
             if not isinstance(scopes, str):
                 raise InvalidCredentialsError

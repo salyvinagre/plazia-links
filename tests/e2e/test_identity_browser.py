@@ -19,14 +19,14 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.models.identity import WorkspaceIdentityBinding
+from app.contexts.access.adapters.models import WorkspaceIdentityBinding
 from tests.identity_support import ORG_A, LocalIssuer
 
 pytestmark = pytest.mark.skipif(os.getenv("IDENTITY_E2E") != "1", reason="IDENTITY_E2E not enabled")
 
 
-@pytest.fixture(scope="module")
-def live_application(tmp_path_factory):
+@pytest.fixture(scope="module", params=["container", "serverless"])
+def live_application(tmp_path_factory, request):
     from playwright.sync_api import sync_playwright
 
     faulthandler.enable()
@@ -41,6 +41,7 @@ def live_application(tmp_path_factory):
     env = {
         **os.environ,
         "AUTH_MODE": "identity",
+        "DEPLOYMENT_MODE": request.param,
         "ENVIRONMENT": "test",
         "DATABASE_URL": postgres,
         "IDENTITY_ISSUER": issuer.url,
@@ -76,7 +77,7 @@ def live_application(tmp_path_factory):
                 sys.executable,
                 "-m",
                 "uvicorn",
-                "app.main:app",
+                "app.index:app" if request.param == "serverless" else "app.main:app",
                 "--host",
                 "127.0.0.1",
                 "--port",

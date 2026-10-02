@@ -7,7 +7,7 @@ from fastapi.routing import APIRoute
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.contexts.access.contracts import Principal
-from app.contexts.links.application.management import LinkView
+from app.contexts.links.contracts import LinkView
 from app.core.dependencies import get_db
 from app.core.identity import api_principal, runtime
 from app.platform.access import link_management
@@ -45,7 +45,7 @@ async def list_links(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> ManagedLinkPage:
-    result = await (await link_management(db, actor)).list(page, page_size)
+    result = await link_management(db, actor).list(page, page_size)
     return ManagedLinkPage(
         items=[_response(item, request) for item in result.items],
         total=result.total,
@@ -59,28 +59,26 @@ async def list_links(
 async def create_link(
     data: CreateLinkRequest, request: Request, response: Response, db: Db, actor: Actor
 ) -> ManagedLinkResponse:
-    link = await (await link_management(db, actor)).create(data.draft())
+    link = await link_management(db, actor).create(data.draft())
     response.headers["Location"] = f"/api/v1/links/{link.id}"
     return _response(link, request)
 
 
 @router.get("/{link_id}", response_model=ManagedLinkResponse, operation_id="getLink")
 async def get_link(link_id: str, request: Request, db: Db, actor: Actor) -> ManagedLinkResponse:
-    return _response(await (await link_management(db, actor)).get(link_id), request)
+    return _response(await link_management(db, actor).get(link_id), request)
 
 
 @router.patch("/{link_id}", response_model=ManagedLinkResponse, operation_id="updateLink")
 async def update_link(
     link_id: str, data: UpdateLinkRequest, request: Request, db: Db, actor: Actor
 ) -> ManagedLinkResponse:
-    return _response(
-        await (await link_management(db, actor)).update(link_id, data.patch()), request
-    )
+    return _response(await link_management(db, actor).update(link_id, data.patch()), request)
 
 
 @router.delete("/{link_id}", status_code=204, operation_id="deleteLink")
 async def delete_link(link_id: str, db: Db, actor: Actor) -> None:
-    await (await link_management(db, actor)).delete(link_id)
+    await link_management(db, actor).delete(link_id)
 
 
 # OAuth2 scopes are enforced by LinkManagement, not inferred from token roles.

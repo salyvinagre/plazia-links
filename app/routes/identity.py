@@ -10,17 +10,16 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.contexts.access.adapters.workspaces import WorkspaceAccess
-from app.contexts.access.domain.principal import (
+from app.contexts.access.contracts import (
     AccessDeniedError,
     AccessUnavailableError,
     BrowserSession,
     InvalidCredentialsError,
 )
-from app.contexts.links.application.management import LinkConflictError
+from app.contexts.links.contracts import LinkConflictError
 from app.core.dependencies import get_db
 from app.core.identity import browser_session, csrf, runtime
-from app.platform.access import link_management
+from app.platform.access import link_management, workspace_access
 from app.schemas.managed_link import CreateLinkRequest, UpdateLinkRequest
 
 router = APIRouter(include_in_schema=False)
@@ -68,7 +67,7 @@ async def callback(request: Request, db: Db) -> Response:
             request.query_params["code"],
         )
         # A token does not auto-provision a workspace or turn the first visitor into its owner.
-        await WorkspaceAccess.resolve(db, session.principal)
+        await workspace_access(db).resolve(session.principal)
         await auth.browser.logout(request.cookies.get(auth.config.session_cookie, ""))
         handle = await auth.browser.save(session)
         response: Response = _redirect("/dashboard/links")
@@ -139,8 +138,8 @@ async def dashboard() -> Response:
 
 @router.get("/dashboard/links", response_class=HTMLResponse)
 async def links(request: Request, db: Db, session: Session, page: int = Query(1, ge=1)) -> Response:
-    workspace = await WorkspaceAccess.resolve(db, session.principal)
-    result = await (await link_management(db, session.principal)).list(page, 20)
+    workspace = await workspace_access(db).resolve(session.principal)
+    result = await link_management(db, session.principal).list(page, 20)
     return templates.TemplateResponse(
         request,
         "identity/links.html",
@@ -156,7 +155,7 @@ async def links(request: Request, db: Db, session: Session, page: int = Query(1,
 @router.get("/dashboard/links/new", response_class=HTMLResponse)
 async def new_form(request: Request, db: Db, session: Session) -> Response:
     session.principal.require("create:links")
-    await WorkspaceAccess.resolve(db, session.principal)
+    await workspace_access(db).resolve(session.principal)
     return templates.TemplateResponse(
         request,
         "identity/link_form.html",
@@ -172,7 +171,7 @@ async def new_form(request: Request, db: Db, session: Session) -> Response:
 @router.get("/dashboard/links/{link_id}/edit", response_class=HTMLResponse)
 async def edit_form(link_id: str, request: Request, db: Db, session: Session) -> Response:
     session.principal.require("update:links")
-    link = await (await link_management(db, session.principal)).get(link_id)
+    link = await link_management(db, session.principal).get(link_id)
     return templates.TemplateResponse(
         request,
         "identity/link_form.html",
@@ -192,7 +191,7 @@ async def create_link(request: Request, db: Db, session: Session) -> Response:
     values = {
         key: str(form.get(key, "")) for key in ("destination_url", "title", "notes", "short_code")
     }
-    manager = await link_management(db, session.principal)
+    manager = link_management(db, session.principal)
     try:
         data = CreateLinkRequest.model_validate({k: v or None for k, v in values.items()})
         await manager.create(data.draft())
@@ -229,7 +228,7 @@ async def update_link(link_id: str, request: Request, db: Db, session: Session) 
         "notes": str(form.get("notes", "")) or None,
         "is_active": form.get("is_active") == "on",
     }
-    manager = await link_management(db, session.principal)
+    manager = link_management(db, session.principal)
     try:
         await manager.update(link_id, UpdateLinkRequest.model_validate(values).patch())
     except ValidationError:
@@ -251,5 +250,5 @@ async def update_link(link_id: str, request: Request, db: Db, session: Session) 
 async def delete_link(link_id: str, request: Request, db: Db, session: Session) -> Response:
     form = await request.form(max_fields=10, max_files=0)
     csrf(request, session, str(form.get("csrf_token", "")))
-    await (await link_management(db, session.principal)).delete(link_id)
+    await link_management(db, session.principal).delete(link_id)
     return _redirect("/dashboard/links")

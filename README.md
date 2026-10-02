@@ -27,8 +27,8 @@ contacts. The current link API requires a real destination.
 
 ## Run locally
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) 0.12.21 or
-newer, Git and Docker Compose. From the repository root:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) 0.12.21
+(the development/CI version), Git and Docker Compose. From the repository root:
 
 ```sh
 git clone https://github.com/salyvinagre/plazia-links.git
@@ -98,6 +98,21 @@ Identity M2M flow issues **DPoP-bound** tokens: those require
 `Authorization: DPoP <token>` and a fresh signed `DPoP` header. The example above
 is not a bearer downgrade for machine credentials. See [the token contract](docs/IDENTITY.md#rest-access).
 
+## Serverless test deployment
+
+The native Vercel profile runs the same Python 3.14 application with external
+PostgreSQL 18 and Redis. `DEPLOYMENT_MODE=serverless` uses short-lived SQL
+connections and records clicks within the request, so a preview does not depend
+on an always-running ARQ worker. The API, OIDC callback and SSR form paths stay
+unchanged; no catch-all rewrite or alternate authentication is introduced.
+
+Follow [the Vercel test-deployment guide](docs/VERCEL.md) and use
+[`infrastructure/.env.vercel.example`](infrastructure/.env.vercel.example).
+Use a dedicated database, Redis namespace, Identity client and stable HTTPS
+origin. Apply migrations and bind the tenant explicitly before serving traffic.
+The build only validates configuration/assets; it never migrates a database.
+The files and profile tests do not mean a live Vercel deployment has been executed.
+
 ## Container deployment
 
 Copy `infrastructure/.env.example` to the root `.env`, replace all placeholders and
@@ -154,6 +169,14 @@ IDENTITY_E2E=1 uv run --locked pytest -q tests/e2e
 The E2E suite starts its own local issuer and API process. It creates test workspaces
 and links; never point it at production data. The ordinary pytest command skips
 this opt-in browser job and PostgreSQL-specific tests, which run separately in CI.
+
+## Architecture
+
+The new `access` and `links` contexts separate domain invariants, application
+use cases/ports and technical adapters. Session policy and link allocation live
+in application services, not HTTP/SQL adapters. The platform binds implementations;
+interfaces use published contracts. Architecture tests protect those dependencies.
+See [the architecture and explicit legacy boundary](docs/ARCHITECTURE.md).
 
 ## Boundaries and remaining work
 

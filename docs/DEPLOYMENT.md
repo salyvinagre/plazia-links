@@ -1,3 +1,7 @@
+> For a provider-hosted test instance, use [the Vercel guide](VERCEL.md).
+> The container and serverless profiles share the application but bind database
+> connection lifetimes and click delivery differently.
+
 # Deployment: Python 3.14 and PostgreSQL 18
 
 The maintained entry point is the [repository README](../README.md). Commands

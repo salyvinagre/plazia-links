@@ -1,89 +1,69 @@
-"""Core link use cases. Both JSON and HTML adapters enter through this boundary."""
+"""Authorized link use cases shared by JSON, browser and future command adapters."""
 
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Protocol
+from dataclasses import replace
 
-from app.contexts.access.contracts import Principal
-
-
-class LinkNotFoundError(Exception):
-    """No link is visible in the caller's workspace."""
-
-
-class LinkConflictError(Exception):
-    """The requested public code is already allocated."""
-
-
-@dataclass(frozen=True)
-class LinkDraft:
-    destination_url: str
-    title: str | None = None
-    short_code: str | None = None
-    notes: str | None = None
-
-
-@dataclass(frozen=True)
-class LinkPatch:
-    fields: frozenset[str]
-    destination_url: str | None = None
-    title: str | None = None
-    notes: str | None = None
-    is_active: bool | None = None
-
-
-@dataclass(frozen=True)
-class LinkView:
-    id: str
-    short_code: str
-    destination_url: str
-    title: str | None
-    notes: str | None
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
-
-
-@dataclass(frozen=True)
-class LinkPage:
-    items: list[LinkView]
-    total: int
-    page: int
-    page_size: int
-    has_next: bool
-
-
-class LinkRepository(Protocol):
-    """Every operation is scoped to one already-authorized local workspace."""
-
-    async def list(self, page: int, page_size: int) -> LinkPage: ...
-    async def get(self, link_id: str) -> LinkView: ...
-    async def create(self, draft: LinkDraft) -> LinkView: ...
-    async def update(self, link_id: str, patch: LinkPatch) -> LinkView: ...
-    async def delete(self, link_id: str) -> None: ...
+from app.contexts.access.contracts import Permission, Principal, WorkspaceResolver
+from app.contexts.links.application.models import LinkPage, LinkView
+from app.contexts.links.application.ports import LinkAudit, LinkRepository
+from app.contexts.links.domain.link import (
+    InvalidLinkError,
+    LinkConflictError,
+    LinkDraft,
+    LinkPatch,
+    PublicCode,
+)
 
 
 class LinkManagement:
-    def __init__(self, principal: Principal, repository: LinkRepository) -> None:
+    def __init__(
+        self,
+        principal: Principal,
+        workspaces: WorkspaceResolver,
+        repository: LinkRepository,
+        audit: LinkAudit,
+    ) -> None:
         self.principal = principal
+        self._workspaces = workspaces
         self._repository = repository
+        self._audit = audit
+
+    async def _workspace(self, permission: Permission) -> str:
+        self.principal.require(permission)
+        return (await self._workspaces.resolve(self.principal)).id
 
     async def list(self, page: int = 1, page_size: int = 20) -> LinkPage:
-        self.principal.require("read:links")
-        return await self._repository.list(page, page_size)
+        workspace = await self._workspace("read:links")
+        if page < 1 or not 1 <= page_size <= 100:
+            raise InvalidLinkError("Invalid pagination")
+        return await self._repository.list(workspace, page, page_size)
 
     async def get(self, link_id: str) -> LinkView:
-        self.principal.require("read:links")
-        return await self._repository.get(link_id)
+        return await self._repository.get(await self._workspace("read:links"), link_id)
 
     async def create(self, draft: LinkDraft) -> LinkView:
-        self.principal.require("create:links")
-        return await self._repository.create(draft)
+        workspace = await self._workspace("create:links")
+        # Allocation/retry policy belongs here, not in the SQL driver.
+        for _ in range(5):
+            candidate = (
+                draft if draft.short_code else replace(draft, short_code=PublicCode.generate())
+            )
+            try:
+                link = await self._repository.create(workspace, candidate)
+            except LinkConflictError:
+                if draft.short_code:
+                    raise
+                continue
+            await self._audit.record("create", workspace, link.id, self.principal)
+            return link
+        raise LinkConflictError
 
     async def update(self, link_id: str, patch: LinkPatch) -> LinkView:
-        self.principal.require("update:links")
-        return await self._repository.update(link_id, patch)
+        workspace = await self._workspace("update:links")
+        link = await self._repository.update(workspace, link_id, patch)
+        await self._audit.record("update", workspace, link_id, self.principal)
+        return link
 
     async def delete(self, link_id: str) -> None:
-        self.principal.require("delete:links")
-        await self._repository.delete(link_id)
+        workspace = await self._workspace("delete:links")
+        await self._repository.delete(workspace, link_id)
+        await self._audit.record("delete", workspace, link_id, self.principal)

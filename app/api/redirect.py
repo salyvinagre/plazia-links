@@ -7,12 +7,14 @@ from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.contexts.links.contracts import ClickDraft
 from app.core.dependencies import get_db
 from app.core.logging import get_logger
 from app.core.security import validate_private_url
 from app.core.user_agent import extract_domain, parse_user_agent
 from app.db import get_session_factory
 from app.models.ab import ABVariant
+from app.platform.links import click_recorder
 from app.services.ab_service import list_variants, select_variant
 from app.services.link_service import get_link_by_code
 
@@ -173,32 +175,9 @@ async def redirect(
     referer = request.headers.get("referer")
     parsed = parse_user_agent(ua)
 
-    try:
-        from app.core.arq_pool import get_arq_pool
-
-        pool = await get_arq_pool()
-        await pool.enqueue_job(
-            "process_click",
-            link_id=link.id,
-            ip=ip,
-            user_agent=ua,
-            referrer=referer,
-            variant_id=selected_variant.id if selected_variant else None,
-        )
-    except Exception as exc:
-        logger.warning(
-            "Failed to enqueue click job, recording synchronously", extra={"error": str(exc)}
-        )
-        from app.services.click_service import record_click
-
-        await record_click(
-            db,
-            link.id,
-            ip,
-            ua,
-            referer,
-            variant_id=selected_variant.id if selected_variant else None,
-        )
+    await click_recorder(db).record(
+        ClickDraft(link.id, ip, ua, referer, selected_variant.id if selected_variant else None)
+    )
 
     if not identity_profile:
         asyncio.create_task(

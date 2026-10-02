@@ -1,214 +1,126 @@
-# Architecture — Zly
+# Architecture
 
-## Overview
+Plazia Links is a single FastAPI service with a Python worker and extraction-ready
+contexts. The inherited Zly modules are a migration boundary, not an excuse to
+put new business logic into transport handlers or SQL adapters. The historical
+upstream description is kept in [upstream/ARCHITECTURE.md](upstream/ARCHITECTURE.md).
 
-Zly is a multi-tenant URL shortener built on FastAPI with async SQLAlchemy, PostgreSQL, and Redis. The system follows a service-oriented architecture with clear separation between API, business logic, and data access layers.
+This layout applies the portfolio's [layer rules](https://github.com/salyvinagre/plazia/blob/main/docs/golden-principles/architecture/LAYERS.md)
+and [runtime-composition rules](https://github.com/salyvinagre/plazia/blob/main/docs/golden-principles/architecture/runtime-composition.md).
 
-## Data Model
+## Dependency direction
 
-### Core Entities
-
-```
-User (1) ──── (N) WorkspaceMember ──── (N) Workspace (1)
-  │                                            │
-  │                                            ├── (N) Link ──── (N) Click
-  │                                            │       │
-  │                                            │       ├── (N) ABVariant
-  │                                            │       └── (1) QR Code (generated on demand)
-  │                                            │
-  │                                            ├── (1) BioPage ──── (N) BioLink
-  │                                            │
-  │                                            ├── (N) CustomDomain
-  │                                            │
-  │                                            └── (N) ApiKey
-  │
-  └── (N) Invite
+```text
+HTTP/CLI interfaces → platform composition → contexts
+                                           ├── domain
+                                           ├── application → domain + owned ports
+                                           └── adapters → application/domain
 ```
 
-### Users & Authentication
+`app/api`, `app/routes`, `app/schemas`, `app/core/identity.py` and `app/cli.py`
+are delivery adapters in the inherited directory layout. The new Identity/link
+surface imports context contracts and stable platform factories, never concrete
+context repositories or browser protocol implementations. No duplicate runtime
+container is constructed inside an endpoint.
 
-- `User` — email + bcrypt-hashed password
-- JWT-based auth with access/refresh token flow
-- `get_current_user` dependency extracts user from Bearer token via `HTTPBearer`
-- Default personal workspace auto-created on registration
+Each context publishes `contracts.py`. Cross-context imports use that module
+only. Domain and application modules are independent of FastAPI, Pydantic,
+SQLAlchemy, HTTPX, OAuthlib, JWT/Redis implementations and process settings.
+The import-boundary tests load the core with Python's site-packages disabled.
 
-### Multi-Tenancy via Workspaces
+## Access ownership
 
-- Every resource belongs to a workspace
-- `Workspace.owner_id` identifies the owner
-- `WorkspaceMember` grants member-level access to additional users
-- `verify_workspace_access(db, workspace_id, user, require_owner=False)` is the single authorization entry point
-- Owner-only operations: workspace delete/update, invites, API keys, domains
+| Concern | Placement |
+| --- | --- |
+| Verified principal, permissions, browser session and canonical organization ID | `contexts/access/domain` |
+| Sign-in/session lifetime policy and one-use attempts | `contexts/access/application/browser.py` |
+| Active binding resolution and bind/disable organization commands | `contexts/access/application/workspaces.py` |
+| Token, proof, authorization-code, browser-state and binding ports | `contexts/access/application/ports.py` |
+| OIDC HTTP exchange, JWT/DPoP verification, serialization, Redis and SQL | `contexts/access/adapters` |
+| Local binding table definition | `contexts/access/adapters/models.py` |
 
-### Links
+The browser application service receives an authorization-code client, token
+verifier and typed state-store port. OIDC requests and JSON encoding are adapter
+work; session lifetime and browser-client policy are application work. SQL reads
+return `WorkspaceBinding`/`WorkspaceView`, not an ORM instance. Provisioning
+idempotence and forbidden reassignment are application decisions.
 
-| Column | Type | Purpose |
-|---|---|---|
-| `id` | UUID | Primary key |
-| `workspace_id` | UUID FK | Tenant isolation |
-| `short_code` | String(10) | Unique redirect key |
-| `destination_url` | Text | Redirect target |
-| `title` | String | Display name |
-| `password_hash` | String | Optional password protection |
-| `activate_at` | DateTime | Scheduled activation (404 before) |
-| `expires_at` | DateTime | Scheduled expiry (410 after) |
-| `is_active` | Boolean | Manual toggle |
+No credential replica or implicit email-based ownership is introduced. Crypto
+and protocol libraries remain reusable adapters; the domain does not implement
+JWT signature algorithms or an HTTP client.
 
-### Clicks
+## Link ownership
 
-Every redirect records a `Click` with:
-- `link_id`, `workspace_id` — ownership
-- `timestamp` — when the click happened
-- `ip_address`, `user_agent` — raw request metadata
-- `referer` — HTTP Referer header
-- `country`, `city`, `region` — GeoIP (reserved for future)
-- `browser`, `os`, `device` — parsed from User-Agent
-- `variant_id` — ABVariant selected (nullable)
+`contexts/links/domain/link.py` owns destination/code validation and immutable
+creation/update commands. A caller cannot bypass those invariants by skipping
+Pydantic HTTP validation. Destination validation is lexical; it does not resolve
+DNS or make an outbound HTTP request and is not a general-purpose SSRF defence.
 
-### A/B Testing
+`LinkManagement` checks permissions and resolves the active workspace on each
+operation through the published access contract. It owns allocation/retry policy
+and write/audit orchestration. Every repository method receives an explicit bound
+workspace ID; there is no unscoped method hidden behind a scoped interface.
 
-- `ABVariant` per link with `weight` (integer, higher = more traffic)
-- `select_variant()` uses cumulative weight distribution for weighted random selection
-- Selected `variant_id` stored on `Click` for per-variant analytics
+`SqlLinkRepository` owns SQL translation, persisted rows, scoped lookup and
+mapping database conflicts to application errors. It no longer calls an HTTP
+schema or the legacy `link_service`. Only a short-code uniqueness collision is
+translated to `LinkConflictError`; unrelated integrity failures propagate. A
+savepoint keeps the outer request transaction usable after an expected collision.
+`SqlLinkAudit` shares that transaction. A failed audit aborts the outer command;
+it is not an independent commit or a notification outbox.
 
-### Bio Pages
+Commands, read models and ports are separate modules. JSON and HTML adapters
+shape their own transport responses from the same application results. SQL
+rows, HTTP response models and externally mutable dictionaries are not domain
+entities.
 
-- `BioPage` — one per workspace, slug-based public URL
-- `BioLink` — ordered link entries with title, URL, active toggle
-- Three themes: midnight, dark, light
+## Composition and deployment
 
-### Custom Domains
+`app/platform/access.py` constructs access implementations and the authorized
+link-management service. Its factories bind ports; they do not decide who may
+access a workspace. `app/platform/links.py` binds click execution to the selected
+deployment. `app/platform/database.py` controls connection lifetimes. Settings
+remain centralized in the existing runtime-owned `app/config.py`.
 
-- `CustomDomain` — domain name + verification code (uuid4) + verified flag
-- DNS TXT verification: `zly-verify=<verification_code>`
-- `get_workspace_by_domain()` resolves domain to workspace for CNAME-based routing
+Both `app.main:app` and the native function entrypoint `app.index:app` expose the
+same application. `api/index.py` is a thin ASGI export for existing tooling, not
+a second app or `sys.path` mutation. Deployment selection changes runtime
+bindings, not the domain or use cases.
 
-## Routing Flow
+| Profile | Database binding | Click binding |
+| --- | --- | --- |
+| `container` | Async SQLAlchemy engine with pre-ping | ARQ queue with synchronous fallback |
+| `serverless` | Async SQLAlchemy `NullPool` | Synchronous persistence inside the request |
 
-```
-Client
-  │
-  ├── GET /{short_code}
-  │     │
-  │     ├── Check Redis cache ── hit ──► 307 redirect
-  │     │
-  │     └── Miss:
-  │           ├── Query DB for link by short_code
-  │           ├── Check activate_at (404 if not yet active)
-  │           ├── Check expires_at (410 if expired)
-  │           ├── Check password_hash:
-  │           │     ├── No password → proceed
-  │           │     ├── Has password + ?password= in query → verify
-  │           │     └── Has password + no query → return 401 (password required)
-  │           ├── Select A/B variant (if variants exist):
-  │           │     └── select_variant(link.id) → selected variant
-  │           ├── Record Click (async via DB):
-  │           │     ├── Parse User-Agent → browser, os, device
-  │           │     ├── Store variant_id (if applicable)
-  │           │     └── Store referer, IP, timestamp
-  │           ├── Cache result in Redis (if available)
-  │           └── 307 redirect to destination
-  │
-  ├── GET /dashboard/* — HTML pages (HTMX-enhanced)
-  │
-  ├── GET /bio/{slug} — Public bio page
-  │
-  └── /api/v1/* — REST API (JSON)
-```
+Authentication state is always external Redis, including atomic replay/one-use
+operations. PostgreSQL migrations are an explicit deployment command; startup
+only checks the revision. The Vercel build preflight checks configuration and
+assets without connecting to a database or creating tenant data.
 
-### Caching Strategy
+## Explicit legacy boundary
 
-- Redirect lookups cached in Redis: `link:{short_code}` → `{destination, password_hash, etc}`
-- TTL: 1 hour (configurable in future)
-- Cache invalidation: on link update/delete (future: Redis pub/sub or cache-busting)
-- Graceful degradation: Redis failure falls through to DB query
+Existing link, workspace, audit and analytics table definitions remain in
+`app/models` while the adopted core is extracted incrementally. The existing
+`app/models/__init__.py` is also the Alembic/test metadata-registration bridge;
+it imports the new context-owned binding model once. It contains no policy.
 
-## Auth Flow
+The click adapter deliberately reuses the inherited click persistence service.
+That bridge stays in `contexts/links/adapters/clicks.py`; it is not imported by
+application/domain code. Moving every inherited ORM model or service is not
+part of this review. The restricted Identity profile does not expose the legacy
+marketing/admin authentication or unsafe generic outbound APIs.
 
-```
-Register ──► POST /api/v1/auth/register
-  │
-  ├── Hash password (bcrypt)
-  ├── Create User
-  ├── Create default personal workspace
-  └── Return access_token + refresh_token
+## Executable checks
 
-Login ──► POST /api/v1/auth/login
-  │
-  ├── Verify email + password
-  └── Return access_token + refresh_token
+- `tests/architecture`: core imports, cross-context contracts and delivery boundaries.
+- `tests/unit`: application policy against ports and direct domain validation.
+- `tests/acceptance`: signed tokens and HTTP security boundaries.
+- `tests/test_postgres_runtime.py`: migrated PostgreSQL, scoped operations,
+  collision recovery and write/audit rollback.
+- `tests/e2e`: actual browser flow through both deployment profiles with PostgreSQL
+  and Redis; the issuer is a controlled test service, not live Plazia Identity.
+- `tests/unit/test_serverless_profile.py`: read-only preflight, TLS configuration,
+  ASGI export, bundle inputs, connection lifetime and inline click binding.
 
-Request ──► Any protected endpoint
-  │
-  ├── get_current_user dependency:
-  │     ├── Extract Bearer token from Authorization header
-  │     ├── Decode JWT (verify signature + expiry)
-  │     ├── Fetch user from DB
-  │     └── Return User or 401
-  │
-  └── verify_workspace_access dependency:
-        ├── Check workspace.owner_id == user.id
-        ├── Fallback: WorkspaceMember exists for user
-        ├── require_owner=True restricts to owner only
-        └── Return workspace or 403
-```
-
-## Async Patterns
-
-### Current (Synchronous Click Recording)
-
-Click recording happens synchronously in the redirect handler within the same DB transaction. This keeps the architecture simple for self-hosted deployments and avoids session lifecycle issues with BackgroundTasks.
-
-### Future (arq Queue)
-
-For high-traffic deployments, click recording will move to arq workers:
-
-```python
-# Worker (worker/main.py)
-class WorkerSettings:
-    functions = [record_click]
-
-
-# Enqueue
-await ctx["redis"].enqueue_job("record_click", click_data)
-```
-
-## Analytics Aggregation
-
-All analytics queries aggregate from the `clicks` table:
-
-- **Clicks Over Time**: `GROUP BY date(timestamp)` with date range filtering
-- **Top Referrers**: `GROUP BY referer` (extracted domain), sorted by count DESC
-- **Browsers**: `GROUP BY browser` from parsed User-Agent
-- **OS/Devices**: Same pattern as browsers
-- **Workspace Summary**: Aggregate across all links in a workspace, with total clicks + per-link breakdown
-
-## Migration Strategy
-
-- Alembic with async SQLAlchemy support
-- Migrations auto-generated via `alembic revision --autogenerate`
-- Test-friendly: SQLite for offline dev, PostgreSQL in production
-- Initial migration captures all 10 tables
-- Migrations run idempotently in CI and deployment
-
-## Frontend Architecture
-
-- **Templating**: Jinja2 server-side rendering
-- **Interactivity**: HTMX for partial page updates (no JS build step)
-- **Charts**: Chart.js loaded from CDN
-- **Styling**: Tailwind CSS v4 via CDN + custom toon/editorial CSS
-- **Design**: Fredoka font, gradient elements, rounded/bubbly cards, cartoon-style icons
-- **No SPA**: Everything is server-rendered with progressive enhancement
-
-## Security Considerations
-
-| Concern | Mitigation |
-|---|---|
-| Password storage | bcrypt with work factor 12 |
-| JWT tokens | HS256 with configurable expiry (30 min access, 7 day refresh) |
-| SQL injection | SQLAlchemy parameterized queries |
-| XSS | Jinja2 auto-escapes HTML |
-| CSRF | HTMX uses same-origin, API uses Bearer tokens |
-| Rate limiting | Future: Caddy middleware |
-| Secret management | Environment variables, never committed |
-| CORS | Configurable origins, restrict in production |
+Do not weaken the import tests by blanket exclusions when adding a new context.
+Add a published contract or move the dependency to its actual owning adapter.

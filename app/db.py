@@ -4,11 +4,11 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
-    create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
+from app.platform.database import DatabaseRuntime
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
@@ -17,7 +17,7 @@ _session_factory: async_sessionmaker[AsyncSession] | None = None
 def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
-        _engine = create_async_engine(settings.database_url, echo=False)
+        _engine = DatabaseRuntime.create_engine(settings)
     return _engine
 
 

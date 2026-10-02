@@ -5,10 +5,10 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.contexts.access.adapters.models import WorkspaceIdentityBinding
 from app.core.dependencies import get_db
 from app.db import Base
 from app.main import create_app
-from app.models.identity import WorkspaceIdentityBinding
 from app.models.workspace import Workspace
 from app.platform.access import AccessRuntime
 from tests.identity_support import ORG_A, ORG_B, LocalIssuer, MemoryState
@@ -66,7 +66,7 @@ async def identity_client(identity_db, issuer, ephemeral, monkeypatch):
         pass
 
     # These tests exercise auth, authorization and SQL, not Redis analytics or ARQ delivery.
-    monkeypatch.setattr("app.core.arq_pool.get_arq_pool", unavailable_queue)
+    monkeypatch.setattr("app.contexts.links.adapters.clicks.get_arq_pool", unavailable_queue)
     monkeypatch.setattr("app.services.link_service._invalidate_link_cache", invalidate)
     app.dependency_overrides[get_db] = database
     async with AsyncClient(
