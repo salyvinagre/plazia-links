@@ -7,7 +7,7 @@ from app.core.redis import get_redis
 from app.db import get_session_factory
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+async def get_db() -> AsyncGenerator[AsyncSession]:
     async with get_session_factory()() as session:
         try:
             yield session
@@ -17,6 +17,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
-async def get_redis_client() -> AsyncGenerator[Redis, None]:
+async def get_redis_client() -> AsyncGenerator[Redis]:
     redis = await get_redis()
     yield redis

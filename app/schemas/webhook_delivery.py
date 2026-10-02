@@ -1,13 +1,13 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 
 class WebhookDeliveryResponse(BaseModel):
     id: str
     webhook_id: str
     event: str
-    payload: dict
+    payload: dict[str, JsonValue]
     status: str
     response_code: int | None = None
     response_body: str | None = None

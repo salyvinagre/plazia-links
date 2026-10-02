@@ -1,11 +1,12 @@
 import uuid
 
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
-from app.models.bio import BioPage, BioLink
-from app.schemas.bio import BioPageCreate, BioPageUpdate, BioLinkCreate, BioLinkUpdate
+from app.models.bio import BioLink, BioPage
+from app.schemas.bio import BioLinkCreate, BioLinkUpdate, BioPageCreate, BioPageUpdate
 
 
 async def create_bio_page(db: AsyncSession, workspace_id: str, data: BioPageCreate) -> BioPage:
@@ -20,13 +21,14 @@ async def create_bio_page(db: AsyncSession, workspace_id: str, data: BioPageCrea
     )
     db.add(bio)
     await db.commit()
-    return await _get_bio_page(db, BioPage.id == bio.id)
+    loaded = await _get_bio_page(db, BioPage.id == bio.id)
+    if loaded is None:
+        raise RuntimeError("Created bio page could not be loaded")
+    return loaded
 
 
-async def _get_bio_page(db: AsyncSession, *filters) -> BioPage | None:
-    result = await db.execute(
-        select(BioPage).options(selectinload(BioPage.links)).where(*filters)
-    )
+async def _get_bio_page(db: AsyncSession, *filters: ColumnElement[bool]) -> BioPage | None:
+    result = await db.execute(select(BioPage).options(selectinload(BioPage.links)).where(*filters))
     return result.scalar_one_or_none()
 
 
@@ -35,10 +37,12 @@ async def get_bio_page(db: AsyncSession, workspace_id: str) -> BioPage | None:
 
 
 async def get_bio_page_by_slug(db: AsyncSession, slug: str) -> BioPage | None:
-    return await _get_bio_page(db, BioPage.slug == slug, BioPage.is_published == True)
+    return await _get_bio_page(db, BioPage.slug == slug, BioPage.is_published.is_(True))
 
 
-async def update_bio_page(db: AsyncSession, workspace_id: str, data: BioPageUpdate) -> BioPage | None:
+async def update_bio_page(
+    db: AsyncSession, workspace_id: str, data: BioPageUpdate
+) -> BioPage | None:
     bio = await get_bio_page(db, workspace_id)
     if not bio:
         return None
@@ -102,7 +106,9 @@ async def remove_bio_link(db: AsyncSession, link_id: str) -> bool:
     return True
 
 
-async def reorder_bio_links(db: AsyncSession, bio_page_id: str, link_ids: list[str]) -> list[BioLink]:
+async def reorder_bio_links(
+    db: AsyncSession, bio_page_id: str, link_ids: list[str]
+) -> list[BioLink]:
     links = []
     for i, link_id in enumerate(link_ids):
         result = await db.execute(
@@ -115,4 +121,4 @@ async def reorder_bio_links(db: AsyncSession, bio_page_id: str, link_ids: list[s
     await db.commit()
     for link in links:
         await db.refresh(link)
-    return sorted(links, key=lambda l: l.position)
+    return sorted(links, key=lambda item: item.position)

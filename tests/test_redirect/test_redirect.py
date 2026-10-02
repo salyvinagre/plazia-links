@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,8 +8,12 @@ from app.models.link import Link
 
 
 @pytest.mark.asyncio
-async def test_redirect_basic(client: AsyncClient, db_session: AsyncSession, test_workspace_id: str):
-    link = Link(short_code="test123", destination_url="https://example.com", workspace_id=test_workspace_id)
+async def test_redirect_basic(
+    client: AsyncClient, db_session: AsyncSession, test_workspace_id: str
+):
+    link = Link(
+        short_code="test123", destination_url="https://example.com", workspace_id=test_workspace_id
+    )
     db_session.add(link)
     await db_session.flush()
 
@@ -23,8 +29,15 @@ async def test_redirect_not_found(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_redirect_inactive_link(client: AsyncClient, db_session: AsyncSession, test_workspace_id: str):
-    link = Link(short_code="inactive", destination_url="https://example.com", is_active=False, workspace_id=test_workspace_id)
+async def test_redirect_inactive_link(
+    client: AsyncClient, db_session: AsyncSession, test_workspace_id: str
+):
+    link = Link(
+        short_code="inactive",
+        destination_url="https://example.com",
+        is_active=False,
+        workspace_id=test_workspace_id,
+    )
     db_session.add(link)
     await db_session.flush()
 
@@ -33,10 +46,18 @@ async def test_redirect_inactive_link(client: AsyncClient, db_session: AsyncSess
 
 
 @pytest.mark.asyncio
-async def test_redirect_expired_link(client: AsyncClient, db_session: AsyncSession, test_workspace_id: str):
-    from datetime import datetime, timedelta, timezone
-    past = datetime.now(timezone.utc) - timedelta(hours=1)
-    link = Link(short_code="expired", destination_url="https://example.com", expires_at=past, workspace_id=test_workspace_id)
+async def test_redirect_expired_link(
+    client: AsyncClient, db_session: AsyncSession, test_workspace_id: str
+):
+    from datetime import datetime, timedelta
+
+    past = datetime.now(UTC) - timedelta(hours=1)
+    link = Link(
+        short_code="expired",
+        destination_url="https://example.com",
+        expires_at=past,
+        workspace_id=test_workspace_id,
+    )
     db_session.add(link)
     await db_session.flush()
 
@@ -45,10 +66,18 @@ async def test_redirect_expired_link(client: AsyncClient, db_session: AsyncSessi
 
 
 @pytest.mark.asyncio
-async def test_redirect_not_yet_active(client: AsyncClient, db_session: AsyncSession, test_workspace_id: str):
-    from datetime import datetime, timedelta, timezone
-    future = datetime.now(timezone.utc) + timedelta(hours=1)
-    link = Link(short_code="future", destination_url="https://example.com", activate_at=future, workspace_id=test_workspace_id)
+async def test_redirect_not_yet_active(
+    client: AsyncClient, db_session: AsyncSession, test_workspace_id: str
+):
+    from datetime import datetime, timedelta
+
+    future = datetime.now(UTC) + timedelta(hours=1)
+    link = Link(
+        short_code="future",
+        destination_url="https://example.com",
+        activate_at=future,
+        workspace_id=test_workspace_id,
+    )
     db_session.add(link)
     await db_session.flush()
 
@@ -57,9 +86,17 @@ async def test_redirect_not_yet_active(client: AsyncClient, db_session: AsyncSes
 
 
 @pytest.mark.asyncio
-async def test_redirect_password_protected(client: AsyncClient, db_session: AsyncSession, test_workspace_id: str):
+async def test_redirect_password_protected(
+    client: AsyncClient, db_session: AsyncSession, test_workspace_id: str
+):
     from app.core.security import hash_password
-    link = Link(short_code="secret", destination_url="https://secret.com", password_hash=hash_password("hunter2"), workspace_id=test_workspace_id)
+
+    link = Link(
+        short_code="secret",
+        destination_url="https://secret.com",
+        password_hash=hash_password("hunter2"),
+        workspace_id=test_workspace_id,
+    )
     db_session.add(link)
     await db_session.flush()
 
@@ -68,9 +105,17 @@ async def test_redirect_password_protected(client: AsyncClient, db_session: Asyn
 
 
 @pytest.mark.asyncio
-async def test_redirect_password_protected_correct(client: AsyncClient, db_session: AsyncSession, test_workspace_id: str):
+async def test_redirect_password_protected_correct(
+    client: AsyncClient, db_session: AsyncSession, test_workspace_id: str
+):
     from app.core.security import hash_password
-    link = Link(short_code="secret2", destination_url="https://secret.com", password_hash=hash_password("hunter2"), workspace_id=test_workspace_id)
+
+    link = Link(
+        short_code="secret2",
+        destination_url="https://secret.com",
+        password_hash=hash_password("hunter2"),
+        workspace_id=test_workspace_id,
+    )
     db_session.add(link)
     await db_session.flush()
 
@@ -80,9 +125,17 @@ async def test_redirect_password_protected_correct(client: AsyncClient, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_redirect_password_protected_wrong(client: AsyncClient, db_session: AsyncSession, test_workspace_id: str):
+async def test_redirect_password_protected_wrong(
+    client: AsyncClient, db_session: AsyncSession, test_workspace_id: str
+):
     from app.core.security import hash_password
-    link = Link(short_code="secret3", destination_url="https://secret.com", password_hash=hash_password("hunter2"), workspace_id=test_workspace_id)
+
+    link = Link(
+        short_code="secret3",
+        destination_url="https://secret.com",
+        password_hash=hash_password("hunter2"),
+        workspace_id=test_workspace_id,
+    )
     db_session.add(link)
     await db_session.flush()
 

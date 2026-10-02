@@ -1,14 +1,20 @@
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.core.logging import get_logger
+from app.schemas.internal import GeoLocation
+
+if TYPE_CHECKING:
+    from geoip2.database import Reader
+
 
 logger = get_logger(__name__)
 
-_reader = None
+_reader: Reader | None = None
 
 
-def _get_reader():
+def _get_reader() -> Reader | None:
     global _reader
     if _reader is not None:
         return _reader
@@ -20,6 +26,7 @@ def _get_reader():
         return None
     try:
         import geoip2.database
+
         _reader = geoip2.database.Reader(db_path)
         logger.info("GeoIP database loaded from %s", db_path)
     except ImportError:
@@ -29,8 +36,8 @@ def _get_reader():
     return _reader
 
 
-async def resolve_ip(ip: str) -> dict:
-    result = {
+async def resolve_ip(ip: str) -> GeoLocation:
+    result: GeoLocation = {
         "country": None,
         "city": None,
         "latitude": None,

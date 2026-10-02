@@ -16,14 +16,20 @@ async def test_register(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_register_duplicate(client: AsyncClient):
-    await client.post("/api/v1/auth/register", json={"email": "dup@test.com", "password": "secret123"})
-    response = await client.post("/api/v1/auth/register", json={"email": "dup@test.com", "password": "secret456"})
+    await client.post(
+        "/api/v1/auth/register", json={"email": "dup@test.com", "password": "secret123"}
+    )
+    response = await client.post(
+        "/api/v1/auth/register", json={"email": "dup@test.com", "password": "secret456"}
+    )
     assert response.status_code == 409
 
 
 @pytest.mark.asyncio
 async def test_login(client: AsyncClient):
-    await client.post("/api/v1/auth/register", json={"email": "login@test.com", "password": "secret123"})
+    await client.post(
+        "/api/v1/auth/register", json={"email": "login@test.com", "password": "secret123"}
+    )
     response = await client.post(
         "/api/v1/auth/login",
         json={"email": "login@test.com", "password": "secret123"},
@@ -36,7 +42,9 @@ async def test_login(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_login_wrong_password(client: AsyncClient):
-    await client.post("/api/v1/auth/register", json={"email": "bad@test.com", "password": "secret123"})
+    await client.post(
+        "/api/v1/auth/register", json={"email": "bad@test.com", "password": "secret123"}
+    )
     response = await client.post(
         "/api/v1/auth/login",
         json={"email": "bad@test.com", "password": "wrongpass"},
@@ -46,8 +54,12 @@ async def test_login_wrong_password(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_refresh_token(client: AsyncClient):
-    await client.post("/api/v1/auth/register", json={"email": "refresh@test.com", "password": "secret123"})
-    login_resp = await client.post("/api/v1/auth/login", json={"email": "refresh@test.com", "password": "secret123"})
+    await client.post(
+        "/api/v1/auth/register", json={"email": "refresh@test.com", "password": "secret123"}
+    )
+    login_resp = await client.post(
+        "/api/v1/auth/login", json={"email": "refresh@test.com", "password": "secret123"}
+    )
     refresh_token = login_resp.json()["refresh_token"]
     response = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
     assert response.status_code == 200
@@ -56,8 +68,12 @@ async def test_refresh_token(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_refresh_token_rotation_invalidates_old(client: AsyncClient):
-    await client.post("/api/v1/auth/register", json={"email": "rotate@test.com", "password": "secret123"})
-    login_resp = await client.post("/api/v1/auth/login", json={"email": "rotate@test.com", "password": "secret123"})
+    await client.post(
+        "/api/v1/auth/register", json={"email": "rotate@test.com", "password": "secret123"}
+    )
+    login_resp = await client.post(
+        "/api/v1/auth/login", json={"email": "rotate@test.com", "password": "secret123"}
+    )
     first_refresh = login_resp.json()["refresh_token"]
 
     refresh_resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": first_refresh})
@@ -69,8 +85,12 @@ async def test_refresh_token_rotation_invalidates_old(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_me(client: AsyncClient):
-    await client.post("/api/v1/auth/register", json={"email": "me@test.com", "password": "secret123"})
-    login_resp = await client.post("/api/v1/auth/login", json={"email": "me@test.com", "password": "secret123"})
+    await client.post(
+        "/api/v1/auth/register", json={"email": "me@test.com", "password": "secret123"}
+    )
+    login_resp = await client.post(
+        "/api/v1/auth/login", json={"email": "me@test.com", "password": "secret123"}
+    )
     token = login_resp.json()["access_token"]
     response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
@@ -79,8 +99,12 @@ async def test_me(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_login_sets_cookie(client: AsyncClient):
-    await client.post("/api/v1/auth/register", json={"email": "cookielogin@test.com", "password": "testpass123"})
-    r = await client.post("/api/v1/auth/login", json={"email": "cookielogin@test.com", "password": "testpass123"})
+    await client.post(
+        "/api/v1/auth/register", json={"email": "cookielogin@test.com", "password": "testpass123"}
+    )
+    r = await client.post(
+        "/api/v1/auth/login", json={"email": "cookielogin@test.com", "password": "testpass123"}
+    )
     assert r.status_code == 200
     assert "zly_token" in r.cookies
     assert r.cookies["zly_token"] is not None
@@ -88,6 +112,8 @@ async def test_login_sets_cookie(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_register_sets_cookie(client: AsyncClient):
-    r = await client.post("/api/v1/auth/register", json={"email": "cookiereg@test.com", "password": "testpass123"})
+    r = await client.post(
+        "/api/v1/auth/register", json={"email": "cookiereg@test.com", "password": "testpass123"}
+    )
     assert r.status_code == 201
     assert "zly_token" in r.cookies

@@ -1,5 +1,7 @@
 import re
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import urlparse
 
 import bcrypt
@@ -86,7 +88,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 
 def create_access_token(
-    data: dict, expires_delta: timedelta | None = None, jti: str | None = None
+    data: dict[str, Any], expires_delta: timedelta | None = None, jti: str | None = None
 ) -> str:
     to_encode = data.copy()
     expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=settings.jwt_expire_minutes))
@@ -96,14 +98,14 @@ def create_access_token(
     return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def create_refresh_token(data: dict, token_version: int = 0) -> str:
+def create_refresh_token(data: dict[str, Any], token_version: int = 0) -> str:
     to_encode = data.copy()
     expire = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_expire_days)
     to_encode.update({"exp": expire, "type": "refresh", "ver": token_version})
     return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str, check_blacklist: bool = False) -> dict | None:
+def decode_access_token(token: str, check_blacklist: bool = False) -> dict[str, Any] | None:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         if payload.get("type") != "access":
@@ -113,7 +115,7 @@ def decode_access_token(token: str, check_blacklist: bool = False) -> dict | Non
         return None
 
 
-def decode_refresh_token(token: str) -> dict | None:
+def decode_refresh_token(token: str) -> dict[str, Any] | None:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         if payload.get("type") != "refresh":
@@ -157,7 +159,9 @@ async def get_current_user(
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
         if not user.is_active:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail=("Account disabled")
+            )
         return user
 
     payload = decode_access_token(raw)
@@ -199,7 +203,9 @@ async def get_current_user_from_cookie(
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
         if not user.is_active:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail=("Account disabled")
+            )
         return user
 
     payload = decode_access_token(token)
@@ -225,7 +231,7 @@ async def get_current_user_from_cookie(
     return user
 
 
-def require_key_permission(permission: str):
+def require_key_permission(permission: str) -> Callable[..., Coroutine[Any, Any, User]]:
     async def _check(current_user: User = Depends(get_current_user)) -> User:
         perms = getattr(current_user, "_key_permissions", None)
         if perms is not None and permission not in perms:

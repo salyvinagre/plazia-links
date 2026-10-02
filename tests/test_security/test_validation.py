@@ -5,6 +5,7 @@ from httpx import AsyncClient
 @pytest.mark.asyncio
 async def test_open_redirect_rejected(auth_client: AsyncClient):
     import uuid
+
     slug = uuid.uuid4().hex[:8]
     ws = await auth_client.post("/api/v1/workspaces", json={"name": "URL Val WS", "slug": slug})
     ws_id = ws.json()["id"]
@@ -18,6 +19,7 @@ async def test_open_redirect_rejected(auth_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_webhook_ssrf_localhost_rejected(auth_client: AsyncClient):
     import uuid
+
     slug = uuid.uuid4().hex[:8]
     ws = await auth_client.post("/api/v1/workspaces", json={"name": "SSRF Test", "slug": slug})
     ws_id = ws.json()["id"]

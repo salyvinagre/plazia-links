@@ -29,7 +29,7 @@ def _reject_private_url(v: str) -> str:
 class WebhookCreate(BaseModel):
     name: str
     url: str
-    secret: str | None = Field(None, max_length=255)
+    secret: str | None = Field(default=None, max_length=255)
     events: str = "click.created"
     is_active: bool = True
 
@@ -59,7 +59,7 @@ class WebhookResponse(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _mark_secret(cls, data):
+    def _mark_secret(cls, data: object) -> dict[str, object]:
         if isinstance(data, dict):
             has_secret = bool(data.get("secret"))
             data = dict(data)

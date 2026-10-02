@@ -1,6 +1,8 @@
 PERMISSION_MATRIX: dict[str, list[str]] = {
     "owner": [
-        "links:create", "links:update", "links:delete",
+        "links:create",
+        "links:update",
+        "links:delete",
         "webhooks:manage",
         "api_keys:manage",
         "domains:manage",
@@ -14,7 +16,9 @@ PERMISSION_MATRIX: dict[str, list[str]] = {
         "campaigns:manage",
     ],
     "admin": [
-        "links:create", "links:update", "links:delete",
+        "links:create",
+        "links:update",
+        "links:delete",
         "webhooks:manage",
         "tags:manage",
         "bio:manage",
@@ -25,7 +29,9 @@ PERMISSION_MATRIX: dict[str, list[str]] = {
         "campaigns:manage",
     ],
     "editor": [
-        "links:create", "links:update", "links:delete",
+        "links:create",
+        "links:update",
+        "links:delete",
         "tags:manage",
         "bio:manage",
         "analytics:view",

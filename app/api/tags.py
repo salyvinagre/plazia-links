@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.security import get_current_user
+from app.models.tag import Tag
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
 from app.schemas.tag import LinkTagRequest, TagCreate, TagResponse, TagUpdate
@@ -21,15 +22,22 @@ from app.services.workspace_service import verify_workspace_access
 router = APIRouter()
 
 
-@router.post("/workspaces/{workspace_id}/tags", response_model=TagResponse, status_code=status.HTTP_201_CREATED, tags=["tags"])
+@router.post(
+    "/workspaces/{workspace_id}/tags",
+    response_model=TagResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["tags"],
+)
 async def api_create_tag(
     workspace_id: str,
     data: TagCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="tags:manage")
+) -> Tag:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission=("tags:manage")
+    )
     tag = await create_tag(db, workspace_id, data)
     await log_audit_event(
         db,
@@ -50,8 +58,10 @@ async def api_list_tags(
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="tags:manage")
+) -> PaginatedResponse[TagResponse]:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission=("tags:manage")
+    )
     tags, total, has_next = await get_tags(db, workspace_id, page=page, page_size=page_size)
     return PaginatedResponse(
         total=total,
@@ -67,11 +77,13 @@ async def api_get_tag(
     tag_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Tag:
     tag = await get_tag(db, tag_id)
     if not tag:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found")
-    await verify_workspace_access(db, tag.workspace_id, current_user, required_permission="tags:manage")
+    await verify_workspace_access(
+        db, tag.workspace_id, current_user, required_permission="tags:manage"
+    )
     return tag
 
 
@@ -82,11 +94,13 @@ async def api_update_tag(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Tag:
     tag = await get_tag(db, tag_id)
     if not tag:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found")
-    await verify_workspace_access(db, tag.workspace_id, current_user, required_permission="tags:manage")
+    await verify_workspace_access(
+        db, tag.workspace_id, current_user, required_permission="tags:manage"
+    )
     updated = await update_tag(db, tag, data)
     await log_audit_event(
         db,
@@ -106,11 +120,13 @@ async def api_delete_tag(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> None:
     tag = await get_tag(db, tag_id)
     if not tag:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found")
-    await verify_workspace_access(db, tag.workspace_id, current_user, required_permission="tags:manage")
+    await verify_workspace_access(
+        db, tag.workspace_id, current_user, required_permission="tags:manage"
+    )
     await delete_tag(db, tag)
     await log_audit_event(
         db,
@@ -129,9 +145,11 @@ async def api_set_link_tags(
     data: LinkTagRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> None:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
-    await verify_workspace_access(db, link.workspace_id, current_user, required_permission="tags:manage")
+    await verify_workspace_access(
+        db, link.workspace_id, current_user, required_permission="tags:manage"
+    )
     await set_link_tags(db, link_id, data.tag_ids)

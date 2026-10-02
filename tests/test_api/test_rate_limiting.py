@@ -1,15 +1,13 @@
 import pytest
 import pytest_asyncio
-from asyncio import sleep
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from unittest.mock import AsyncMock
 
 from app.api.router import api_router, redirect_router
-from app.core.rate_limiter import setup_rate_limiter, ZONES
 from app.core.dependencies import get_db, get_redis_client
+from app.core.rate_limiter import ZONES, setup_rate_limiter
 from app.routes.dashboard import router as dashboard_router
 
 

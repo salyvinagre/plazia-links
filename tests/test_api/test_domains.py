@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 @pytest.mark.asyncio
 async def test_add_domain(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"dom-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -37,9 +37,9 @@ async def test_add_domain(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_add_duplicate_domain(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"dom-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -68,9 +68,9 @@ async def test_add_duplicate_domain(client: AsyncClient, db_session: AsyncSessio
 
 @pytest.mark.asyncio
 async def test_list_domains(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"dom-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -102,9 +102,9 @@ async def test_list_domains(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_verify_domain(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"dom-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -137,9 +137,9 @@ async def test_verify_domain(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_verify_domain_wrong_code(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"dom-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -170,9 +170,9 @@ async def test_verify_domain_wrong_code(client: AsyncClient, db_session: AsyncSe
 
 @pytest.mark.asyncio
 async def test_delete_domain(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"dom-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -202,11 +202,13 @@ async def test_delete_domain(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_domain_requires_auth(client: AsyncClient, db_session: AsyncSession):
-    from app.models.workspace import Workspace
     from app.models.user import User
+    from app.models.workspace import Workspace
     from app.services.auth_service import hash_password
 
-    user = User(email=f"dom-auth-{uuid.uuid4().hex[:8]}@test.com", password_hash=hash_password("pass"))
+    user = User(
+        email=f"dom-auth-{uuid.uuid4().hex[:8]}@test.com", password_hash=hash_password("pass")
+    )
     db_session.add(user)
     await db_session.flush()
     ws = Workspace(name="Auth Dom WS", slug=f"auth-dom-{uuid.uuid4().hex[:8]}", owner_id=user.id)

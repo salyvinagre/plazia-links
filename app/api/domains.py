@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.security import get_current_user
+from app.models.domain import CustomDomain
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
 from app.schemas.domain import DomainCreate, DomainResponse, DomainVerifyRequest
@@ -26,7 +27,7 @@ async def add_domain(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> CustomDomain:
     await verify_workspace_access(
         db, workspace_id, user, require_owner=True, required_permission="domains:manage"
     )
@@ -45,14 +46,14 @@ async def add_domain(
     return domain
 
 
-@router.get("/workspaces/{workspace_id}/domains", response_model=PaginatedResponse)
+@router.get("/workspaces/{workspace_id}/domains", response_model=PaginatedResponse[DomainResponse])
 async def list_domains(
     workspace_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> PaginatedResponse[DomainResponse]:
     await verify_workspace_access(db, workspace_id, user, required_permission="domains:manage")
     domains, total, has_next = await list_workspace_domains(
         db, workspace_id, page=page, page_size=page_size
@@ -66,14 +67,16 @@ async def list_domains(
     )
 
 
-@router.post("/workspaces/{workspace_id}/domains/{domain_id}/verify", response_model=DomainResponse)
+@router.post(
+    ("/workspaces/{workspace_id}/domains/{domain_id}/verify"), response_model=DomainResponse
+)
 async def verify_domain_endpoint(
     workspace_id: str,
     domain_id: str,
     data: DomainVerifyRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> CustomDomain:
     await verify_workspace_access(
         db, workspace_id, user, require_owner=True, required_permission="domains:manage"
     )
@@ -93,7 +96,7 @@ async def remove_domain(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> None:
     await verify_workspace_access(
         db, workspace_id, user, require_owner=True, required_permission="domains:manage"
     )

@@ -1,6 +1,6 @@
 import hashlib
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,8 +34,12 @@ async def create_api_key(
     return api_key, raw
 
 
-async def list_api_keys(db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50) -> tuple[list[ApiKey], int, bool]:
-    base = select(ApiKey).where(ApiKey.workspace_id == workspace_id).order_by(ApiKey.created_at.desc())
+async def list_api_keys(
+    db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50
+) -> tuple[list[ApiKey], int, bool]:
+    base = (
+        select(ApiKey).where(ApiKey.workspace_id == workspace_id).order_by(ApiKey.created_at.desc())
+    )
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar() or 0
     offset = (page - 1) * page_size
@@ -64,10 +68,10 @@ async def get_api_key(db: AsyncSession, key_id: str) -> ApiKey | None:
 async def authenticate_api_key(db: AsyncSession, raw_key: str) -> ApiKey | None:
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
     result = await db.execute(
-        select(ApiKey).where(ApiKey.key_hash == key_hash, ApiKey.is_active == True)
+        select(ApiKey).where(ApiKey.key_hash == key_hash, ApiKey.is_active.is_(True))
     )
     key = result.scalar_one_or_none()
     if key:
-        key.last_used_at = datetime.now(timezone.utc)
+        key.last_used_at = datetime.now(UTC)
         await db.flush()
     return key

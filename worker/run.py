@@ -1,23 +1,36 @@
 from datetime import UTC
+from typing import TypedDict, cast
 
 from arq import create_pool, cron
-from arq.connections import RedisSettings
+from arq.connections import ArqRedis, RedisSettings
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import settings
 from app.db import get_session_factory
 
 
-async def startup(ctx: dict) -> None:
-    ctx["redis"] = await create_pool(RedisSettings.from_url(settings.redis_url))
+class WorkerContext(TypedDict):
+    redis: ArqRedis
+    session_factory: async_sessionmaker[AsyncSession]
+
+
+async def startup(ctx: WorkerContext) -> None:
+    ctx["redis"] = await create_pool(RedisSettings.from_dsn(settings.redis_url))
     ctx["session_factory"] = get_session_factory()
 
 
-async def shutdown(ctx: dict) -> None:
+async def shutdown(ctx: WorkerContext) -> None:
     await ctx["redis"].close()
 
 
 async def process_click(
-    ctx: dict, link_id: str, ip: str, user_agent: str, referrer: str, variant_id: str | None = None
+    ctx: WorkerContext,
+    link_id: str,
+    ip: str,
+    user_agent: str,
+    referrer: str,
+    variant_id: str | None = None,
 ) -> None:
     from app.services.click_service import record_click
     from app.services.geoip_service import resolve_ip
@@ -53,7 +66,7 @@ async def process_click(
             raise
 
 
-async def check_expiring_links_worker(ctx: dict, workspace_id: str) -> None:
+async def check_expiring_links_worker(ctx: WorkerContext, workspace_id: str) -> None:
     from app.services.notification_service import check_expiring_links
 
     async with ctx["session_factory"]() as db:
@@ -65,7 +78,7 @@ async def check_expiring_links_worker(ctx: dict, workspace_id: str) -> None:
             raise
 
 
-async def sweep_expiring_links(ctx: dict) -> None:
+async def sweep_expiring_links(ctx: WorkerContext) -> None:
     from sqlalchemy import select
 
     from app.models.workspace import Workspace
@@ -78,7 +91,7 @@ async def sweep_expiring_links(ctx: dict) -> None:
 
 
 async def send_invite_email_job(
-    ctx: dict,
+    ctx: WorkerContext,
     invite_id: str,
     to_email: str,
     workspace_name: str,
@@ -99,7 +112,7 @@ async def send_invite_email_job(
 
 
 async def send_password_reset_email_job(
-    ctx: dict, user_id: str, to_email: str, reset_url: str, expires_at: str
+    ctx: WorkerContext, user_id: str, to_email: str, reset_url: str, expires_at: str
 ) -> None:
     from app.services.email_service import send_password_reset_email
 
@@ -112,7 +125,7 @@ async def send_password_reset_email_job(
 
 
 async def send_expiry_alert_email_job(
-    ctx: dict,
+    ctx: WorkerContext,
     link_id: str,
     to_email: str,
     link_title: str,
@@ -138,7 +151,7 @@ async def send_expiry_alert_email_job(
     )
 
 
-async def deliver_webhook(ctx: dict, delivery_id: str) -> None:
+async def deliver_webhook(ctx: WorkerContext, delivery_id: str) -> None:
     from app.services.webhook_delivery_service import deliver_webhook as _deliver
 
     async with ctx["session_factory"]() as db:
@@ -150,7 +163,7 @@ async def deliver_webhook(ctx: dict, delivery_id: str) -> None:
             raise
 
 
-async def cleanup_old_data(ctx: dict) -> None:
+async def cleanup_old_data(ctx: WorkerContext) -> None:
     from datetime import datetime, timedelta
 
     from sqlalchemy import delete
@@ -168,21 +181,21 @@ async def cleanup_old_data(ctx: dict) -> None:
     async with ctx["session_factory"]() as db:
         try:
             result = await db.execute(delete(Click).where(Click.timestamp < cutoff))
-            deleted_clicks = result.rowcount
+            deleted_clicks = cast(CursorResult[tuple[object, ...]], result).rowcount
 
             result = await db.execute(
                 delete(EmailCampaignOpen).where(EmailCampaignOpen.opened_at < cutoff)
             )
-            deleted_opens = result.rowcount
+            deleted_opens = cast(CursorResult[tuple[object, ...]], result).rowcount
 
             result = await db.execute(
                 delete(EmailCampaignClick).where(EmailCampaignClick.clicked_at < cutoff)
             )
-            deleted_click_events = result.rowcount
+            deleted_click_events = cast(CursorResult[tuple[object, ...]], result).rowcount
 
             audit_cutoff = datetime.now(UTC) - timedelta(days=365)
             result = await db.execute(delete(AuditLog).where(AuditLog.created_at < audit_cutoff))
-            deleted_audits = result.rowcount
+            deleted_audits = cast(CursorResult[tuple[object, ...]], result).rowcount
 
             await db.commit()
             from app.core.logging import get_logger
@@ -204,7 +217,7 @@ async def cleanup_old_data(ctx: dict) -> None:
 
 
 async def send_campaign_job(
-    ctx: dict, campaign_id: str, contact_ids: list[str], base_url: str
+    ctx: WorkerContext, campaign_id: str, contact_ids: list[str], base_url: str
 ) -> None:
     from app.services.email_campaign_service import send_campaign_sync
 
@@ -230,12 +243,12 @@ class WorkerSettings:
         cleanup_old_data,
     ]
     cron_jobs = [
-        cron(cleanup_old_data, hour=3, minute=0),
-        cron(sweep_expiring_links, minute=0),
+        cron("worker.run.cleanup_old_data", hour=3, minute=0),
+        cron("worker.run.sweep_expiring_links", minute=0),
     ]
     on_startup = startup
     on_shutdown = shutdown
-    redis_settings = RedisSettings.from_url(settings.redis_url)
+    redis_settings = RedisSettings.from_dsn(settings.redis_url)
     keep_result_seconds = 3600
     max_jobs = 10
     poll_delay = 0.5

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.core.security import hash_password
 from app.models.link import Link
+from app.schemas.internal import BulkImportError, BulkImportResult
 from app.schemas.link import LinkCreate, LinkUpdate
 from app.services.short_code import generate_short_code
 from app.services.webhook_service import trigger_webhooks
@@ -13,7 +14,7 @@ from app.services.webhook_service import trigger_webhooks
 logger = get_logger(__name__)
 
 
-def _append_utm(url: str, data) -> str:
+def _append_utm(url: str, data: LinkCreate | LinkUpdate) -> str:
     utm_params = {}
     for field in ("utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"):
         val = getattr(data, field, None)
@@ -195,12 +196,12 @@ async def get_links_all(db: AsyncSession, workspace_id: str) -> list[Link]:
 
 async def bulk_create_links(
     db: AsyncSession,
-    rows: list[dict],
+    rows: list[dict[str, str]],
     workspace_id: str,
     user_id: str | None = None,
-) -> dict:
+) -> BulkImportResult:
     links = []
-    errors = []
+    errors: list[BulkImportError] = []
     for i, row in enumerate(rows):
         try:
             data = LinkCreate(

@@ -2,7 +2,6 @@ import asyncio
 import sys
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session_factory
 from app.models.user import User
@@ -29,7 +28,7 @@ async def _list_superusers() -> None:
     factory = get_session_factory()
     async with factory() as session:
         result = await session.execute(
-            select(User).where(User.is_superuser == True).order_by(User.created_at)
+            select(User).where(User.is_superuser.is_(True)).order_by(User.created_at)
         )
         users = result.scalars().all()
         if not users:

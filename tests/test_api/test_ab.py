@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 @pytest.mark.asyncio
 async def test_create_variant(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"ab-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -43,9 +43,9 @@ async def test_create_variant(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_list_variants(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"ab-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -84,9 +84,9 @@ async def test_list_variants(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_update_variant(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"ab-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -127,9 +127,9 @@ async def test_update_variant(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_delete_variant(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"ab-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -166,12 +166,14 @@ async def test_delete_variant(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_variant_requires_auth(client: AsyncClient, db_session: AsyncSession):
-    from app.models.workspace import Workspace
     from app.models.link import Link
     from app.models.user import User
+    from app.models.workspace import Workspace
     from app.services.auth_service import hash_password
 
-    user = User(email=f"ab-auth-{uuid.uuid4().hex[:8]}@test.com", password_hash=hash_password("pass"))
+    user = User(
+        email=f"ab-auth-{uuid.uuid4().hex[:8]}@test.com", password_hash=hash_password("pass")
+    )
     db_session.add(user)
     await db_session.flush()
     ws = Workspace(name="Auth AB WS", slug=f"auth-ab-{uuid.uuid4().hex[:8]}", owner_id=user.id)
@@ -187,8 +189,8 @@ async def test_variant_requires_auth(client: AsyncClient, db_session: AsyncSessi
 
 @pytest.mark.asyncio
 async def test_variant_selection(client: AsyncClient, db_session: AsyncSession):
-    from app.services.ab_service import select_variant
     from app.models.ab import ABVariant
+    from app.services.ab_service import select_variant
 
     v1 = ABVariant(link_id="test", destination_url="https://a.com", weight=70)
     v2 = ABVariant(link_id="test", destination_url="https://b.com", weight=30)
@@ -206,9 +208,9 @@ async def test_variant_selection_empty(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_redirect_with_variant(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"ab-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -223,6 +225,7 @@ async def test_redirect_with_variant(client: AsyncClient, db_session: AsyncSessi
     ws_id = ws_resp.json()["id"]
 
     import secrets
+
     sc = secrets.token_hex(4)
     link_resp = await client.post(
         "/api/v1/links",

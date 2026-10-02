@@ -1,16 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.security import get_current_user
 from app.models.user import User
+from app.models.workspace import Workspace
 from app.schemas.common import PaginatedResponse
 from app.schemas.workspace import WorkspaceCreate, WorkspaceResponse, WorkspaceUpdate
 from app.services.audit_service import log_audit_event
 from app.services.workspace_service import (
     create_workspace,
     delete_workspace,
-    get_workspace,
     get_workspaces_for_user,
     update_workspace,
     verify_workspace_access,
@@ -25,7 +25,7 @@ async def api_create_workspace(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Workspace:
     ws = await create_workspace(db, data, current_user.id)
     await log_audit_event(
         db,
@@ -39,14 +39,16 @@ async def api_create_workspace(
     return ws
 
 
-@router.get("", response_model=PaginatedResponse)
+@router.get("", response_model=PaginatedResponse[WorkspaceResponse])
 async def api_list_workspaces(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    workspaces, total, has_next = await get_workspaces_for_user(db, current_user.id, page=page, page_size=page_size)
+) -> PaginatedResponse[WorkspaceResponse]:
+    workspaces, total, has_next = await get_workspaces_for_user(
+        db, current_user.id, page=page, page_size=page_size
+    )
     return PaginatedResponse(
         total=total,
         page=page,
@@ -61,7 +63,7 @@ async def api_get_workspace(
     workspace_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Workspace:
     return await verify_workspace_access(db, workspace_id, current_user)
 
 
@@ -72,8 +74,10 @@ async def api_update_workspace(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    ws = await verify_workspace_access(db, workspace_id, current_user, require_owner=True, required_permission="workspace:update")
+) -> Workspace:
+    ws = await verify_workspace_access(
+        db, workspace_id, current_user, require_owner=True, required_permission="workspace:update"
+    )
     updated = await update_workspace(db, ws, data)
     await log_audit_event(
         db,
@@ -93,8 +97,10 @@ async def api_delete_workspace(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    ws = await verify_workspace_access(db, workspace_id, current_user, require_owner=True, required_permission="workspace:delete")
+) -> None:
+    ws = await verify_workspace_access(
+        db, workspace_id, current_user, require_owner=True, required_permission="workspace:delete"
+    )
     await delete_workspace(db, ws)
     await log_audit_event(
         db,

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field
 
 
 class EmailContactCreate(BaseModel):
@@ -26,8 +26,8 @@ class EmailTemplateCreate(BaseModel):
 
 
 class EmailTemplateUpdate(BaseModel):
-    name: str | None = Field(None, max_length=100)
-    subject: str | None = Field(None, max_length=200)
+    name: str | None = Field(default=None, max_length=100)
+    subject: str | None = Field(default=None, max_length=200)
     html_body: str | None = None
     is_default: bool | None = None
 
@@ -50,13 +50,13 @@ class EmailCampaignCreate(BaseModel):
     subject: str = Field(..., max_length=200)
     html_body: str
     from_email: EmailStr | None = None
-    from_name: str | None = Field(None, max_length=100)
+    from_name: str | None = Field(default=None, max_length=100)
     scheduled_at: datetime | None = None
 
 
 class EmailCampaignUpdate(BaseModel):
-    name: str | None = Field(None, max_length=100)
-    subject: str | None = Field(None, max_length=200)
+    name: str | None = Field(default=None, max_length=100)
+    subject: str | None = Field(default=None, max_length=200)
     html_body: str | None = None
     from_email: str | None = None
     from_name: str | None = None
@@ -74,7 +74,7 @@ class EmailCampaignResponse(BaseModel):
     from_name: str | None = None
     scheduled_at: datetime | None = None
     sent_at: datetime | None = None
-    stats: dict
+    stats: dict[str, int]
     created_at: datetime
     updated_at: datetime
 

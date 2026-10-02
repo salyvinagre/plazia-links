@@ -4,12 +4,15 @@ from httpx import AsyncClient
 
 def _slug():
     import uuid
+
     return uuid.uuid4().hex[:8]
 
 
 @pytest.mark.asyncio
 async def test_create_invite(auth_client: AsyncClient):
-    ws_resp = await auth_client.post("/api/v1/workspaces", json={"name": "Inv WS", "slug": _slug()})
+    ws_resp = await auth_client.post(
+        ("/api/v1/workspaces"), json={("name"): ("Inv WS"), ("slug"): _slug()}
+    )
     ws_id = ws_resp.json()["id"]
     response = await auth_client.post(
         f"/api/v1/workspaces/{ws_id}/invites",
@@ -36,7 +39,9 @@ async def test_list_invites(auth_client: AsyncClient):
 async def test_cancel_invite(auth_client: AsyncClient):
     ws_resp = await auth_client.post("/api/v1/workspaces", json={"name": "CI WS", "slug": _slug()})
     ws_id = ws_resp.json()["id"]
-    create_resp = await auth_client.post(f"/api/v1/workspaces/{ws_id}/invites", json={"email": "cancel@test.com"})
+    create_resp = await auth_client.post(
+        f"/api/v1/workspaces/{ws_id}/invites", json={"email": "cancel@test.com"}
+    )
     invite_id = create_resp.json()["id"]
     response = await auth_client.delete(f"/api/v1/workspaces/{ws_id}/invites/{invite_id}")
     assert response.status_code == 204
@@ -55,19 +60,25 @@ async def test_list_members(auth_client: AsyncClient, db_session, test_user_id: 
 
 @pytest.mark.asyncio
 async def test_accept_invite_endpoint(auth_client: AsyncClient, db_session, test_user_id: str):
-    from app.models.user import User
-    from sqlalchemy import select
 
-    ws_resp = await auth_client.post("/api/v1/workspaces", json={"name": "Acc WS", "slug": _slug()})
+    from app.models.user import User
+
+    ws_resp = await auth_client.post(
+        ("/api/v1/workspaces"), json={("name"): ("Acc WS"), ("slug"): _slug()}
+    )
     ws_id = ws_resp.json()["id"]
     from app.services.invite_service import create_invite
+
     invite = await create_invite(db_session, ws_id, test_user_id, "acceptep@test.com", "member")
     token = invite.token
     db_session.add(invite)
     await db_session.flush()
 
     from app.core.security import hash_password
-    user = User(email="acceptep@test.com", password_hash=hash_password("pass"), display_name="Accept EP")
+
+    user = User(
+        email="acceptep@test.com", password_hash=hash_password("pass"), display_name="Accept EP"
+    )
     db_session.add(user)
     await db_session.flush()
 

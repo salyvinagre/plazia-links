@@ -21,14 +21,19 @@ async def update_user(db: AsyncSession, user: User, data: UserUpdate) -> User:
 
 
 async def change_user_password(db: AsyncSession, user: User, data: ChangePasswordRequest) -> None:
-    if not verify_password(data.old_password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current password is incorrect")
+    if not user.password_hash or not verify_password(data.old_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Current password is incorrect"
+        )
     user.password_hash = hash_password(data.new_password)
     await db.flush()
 
 
 async def set_user_password(db: AsyncSession, user: User, data: SetPasswordRequest) -> None:
     if user.password_hash:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password already set. Use change-password instead.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password already set. Use change-password instead.",
+        )
     user.password_hash = hash_password(data.new_password)
     await db.flush()

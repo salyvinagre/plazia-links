@@ -1,23 +1,31 @@
 from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from starlette.status import HTTP_404_NOT_FOUND, HTTP_500_INTERNAL_SERVER_ERROR
+from starlette.status import HTTP_404_NOT_FOUND
+
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 templates = Jinja2Templates(directory="app/templates")
 
 
-async def http_exception_handler(request: Request, exc: HTTPException) -> HTMLResponse | JSONResponse:
+async def http_exception_handler(request: Request, exc: Exception) -> HTMLResponse | JSONResponse:
+    if not isinstance(exc, HTTPException):
+        return await unhandled_exception_handler(request, exc)
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
-        template = "errors/404.html" if exc.status_code == HTTP_404_NOT_FOUND else "errors/500.html"
-        return templates.TemplateResponse(request, template, {"user": None}, status_code=exc.status_code)
+        template = (
+            ("errors/404.html") if exc.status_code == HTTP_404_NOT_FOUND else ("errors/500.html")
+        )
+        return templates.TemplateResponse(
+            request, template, {"user": None}, status_code=exc.status_code
+        )
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
-async def validation_exception_handler(request: Request, exc) -> JSONResponse:
+async def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     from fastapi.exceptions import RequestValidationError
+
     if isinstance(exc, RequestValidationError):
         errors = exc.errors()
         safe_errors = []
@@ -30,14 +38,19 @@ async def validation_exception_handler(request: Request, exc) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
-async def unhandled_exception_handler(request: Request, exc: Exception) -> HTMLResponse | JSONResponse:
+async def unhandled_exception_handler(
+    request: Request, exc: Exception
+) -> HTMLResponse | JSONResponse:
     logger.exception("Unhandled exception", extra={"path": str(request.url.path)})
     try:
         import sentry_sdk
+
         sentry_sdk.capture_exception(exc)
     except Exception:
         pass
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
-        return templates.TemplateResponse(request, "errors/500.html", {"user": None}, status_code=500)
+        return templates.TemplateResponse(
+            request, "errors/500.html", {"user": None}, status_code=500
+        )
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})

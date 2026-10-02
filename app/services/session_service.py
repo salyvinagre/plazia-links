@@ -1,8 +1,14 @@
 import json
 import uuid
-from datetime import datetime, timezone
+from collections.abc import Awaitable
+from datetime import UTC, datetime
+from typing import cast
+
+from pydantic import TypeAdapter
+from redis.asyncio import Redis
 
 from app.core.logging import get_logger
+from app.schemas.internal import SessionInfo
 
 logger = get_logger(__name__)
 
@@ -10,8 +16,9 @@ _JTI_PREFIX = "jti:"
 _SESSION_PREFIX = "sessions:"
 
 
-async def _get_redis():
+async def _get_redis() -> Redis:
     from app.core.redis import get_redis
+
     return await get_redis()
 
 
@@ -38,21 +45,21 @@ async def record_session(user_id: str, jti: str, ip: str | None, user_agent: str
             "jti": jti,
             "ip": ip or "unknown",
             "user_agent": user_agent or "unknown",
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
-        await r.hset(f"{_SESSION_PREFIX}{user_id}", jti, json.dumps(session))
+        await cast(Awaitable[int], r.hset(f"{_SESSION_PREFIX}{user_id}", jti, json.dumps(session)))
         await r.expire(f"{_SESSION_PREFIX}{user_id}", 86400 * 30)
     except Exception as exc:
         logger.debug("Failed to record session (Redis unavailable)", extra={"error": str(exc)})
 
 
-async def list_sessions(user_id: str, current_jti: str | None = None) -> list[dict]:
+async def list_sessions(user_id: str, current_jti: str | None = None) -> list[SessionInfo]:
     try:
         r = await _get_redis()
-        sessions = await r.hgetall(f"{_SESSION_PREFIX}{user_id}")
+        sessions = await cast(Awaitable[dict[str, str]], r.hgetall(f"{_SESSION_PREFIX}{user_id}"))
         result = []
         for s in sessions.values():
-            data = json.loads(s)
+            data = TypeAdapter(SessionInfo).validate_json(s)
             data["is_current"] = data.get("jti") == current_jti
             result.append(data)
         return result
@@ -63,7 +70,7 @@ async def list_sessions(user_id: str, current_jti: str | None = None) -> list[di
 async def revoke_session(user_id: str, jti: str) -> bool:
     try:
         r = await _get_redis()
-        await r.hdel(f"{_SESSION_PREFIX}{user_id}", jti)
+        await cast(Awaitable[int], r.hdel(f"{_SESSION_PREFIX}{user_id}", jti))
         await blacklist_jti(jti)
         return True
     except Exception:

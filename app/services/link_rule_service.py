@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +22,11 @@ async def create_rule(db: AsyncSession, link_id: str, data: LinkRuleCreate) -> L
 
 
 async def get_rules(db: AsyncSession, link_id: str) -> list[LinkRule]:
-    result = await db.execute(select(LinkRule).where(LinkRule.link_id == link_id).order_by(LinkRule.priority.desc(), LinkRule.created_at))
+    result = await db.execute(
+        select(LinkRule)
+        .where(LinkRule.link_id == link_id)
+        .order_by(LinkRule.priority.desc(), LinkRule.created_at)
+    )
     return list(result.scalars().all())
 
 
@@ -34,8 +40,8 @@ async def delete_rule(db: AsyncSession, rule: LinkRule) -> None:
     await db.flush()
 
 
-def evaluate_rules(rules: list[LinkRule], context: dict) -> str | None:
-    """Evaluate rules against context (country, device, os, language, referrer). Returns matched destination or None."""
+def evaluate_rules(rules: list[LinkRule], context: Mapping[str, str | None]) -> str | None:
+    """Return the first matching destination, or None when no rule matches."""
     # Highest priority first (already sorted), first match wins
     for rule in rules:
         t = rule.type

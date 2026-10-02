@@ -51,9 +51,7 @@ async def get_audit_logs(
     if resource_type:
         query = query.where(AuditLog.resource_type == resource_type)
 
-    count_result = await db.execute(
-        select(func.count()).select_from(query.subquery())
-    )
+    count_result = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_result.scalar() or 0
 
     offset = (page - 1) * page_size

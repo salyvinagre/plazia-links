@@ -1,9 +1,11 @@
 import hashlib
 import hmac
 import json
-from datetime import datetime, timedelta, timezone
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 
 import httpx
+from pydantic import JsonValue
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,7 +30,7 @@ async def create_webhook_delivery(
     db: AsyncSession,
     webhook_id: str,
     event: str,
-    payload: dict,
+    payload: Mapping[str, JsonValue],
 ) -> WebhookDelivery:
     delivery = WebhookDelivery(
         webhook_id=webhook_id,
@@ -76,9 +78,7 @@ async def deliver_webhook(
     db: AsyncSession,
     delivery_id: str,
 ) -> bool:
-    result = await db.execute(
-        select(WebhookDelivery).where(WebhookDelivery.id == delivery_id)
-    )
+    result = await db.execute(select(WebhookDelivery).where(WebhookDelivery.id == delivery_id))
     delivery = result.scalar_one_or_none()
     if not delivery:
         return False
@@ -103,7 +103,7 @@ async def deliver_webhook(
 
             if 200 <= resp.status_code < 300:
                 delivery.status = "success"
-                delivery.delivered_at = datetime.now(timezone.utc)
+                delivery.delivered_at = datetime.now(UTC)
                 delivery.next_retry_at = None
                 await db.flush()
                 return True
@@ -114,7 +114,7 @@ async def deliver_webhook(
                 else:
                     delivery.status = "retrying"
                     delay_idx = min(delivery.attempt - 1, len(_RETRY_DELAYS) - 1)
-                    delivery.next_retry_at = datetime.now(timezone.utc) + _RETRY_DELAYS[delay_idx]
+                    delivery.next_retry_at = datetime.now(UTC) + _RETRY_DELAYS[delay_idx]
                 await db.flush()
                 return False
 
@@ -126,7 +126,7 @@ async def deliver_webhook(
         else:
             delivery.status = "retrying"
             delay_idx = min(delivery.attempt - 1, len(_RETRY_DELAYS) - 1)
-            delivery.next_retry_at = datetime.now(timezone.utc) + _RETRY_DELAYS[delay_idx]
+            delivery.next_retry_at = datetime.now(UTC) + _RETRY_DELAYS[delay_idx]
         await db.flush()
         return False
 
@@ -135,15 +135,14 @@ async def schedule_retry(
     db: AsyncSession,
     delivery_id: str,
 ) -> bool:
-    result = await db.execute(
-        select(WebhookDelivery).where(WebhookDelivery.id == delivery_id)
-    )
+    result = await db.execute(select(WebhookDelivery).where(WebhookDelivery.id == delivery_id))
     delivery = result.scalar_one_or_none()
     if not delivery or delivery.status != "retrying":
         return False
 
-    if delivery.next_retry_at and delivery.next_retry_at <= datetime.now(timezone.utc):
+    if delivery.next_retry_at and delivery.next_retry_at <= datetime.now(UTC):
         from app.core.arq_pool import get_arq_pool
+
         pool = await get_arq_pool()
         await pool.enqueue_job("deliver_webhook", delivery_id=delivery_id)
         return True

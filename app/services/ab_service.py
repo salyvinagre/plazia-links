@@ -1,7 +1,7 @@
 import random
 import uuid
 
-from sqlalchemy import func, select, delete
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ab import ABVariant
@@ -27,7 +27,9 @@ async def get_variant(db: AsyncSession, variant_id: str) -> ABVariant | None:
     return result.scalar_one_or_none()
 
 
-async def list_variants(db: AsyncSession, link_id: str, page: int = 1, page_size: int = 50) -> tuple[list[ABVariant], int, bool]:
+async def list_variants(
+    db: AsyncSession, link_id: str, page: int = 1, page_size: int = 50
+) -> tuple[list[ABVariant], int, bool]:
     base = select(ABVariant).where(ABVariant.link_id == link_id).order_by(ABVariant.weight.desc())
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar() or 0
@@ -38,7 +40,9 @@ async def list_variants(db: AsyncSession, link_id: str, page: int = 1, page_size
     return variants, total, has_next
 
 
-async def update_variant(db: AsyncSession, variant_id: str, data: ABVariantUpdate) -> ABVariant | None:
+async def update_variant(
+    db: AsyncSession, variant_id: str, data: ABVariantUpdate
+) -> ABVariant | None:
     variant = await get_variant(db, variant_id)
     if not variant:
         return None

@@ -1,12 +1,15 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.security import get_current_user, verify_password
 from app.models.click import Click
+from app.models.link import Link
 from app.models.user import User
 from app.schemas.click import ClickResponse
 from app.schemas.common import PaginatedResponse
@@ -38,7 +41,7 @@ async def api_create_link(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Link:
     await verify_workspace_access(
         db, data.workspace_id, current_user, required_permission="links:create"
     )
@@ -66,7 +69,7 @@ async def api_list_links(
     is_archived: bool | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PaginatedResponse[LinkResponse]:
     await verify_workspace_access(
         db, workspace_id, current_user, required_permission="analytics:view"
     )
@@ -103,7 +106,7 @@ async def api_bulk_archive(
     data: BulkArchiveRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, JsonValue]:
     updated = 0
     for lid in data.link_ids:
         link = await get_link_by_id(db, lid)
@@ -123,7 +126,7 @@ async def api_bulk_move(
     data: BulkFolderRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, JsonValue]:
     updated = 0
     for lid in data.link_ids:
         link = await get_link_by_id(db, lid)
@@ -147,7 +150,7 @@ async def api_duplicate_link(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Link:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
@@ -180,7 +183,7 @@ async def api_get_link(
     link_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Link:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
@@ -197,7 +200,7 @@ async def api_update_link(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Link:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
@@ -225,7 +228,7 @@ async def api_delete_link(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> None:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
@@ -256,7 +259,7 @@ async def api_link_qrcode(
     style: str = Query("square", pattern="^(square|rounded)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Response:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
@@ -292,7 +295,7 @@ async def api_link_clicks(
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PaginatedResponse[ClickResponse]:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
@@ -328,7 +331,7 @@ async def api_link_health(
     link_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str | int | datetime]:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
@@ -374,7 +377,7 @@ async def api_verify_link_password(
     data: PasswordVerifyRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> PasswordVerifyResponse:
     from app.core.rate_limiter import ZONES, _check_rate_limit
 
     zone = "_pw_verify"

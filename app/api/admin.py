@@ -1,6 +1,5 @@
-from pydantic import BaseModel
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, JsonValue
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +19,9 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 def _require_superuser(current_user: User) -> None:
     if not current_user.is_superuser:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Superuser access required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Superuser access required"
+        )
 
 
 @router.get("/users")
@@ -29,7 +30,7 @@ async def admin_list_users(
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, JsonValue]:
     _require_superuser(current_user)
     count_result = await db.execute(select(func.count()).select_from(User))
     total = count_result.scalar() or 0
@@ -62,7 +63,7 @@ async def admin_get_user(
     user_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, JsonValue]:
     _require_superuser(current_user)
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -90,7 +91,7 @@ async def admin_update_user(
     data: AdminUserUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     _require_superuser(current_user)
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -108,7 +109,7 @@ async def admin_update_user(
 async def admin_stats(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, int]:
     _require_superuser(current_user)
     users = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
     workspaces = (await db.execute(select(func.count()).select_from(Workspace))).scalar() or 0
@@ -140,7 +141,7 @@ async def admin_audit_logs(
     resource_type: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, JsonValue]:
     _require_superuser(current_user)
     query = select(AuditLog)
     if action:
@@ -159,5 +160,5 @@ async def admin_audit_logs(
         "page": page,
         "page_size": page_size,
         "has_next": (offset + page_size) < total,
-        "items": items,
+        "items": [item.model_dump(mode="json") for item in items],
     }

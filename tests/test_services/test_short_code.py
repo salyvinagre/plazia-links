@@ -1,5 +1,3 @@
-import pytest
-
 from app.services.short_code import generate_short_code
 
 

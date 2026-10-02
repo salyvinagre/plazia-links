@@ -168,8 +168,9 @@ For high-traffic deployments, click recording will move to arq workers:
 class WorkerSettings:
     functions = [record_click]
 
+
 # Enqueue
-await ctx['redis'].enqueue_job('record_click', click_data)
+await ctx["redis"].enqueue_job("record_click", click_data)
 ```
 
 ## Analytics Aggregation

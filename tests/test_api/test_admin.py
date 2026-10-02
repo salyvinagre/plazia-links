@@ -5,20 +5,26 @@ from httpx import AsyncClient
 
 def _slug():
     import uuid
+
     return uuid.uuid4().hex[:8]
 
 
 @pytest_asyncio.fixture
 async def superuser_client(client: AsyncClient, db_session) -> AsyncClient:
     import uuid
+
     from app.core.security import create_access_token
 
     email = f"superuser-{uuid.uuid4().hex[:8]}@test.com"
-    resp = await client.post("/api/v1/auth/register", json={"email": email, "password": "testpass123"})
+    resp = await client.post(
+        "/api/v1/auth/register", json={"email": email, "password": "testpass123"}
+    )
     user_id = resp.json()["id"]
 
     from sqlalchemy import select
+
     from app.models.user import User
+
     result = await db_session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one()
     user.is_superuser = True
@@ -73,24 +79,33 @@ async def test_admin_get_user(superuser_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_admin_get_user_not_found(superuser_client: AsyncClient):
     """Getting a non-existent user returns 404."""
-    response = await superuser_client.get("/api/v1/admin/users/00000000-0000-0000-0000-000000000000")
+    response = await superuser_client.get(
+        "/api/v1/admin/users/00000000-0000-0000-0000-000000000000"
+    )
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_admin_update_user(superuser_client: AsyncClient, client: AsyncClient):
     """Superuser can toggle is_superuser on a user."""
-    reg_resp = await client.post("/api/v1/auth/register", json={"email": f"normal-{_slug()}@test.com", "password": "testpass123"})
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={"email": f"normal-{_slug()}@test.com", "password": "testpass123"},
+    )
     target_id = reg_resp.json()["id"]
 
-    response = await superuser_client.patch(f"/api/v1/admin/users/{target_id}", json={"is_superuser": True})
+    response = await superuser_client.patch(
+        f"/api/v1/admin/users/{target_id}", json={"is_superuser": True}
+    )
     assert response.status_code == 200
     assert response.json()["status"] == "updated"
 
     get_resp = await superuser_client.get(f"/api/v1/admin/users/{target_id}")
     assert get_resp.json()["is_superuser"] is True
 
-    response = await superuser_client.patch(f"/api/v1/admin/users/{target_id}", json={"is_superuser": False})
+    response = await superuser_client.patch(
+        f"/api/v1/admin/users/{target_id}", json={"is_superuser": False}
+    )
     assert response.status_code == 200
     get_resp = await superuser_client.get(f"/api/v1/admin/users/{target_id}")
     assert get_resp.json()["is_superuser"] is False
@@ -99,7 +114,9 @@ async def test_admin_update_user(superuser_client: AsyncClient, client: AsyncCli
 @pytest.mark.asyncio
 async def test_admin_update_user_not_found(superuser_client: AsyncClient):
     """Updating a non-existent user returns 404."""
-    response = await superuser_client.patch("/api/v1/admin/users/00000000-0000-0000-0000-000000000000", json={"is_superuser": True})
+    response = await superuser_client.patch(
+        "/api/v1/admin/users/00000000-0000-0000-0000-000000000000", json={"is_superuser": True}
+    )
     assert response.status_code == 404
 
 
@@ -109,8 +126,17 @@ async def test_admin_stats(superuser_client: AsyncClient):
     response = await superuser_client.get("/api/v1/admin/stats")
     assert response.status_code == 200
     data = response.json()
-    expected_keys = {"users", "workspaces", "links", "clicks", "webhooks",
-                     "workspace_members", "email_campaigns", "email_contacts", "audit_logs"}
+    expected_keys = {
+        "users",
+        "workspaces",
+        "links",
+        "clicks",
+        "webhooks",
+        "workspace_members",
+        "email_campaigns",
+        "email_contacts",
+        "audit_logs",
+    }
     assert set(data.keys()) == expected_keys
     for v in data.values():
         assert isinstance(v, int)
@@ -134,7 +160,9 @@ async def test_admin_audit_logs(superuser_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_admin_audit_logs_filtered(superuser_client: AsyncClient):
     """Filtering audit logs by action and resource_type works."""
-    response = await superuser_client.get("/api/v1/admin/audit-logs?action=link.created&resource_type=link")
+    response = await superuser_client.get(
+        "/api/v1/admin/audit-logs?action=link.created&resource_type=link"
+    )
     assert response.status_code == 200
     data = response.json()
     assert "total" in data

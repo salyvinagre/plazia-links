@@ -12,14 +12,14 @@ x-runtime: &runtime
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-zly}
+      POSTGRES_USER: ${POSTGRES_USER:-plazia_links}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-zly}
+      POSTGRES_DB: ${POSTGRES_DB:-plazia_links}
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql
     healthcheck:
       test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 5s
@@ -82,6 +82,7 @@ services:
       start_period: 30s
 
   caddy:
+    profiles: [tls]
     image: caddy:2-alpine
     restart: unless-stopped
     ports: ['80:80', '443:443']

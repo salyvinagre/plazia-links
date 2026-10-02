@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
@@ -20,8 +20,10 @@ async def api_list_audit_logs(
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, require_owner=True, required_permission="audit:view")
+) -> PaginatedAuditLogs:
+    await verify_workspace_access(
+        db, workspace_id, current_user, require_owner=True, required_permission="audit:view"
+    )
     items, total = await get_audit_logs(
         db,
         workspace_id=workspace_id,

@@ -34,7 +34,7 @@ async def test_engine():
 
 
 @pytest_asyncio.fixture
-async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
+async def db_session(test_engine) -> AsyncGenerator[AsyncSession]:
     session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         yield session
@@ -69,9 +69,7 @@ async def mock_redis():
 
 
 @pytest_asyncio.fixture
-async def client(
-    db_session: AsyncSession, mock_redis, monkeypatch
-) -> AsyncGenerator[AsyncClient, None]:
+async def client(db_session: AsyncSession, mock_redis, monkeypatch) -> AsyncGenerator[AsyncClient]:
     from app.config import settings
     from app.core.rate_limiter import ZONES
 

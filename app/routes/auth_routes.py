@@ -5,10 +5,8 @@ from jinja2 import Environment, FileSystemLoader
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
-from app.core.security import get_current_user_from_cookie as get_current_user
-from app.models.user import User
-from app.services.session_service import revoke_session
 from app.core.security import decode_access_token as decode_jwt
+from app.services.session_service import revoke_session
 
 router = APIRouter()
 env = Environment(loader=FileSystemLoader("app/templates"), cache_size=0)
@@ -16,22 +14,22 @@ templates = Jinja2Templates(env=env)
 
 
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
+async def login_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "auth/login.html")
 
 
 @router.get("/auth/forgot-password", response_class=HTMLResponse)
-async def forgot_password_page(request: Request):
+async def forgot_password_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "auth/forgot_password.html")
 
 
 @router.get("/auth/reset-password", response_class=HTMLResponse)
-async def reset_password_page(request: Request, token: str = ""):
+async def reset_password_page(request: Request, token: str = "") -> HTMLResponse:
     return templates.TemplateResponse(request, "auth/reset_password.html", {"token": token})
 
 
 @router.get("/register", response_class=HTMLResponse)
-async def register_page(request: Request):
+async def register_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "auth/register.html")
 
 
@@ -40,23 +38,26 @@ async def invite_page(
     request: Request,
     token: str,
     db: AsyncSession = Depends(get_db),
-):
+) -> HTMLResponse:
     from app.services.invite_service import get_invite_by_token, get_invite_email_data
+
     invite = await get_invite_by_token(db, token)
     if not invite or invite.status != "pending":
         return templates.TemplateResponse(request, "errors/404.html", {"user": None})
     invite_data = await get_invite_email_data(db, invite, str(request.base_url))
     if not invite_data:
         return templates.TemplateResponse(request, "errors/404.html", {"user": None})
-    return templates.TemplateResponse(request, "auth/invite.html", {"invite": invite_data, "token": token, "user": None})
+    return templates.TemplateResponse(
+        request, "auth/invite.html", {"invite": invite_data, "token": token, "user": None}
+    )
 
 
 @router.post("/logout")
-async def logout(request: Request):
+async def logout(request: Request) -> RedirectResponse:
     token = request.cookies.get("zly_token")
     if token:
         try:
-            payload = decode_jwt(token)
+            payload = decode_jwt(token) or {}
             jti = payload.get("jti")
             user_id = payload.get("sub")
             if jti and user_id:

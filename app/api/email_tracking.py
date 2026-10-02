@@ -24,7 +24,7 @@ async def track_open(
     contact_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> Response:
     from app.core.rate_limiter import ZONES, _check_rate_limit
 
     zone = "_tracking"
@@ -157,7 +157,7 @@ async def unsubscribe(
     contact_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> Response:
     campaign = await get_campaign(db, campaign_id)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
@@ -187,11 +187,11 @@ async def unsubscribe(
 @router.get("/l/track/{campaign_id}")
 async def track_click(
     campaign_id: str,
+    request: Request,
     url: str = Query(...),
     contact_id: str | None = Query(None),
-    request: Request = None,
     db: AsyncSession = Depends(get_db),
-):
+) -> Response:
     from app.core.rate_limiter import ZONES, _check_rate_limit
 
     zone = "_tracking"

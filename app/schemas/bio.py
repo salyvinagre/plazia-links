@@ -1,6 +1,4 @@
-import uuid
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -18,10 +16,10 @@ class BioLinkCreate(BaseModel):
 
 
 class BioLinkUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1, max_length=200)
-    url: Optional[str] = None
-    position: Optional[int] = None
-    is_active: Optional[bool] = None
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    url: str | None = None
+    position: int | None = None
+    is_active: bool | None = None
 
     _validate_url = field_validator("url")(_validate_url_scheme)
 
@@ -42,18 +40,18 @@ class BioLinkResponse(BaseModel):
 class BioPageCreate(BaseModel):
     slug: str = Field(..., min_length=2, max_length=50, pattern=r"^[a-z0-9-]+$")
     title: str = Field(..., min_length=1, max_length=100)
-    bio: Optional[str] = None
-    avatar_url: Optional[str] = None
+    bio: str | None = None
+    avatar_url: str | None = None
     theme: str = "midnight"
 
 
 class BioPageUpdate(BaseModel):
-    slug: Optional[str] = None
-    title: Optional[str] = Field(None, min_length=1, max_length=100)
-    bio: Optional[str] = None
-    avatar_url: Optional[str] = None
-    theme: Optional[str] = None
-    is_published: Optional[bool] = None
+    slug: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=100)
+    bio: str | None = None
+    avatar_url: str | None = None
+    theme: str | None = None
+    is_published: bool | None = None
 
 
 class BioPageResponse(BaseModel):
@@ -63,8 +61,8 @@ class BioPageResponse(BaseModel):
     workspace_id: str
     slug: str
     title: str
-    bio: Optional[str]
-    avatar_url: Optional[str]
+    bio: str | None
+    avatar_url: str | None
     theme: str
     is_published: bool
     created_at: datetime
@@ -76,7 +74,7 @@ class BioPagePublicResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     title: str
-    bio: Optional[str]
-    avatar_url: Optional[str]
+    bio: str | None
+    avatar_url: str | None
     theme: str
     links: list[BioLinkResponse] = []

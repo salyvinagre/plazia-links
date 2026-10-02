@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.security import get_current_user
+from app.models.folder import Folder
 from app.models.user import User
 from app.schemas.folder import FolderCreate, FolderResponse
 from app.services.folder_service import create_folder, delete_folder, get_folder, get_folders
@@ -17,8 +18,10 @@ async def api_create_folder(
     data: FolderCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="links:create")
+) -> Folder:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="links:create"
+    )
     if not data.name or not data.name.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Folder name required")
     folder = await create_folder(db, workspace_id, data.name)
@@ -30,8 +33,10 @@ async def api_list_folders(
     workspace_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="analytics:view")
+) -> list[Folder]:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="analytics:view"
+    )
     folders = await get_folders(db, workspace_id)
     return folders
 
@@ -42,8 +47,10 @@ async def api_delete_folder(
     folder_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="links:delete")
+) -> None:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="links:delete"
+    )
     folder = await get_folder(db, folder_id)
     if not folder or folder.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found")

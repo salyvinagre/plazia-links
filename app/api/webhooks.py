@@ -1,13 +1,17 @@
+from datetime import UTC
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.security import get_current_user
 from app.models.user import User
+from app.models.webhook import Webhook
 from app.schemas.common import PaginatedResponse
 from app.schemas.webhook import WebhookCreate, WebhookResponse, WebhookUpdate
 from app.schemas.webhook_delivery import WebhookDeliveryListResponse, WebhookDeliveryResponse
 from app.services.audit_service import log_audit_event
+from app.services.webhook_delivery_service import get_deliveries
 from app.services.webhook_service import (
     create_webhook,
     delete_webhook,
@@ -15,7 +19,6 @@ from app.services.webhook_service import (
     get_webhooks,
     update_webhook,
 )
-from app.services.webhook_delivery_service import get_deliveries
 from app.services.workspace_service import verify_workspace_access
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/webhooks", tags=["webhooks"])
@@ -28,8 +31,10 @@ async def api_create_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, require_owner=True, required_permission="webhooks:manage")
+) -> Webhook:
+    await verify_workspace_access(
+        db, workspace_id, current_user, require_owner=True, required_permission="webhooks:manage"
+    )
     wh = await create_webhook(db, workspace_id, data)
     await log_audit_event(
         db,
@@ -43,15 +48,17 @@ async def api_create_webhook(
     return wh
 
 
-@router.get("", response_model=PaginatedResponse)
+@router.get("", response_model=PaginatedResponse[WebhookResponse])
 async def api_list_webhooks(
     workspace_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="webhooks:manage")
+) -> PaginatedResponse[WebhookResponse]:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="webhooks:manage"
+    )
     webhooks, total, has_next = await get_webhooks(db, workspace_id, page=page, page_size=page_size)
     return PaginatedResponse(
         total=total,
@@ -68,8 +75,10 @@ async def api_get_webhook(
     webhook_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="webhooks:manage")
+) -> Webhook:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="webhooks:manage"
+    )
     wh = await get_webhook(db, webhook_id)
     if not wh or wh.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
@@ -84,8 +93,10 @@ async def api_update_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, require_owner=True, required_permission="webhooks:manage")
+) -> Webhook:
+    await verify_workspace_access(
+        db, workspace_id, current_user, require_owner=True, required_permission="webhooks:manage"
+    )
     wh = await get_webhook(db, webhook_id)
     if not wh or wh.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
@@ -109,8 +120,10 @@ async def api_delete_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, require_owner=True, required_permission="webhooks:manage")
+) -> None:
+    await verify_workspace_access(
+        db, workspace_id, current_user, require_owner=True, required_permission="webhooks:manage"
+    )
     wh = await get_webhook(db, webhook_id)
     if not wh or wh.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
@@ -132,17 +145,27 @@ async def api_test_webhook(
     webhook_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="webhooks:manage")
+) -> dict[str, str | bool]:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="webhooks:manage"
+    )
     wh = await get_webhook(db, webhook_id)
     if not wh or wh.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
-    from datetime import datetime, timezone
-    payload = {"event": "webhook.test", "webhook_id": wh.id, "workspace_id": workspace_id, "timestamp": datetime.now(timezone.utc).isoformat()}
+    from datetime import datetime
+
+    payload = {
+        "event": "webhook.test",
+        "webhook_id": wh.id,
+        "workspace_id": workspace_id,
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
     from app.services.webhook_delivery_service import create_webhook_delivery, deliver_webhook
+
     delivery = await create_webhook_delivery(db, wh.id, "webhook.test", payload)
     try:
         from app.core.arq_pool import get_arq_pool
+
         pool = await get_arq_pool()
         await pool.enqueue_job("deliver_webhook", delivery_id=delivery.id)
         return {"status": "enqueued", "delivery_id": delivery.id}
@@ -158,22 +181,27 @@ async def api_replay_delivery(
     delivery_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="webhooks:manage")
+) -> dict[str, str | bool]:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="webhooks:manage"
+    )
     wh = await get_webhook(db, webhook_id)
     if not wh or wh.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
     from app.services.webhook_delivery_service import get_delivery
+
     delivery = await get_delivery(db, delivery_id)
     if not delivery or delivery.webhook_id != webhook_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery not found")
     try:
         from app.core.arq_pool import get_arq_pool
+
         pool = await get_arq_pool()
         await pool.enqueue_job("deliver_webhook", delivery_id=delivery.id)
         return {"status": "enqueued", "delivery_id": delivery.id}
     except Exception:
         from app.services.webhook_delivery_service import deliver_webhook
+
         result = await deliver_webhook(db, delivery.id)
         return {"status": "delivered_sync", "delivery_id": delivery.id, "result": result}
 
@@ -186,8 +214,10 @@ async def api_list_webhook_deliveries(
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="webhooks:manage")
+) -> WebhookDeliveryListResponse:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="webhooks:manage"
+    )
     wh = await get_webhook(db, webhook_id)
     if not wh or wh.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")

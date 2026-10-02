@@ -1,7 +1,9 @@
 import asyncio
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -10,13 +12,14 @@ from app.core.logging import get_logger
 from app.core.security import validate_private_url
 from app.core.user_agent import extract_domain, parse_user_agent
 from app.db import get_session_factory
+from app.models.ab import ABVariant
 from app.services.ab_service import list_variants, select_variant
 from app.services.link_service import get_link_by_code
 
 logger = get_logger(__name__)
 
 
-async def _fire_webhooks(workspace_id: str, event: str, payload: dict) -> None:
+async def _fire_webhooks(workspace_id: str, event: str, payload: Mapping[str, JsonValue]) -> None:
     from app.services.webhook_service import trigger_webhooks
 
     factory = get_session_factory()
@@ -36,7 +39,7 @@ async def redirect(
     short_code: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> Response:
     from urllib.parse import urlparse
 
     from app.services.domain_service import get_workspace_by_domain
@@ -63,7 +66,7 @@ async def redirect(
     if link.expires_at and link.expires_at < now:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Link has expired")
     # Max clicks guard
-    if getattr(link, "max_clicks", None):
+    if link.max_clicks is not None:
         from sqlalchemy import func, select
 
         from app.models.click import Click
@@ -114,7 +117,7 @@ async def redirect(
                 target_url = matched
                 selected_variant = None
                 # Skip variant selection if rule matched
-                variants = []
+                variants: list[ABVariant] = []
             else:
                 # No rule matched, fall through to variant/primary
                 variants_list = await list_variants(db, link.id)

@@ -9,6 +9,7 @@ from app.models.user import User
 @pytest.mark.asyncio
 async def test_forgot_password_existing_user(client: AsyncClient, db_session: AsyncSession):
     from uuid import uuid4
+
     from app.core.security import hash_password
 
     email = f"existing-{uuid4().hex[:8]}@test.com"
@@ -34,6 +35,7 @@ async def test_forgot_password_nonexistent_user(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_reset_password_valid_token(client: AsyncClient, db_session: AsyncSession):
     from uuid import uuid4
+
     from app.core.security import hash_password
 
     email = f"reset-valid-{uuid4().hex[:8]}@test.com"
@@ -72,6 +74,7 @@ async def test_reset_password_invalid_token(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_set_password_oauth_user(client: AsyncClient, db_session: AsyncSession):
     from uuid import uuid4
+
     from app.core.security import create_access_token
 
     email = f"oauth-{uuid4().hex[:8]}@test.com"
@@ -89,11 +92,15 @@ async def test_set_password_oauth_user(client: AsyncClient, db_session: AsyncSes
     token = create_access_token({"sub": user.id})
     client.headers["Authorization"] = f"Bearer {token}"
 
-    resp = await client.post("/api/v1/users/me/set-password", json={"new_password": "newpass123456"})
+    resp = await client.post(
+        "/api/v1/users/me/set-password", json={"new_password": "newpass123456"}
+    )
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
 
-    login_resp = await client.post("/api/v1/auth/login", json={"email": email, "password": "newpass123456"})
+    login_resp = await client.post(
+        "/api/v1/auth/login", json={"email": email, "password": "newpass123456"}
+    )
     assert login_resp.status_code == 200
     data = login_resp.json()
     assert "access_token" in data

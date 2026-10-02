@@ -7,12 +7,15 @@ from app.models.link import Link
 
 def _slug():
     import uuid
+
     return uuid.uuid4().hex[:8]
 
 
 @pytest.mark.asyncio
 async def test_link_analytics(auth_client: AsyncClient, db_session, test_user_id: str):
-    ws_resp = await auth_client.post("/api/v1/workspaces", json={"name": "Ana WS", "slug": _slug()})
+    ws_resp = await auth_client.post(
+        ("/api/v1/workspaces"), json={("name"): ("Ana WS"), ("slug"): _slug()}
+    )
     ws_id = ws_resp.json()["id"]
     create_resp = await auth_client.post(
         "/api/v1/links", json={"destination_url": "https://example.com", "workspace_id": ws_id}
@@ -21,7 +24,15 @@ async def test_link_analytics(auth_client: AsyncClient, db_session, test_user_id
 
     link = await db_session.get(Link, link_id)
     for _ in range(3):
-        db_session.add(Click(link_id=link.id, ip_hash="abc", browser="Chrome", os="Windows", device_type="desktop"))
+        db_session.add(
+            Click(
+                link_id=link.id,
+                ip_hash="abc",
+                browser="Chrome",
+                os="Windows",
+                device_type="desktop",
+            )
+        )
     await db_session.flush()
 
     response = await auth_client.get(f"/api/v1/links/{link_id}/analytics")
@@ -35,7 +46,9 @@ async def test_link_analytics(auth_client: AsyncClient, db_session, test_user_id
 
 @pytest.mark.asyncio
 async def test_workspace_analytics_summary(auth_client: AsyncClient, db_session, test_user_id: str):
-    ws_resp = await auth_client.post("/api/v1/workspaces", json={"name": "Sum WS", "slug": _slug()})
+    ws_resp = await auth_client.post(
+        ("/api/v1/workspaces"), json={("name"): ("Sum WS"), ("slug"): _slug()}
+    )
     ws_id = ws_resp.json()["id"]
     create_resp = await auth_client.post(
         "/api/v1/links", json={"destination_url": "https://example.com", "workspace_id": ws_id}
@@ -65,7 +78,12 @@ async def test_verify_password(auth_client: AsyncClient, db_session, test_user_i
     ws_resp = await auth_client.post("/api/v1/workspaces", json={"name": "PW WS", "slug": _slug()})
     ws_id = ws_resp.json()["id"]
     create_resp = await auth_client.post(
-        "/api/v1/links", json={"destination_url": "https://secret.com", "workspace_id": ws_id, "password": "hunter2"}
+        "/api/v1/links",
+        json={
+            "destination_url": "https://secret.com",
+            "workspace_id": ws_id,
+            "password": "hunter2",
+        },
     )
     link_id = create_resp.json()["id"]
 
@@ -78,10 +96,17 @@ async def test_verify_password(auth_client: AsyncClient, db_session, test_user_i
 
 @pytest.mark.asyncio
 async def test_verify_password_wrong(auth_client: AsyncClient, db_session, test_user_id: str):
-    ws_resp = await auth_client.post("/api/v1/workspaces", json={"name": "PW2 WS", "slug": _slug()})
+    ws_resp = await auth_client.post(
+        ("/api/v1/workspaces"), json={("name"): ("PW2 WS"), ("slug"): _slug()}
+    )
     ws_id = ws_resp.json()["id"]
     create_resp = await auth_client.post(
-        "/api/v1/links", json={"destination_url": "https://secret.com", "workspace_id": ws_id, "password": "hunter2"}
+        "/api/v1/links",
+        json={
+            "destination_url": "https://secret.com",
+            "workspace_id": ws_id,
+            "password": "hunter2",
+        },
     )
     link_id = create_resp.json()["id"]
 
@@ -107,7 +132,9 @@ async def test_qrcode_png(auth_client: AsyncClient, db_session, test_user_id: st
 
 @pytest.mark.asyncio
 async def test_qrcode_svg(auth_client: AsyncClient, db_session, test_user_id: str):
-    ws_resp = await auth_client.post("/api/v1/workspaces", json={"name": "QR2 WS", "slug": _slug()})
+    ws_resp = await auth_client.post(
+        ("/api/v1/workspaces"), json={("name"): ("QR2 WS"), ("slug"): _slug()}
+    )
     ws_id = ws_resp.json()["id"]
     create_resp = await auth_client.post(
         "/api/v1/links", json={"destination_url": "https://example.com", "workspace_id": ws_id}

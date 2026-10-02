@@ -15,7 +15,9 @@ async def create_tag(db: AsyncSession, workspace_id: str, data: TagCreate) -> Ta
     return tag
 
 
-async def get_tags(db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50) -> tuple[Sequence[Tag], int, bool]:
+async def get_tags(
+    db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50
+) -> tuple[Sequence[Tag], int, bool]:
     base = select(Tag).where(Tag.workspace_id == workspace_id).order_by(Tag.name)
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar() or 0

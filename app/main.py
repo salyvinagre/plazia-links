@@ -1,5 +1,6 @@
 import os
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -30,7 +31,7 @@ START_TIME = time.time()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     logger = get_logger(__name__)
 
@@ -170,7 +171,7 @@ app.include_router(email_tracking_router)
 
 
 @app.get("/health")
-async def health():
+async def health() -> JSONResponse:
     db_ok = "unknown"
     redis_ok = "unknown"
 

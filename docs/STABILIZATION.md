@@ -26,23 +26,23 @@ It is not completion of the Plazia Links product or a blanket security approval.
   and click pagination schemas; accept/persist link notes during creation.
 - Repair the missing Request import that prevented the application from loading.
 
-## Local verification
+## Verification and toolchain
 
-On Python 3.13.5, the collected suite was run in three non-overlapping batches:
-68 API tests, 62 API tests and 95 remaining tests: **225 passed**. This includes
-15 new regression tests for migration-head shape, read-only startup checks,
-API-key boundaries, folder/domain ownership, non-mutating serialization,
-typed pagination and redirect namespace/cache behavior.
+The project now requires Python >=3.14 and uses uv/uv_build with a committed
+`uv.lock`. The API and ARQ worker are both included in strict mypy checks.
+Whole-project Ruff lint and formatting are enforced; no inherited diagnostics
+are hidden with global suppressions. Existing return values now have explicit
+schemas/types, including paginated collections and analytics service records.
 
-Only project pytest plugins were loaded. The unit database was SQLite, and
-Redis/network boundaries were mocked where the existing fixtures do so.
-These results do not establish live PostgreSQL behavior, browser E2E behavior,
-load limits or exactly-once message delivery.
+The existing 225 unit/API tests pass on Python 3.14.7. New regression tests cover
+ARQ configuration and portable hourly analytics. Opt-in PostgreSQL runtime tests
+exercise a migrated PostgreSQL 18 schema, link creation/update and hour grouping.
+CI runs those checks independently, alongside package and container builds.
+Consult the latest PR run for the exact tested commit and results.
 
-Ruff passes on the changed/new Python files. Full-project Ruff and mypy retain
-upstream debt; CI deliberately continues to report it. PostgreSQL offline DDL
-rendering succeeds. The separate real PostgreSQL CI job is the authority for
-fresh migration execution and model/schema drift; inspect the PR's latest run.
+PostgreSQL 18 Compose volumes mount at `/var/lib/postgresql`; this is not an
+in-place upgrade path for a populated PostgreSQL 16/17 volume. Read the deployment
+guide before changing an existing database image.
 
 ## Remaining work before production approval
 
@@ -54,11 +54,9 @@ fresh migration execution and model/schema drift; inspect the PR's latest run.
    A literal-IP validator is not sufficient network egress protection.
 4. Implement reliable transactional outbox/retry processing. Existing webhook
    enqueue-before-commit and delivery/retry limitations remain.
-5. Resolve inherited full-project lint/type debt, pin dependencies and adopt uv
-   tooling. Do not claim a locked or Python 3.14-validated environment yet.
-6. Add PostgreSQL application integration, concurrency and migration-upgrade
-   tests beyond the fresh-database migration job. Audit existing non-Alembic
-   databases before any production migration.
+5. Expand browser E2E, PostgreSQL concurrency and migration-upgrade coverage.
+   The PostgreSQL runtime smoke tests are not comprehensive load/upgrade tests.
+   Audit existing non-Alembic databases before any production migration.
 
 Then implement Identity integration and the product lifecycle: owned pools,
 reserved links with no destination, confirmed visitor subscriptions, first

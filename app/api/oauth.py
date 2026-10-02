@@ -1,16 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import JsonValue
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.dependencies import get_db
+from app.core.logging import get_logger
 from app.core.security import (
     create_access_token,
     create_refresh_token,
-    get_current_user,
-    hash_password,
 )
-from app.core.logging import get_logger
 from app.models.user import User
 from app.services.oauth_service import (
     _generate_state,
@@ -34,6 +33,7 @@ _STATE_TTL = 600
 async def _store_state(state: str, provider: str) -> None:
     try:
         from app.core.redis import get_redis
+
         r = await get_redis()
         await r.setex(f"{_STATE_PREFIX}{state}", _STATE_TTL, provider)
         return
@@ -45,18 +45,19 @@ async def _store_state(state: str, provider: str) -> None:
 async def _pop_state(state: str) -> str | None:
     try:
         from app.core.redis import get_redis
+
         r = await get_redis()
         provider = await r.get(f"{_STATE_PREFIX}{state}")
         if provider:
             await r.delete(f"{_STATE_PREFIX}{state}")
-            return provider
+            return str(provider)
     except Exception:
         pass
     return _STATE_STORE.pop(state, None)
 
 
 @router.get("/google/login")
-async def google_login():
+async def google_login() -> dict[str, JsonValue]:
     state = _generate_state()
     await _store_state(state, "google")
     url = get_google_login_url(state)
@@ -64,7 +65,7 @@ async def google_login():
 
 
 @router.get("/github/login")
-async def github_login():
+async def github_login() -> dict[str, JsonValue]:
     state = _generate_state()
     await _store_state(state, "github")
     url = get_github_login_url(state)
@@ -77,17 +78,22 @@ async def oauth_callback(
     code: str = Query(...),
     state: str = Query(...),
     db: AsyncSession = Depends(get_db),
-):
+) -> Response:
     provider = await _pop_state(state)
     if not provider:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired state parameter")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired state parameter"
+        )
 
     provider = provider.lower()
     user_data = None
     if provider == "google":
         user_data = await exchange_google_code(code)
         if not user_data:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to authenticate with Google")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=("Failed to authenticate with Google"),
+            )
         oauth_id = user_data.get("id")
         email = user_data.get("email", "")
         display_name = user_data.get("name", "")
@@ -95,16 +101,23 @@ async def oauth_callback(
     elif provider == "github":
         user_data = await exchange_github_code(code)
         if not user_data:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to authenticate with GitHub")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=("Failed to authenticate with GitHub"),
+            )
         oauth_id = str(user_data.get("id", ""))
         email = user_data.get("email", "")
         display_name = user_data.get("name") or user_data.get("login", "")
         avatar_url = user_data.get("avatar_url", "")
     else:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown OAuth provider")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown OAuth provider"
+        )
 
     if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required from OAuth provider")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required from OAuth provider"
+        )
 
     result = await db.execute(
         select(User).where(
@@ -132,8 +145,8 @@ async def oauth_callback(
             )
             db.add(user)
             from app.models.workspace import Workspace, WorkspaceMember
+
             slug = email.split("@")[0]
-            from app.services.workspace_service import get_workspace
             existing_ws = await db.execute(select(Workspace).where(Workspace.slug == slug))
             if existing_ws.scalar_one_or_none():
                 slug = f"{slug}-{state[:6]}"
@@ -150,7 +163,7 @@ async def oauth_callback(
         await db.refresh(user)
 
     access = create_access_token({"sub": user.id})
-    refresh = create_refresh_token({"sub": user.id}, token_version=user.token_version)
+    _refresh = create_refresh_token({"sub": user.id}, token_version=user.token_version)
 
     redirect_html = f"""
     <html><body>

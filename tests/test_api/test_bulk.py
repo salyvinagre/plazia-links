@@ -3,19 +3,24 @@ import io
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def _slug():
     import uuid
+
     return uuid.uuid4().hex[:8]
 
 
 @pytest.mark.asyncio
 async def test_bulk_import_csv(auth_client: AsyncClient):
-    ws = await auth_client.post("/api/v1/workspaces", json={"name": "Bulk Import", "slug": _slug()})
+    ws = await auth_client.post(
+        ("/api/v1/workspaces"), json={("name"): ("Bulk Import"), ("slug"): _slug()}
+    )
     ws_id = ws.json()["id"]
-    csv_content = "destination_url,title,short_code\nhttps://a.com,Link A,ab\nhttps://b.com,Link B,bc\nhttps://c.com,Link C,cd"
+    csv_content = (
+        "destination_url,title,short_code\nhttps://a.com,Link "
+        "A,ab\nhttps://b.com,Link B,bc\nhttps://c.com,Link C,cd"
+    )
     r = await auth_client.post(
         f"/api/v1/workspaces/{ws_id}/links/bulk-import",
         files={"file": ("links.csv", csv_content, "text/csv")},
@@ -29,10 +34,13 @@ async def test_bulk_import_csv(auth_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_bulk_import_file_too_large(auth_client: AsyncClient):
     from app.config import settings
+
     original = settings.max_upload_size_mb
     settings.max_upload_size_mb = 0
     try:
-        ws = await auth_client.post("/api/v1/workspaces", json={"name": "Bulk Size", "slug": _slug()})
+        ws = await auth_client.post(
+            "/api/v1/workspaces", json={"name": "Bulk Size", "slug": _slug()}
+        )
         ws_id = ws.json()["id"]
         r = await auth_client.post(
             f"/api/v1/workspaces/{ws_id}/links/bulk-import",
@@ -46,11 +54,17 @@ async def test_bulk_import_file_too_large(auth_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_export_csv(auth_client: AsyncClient):
-    ws = await auth_client.post("/api/v1/workspaces", json={"name": "Bulk Export", "slug": _slug()})
+    ws = await auth_client.post(
+        ("/api/v1/workspaces"), json={("name"): ("Bulk Export"), ("slug"): _slug()}
+    )
     ws_id = ws.json()["id"]
     await auth_client.post(
         "/api/v1/links",
-        json={"destination_url": "https://export-test.com", "title": "Export Me", "workspace_id": ws_id},
+        json={
+            "destination_url": "https://export-test.com",
+            "title": "Export Me",
+            "workspace_id": ws_id,
+        },
     )
     r = await auth_client.get(f"/api/v1/workspaces/{ws_id}/links/export")
     assert r.status_code == 200

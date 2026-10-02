@@ -1,21 +1,35 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from pydantic import TypeAdapter
+from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.models.click import Click
 from app.models.link import Link
+from app.schemas.internal import (
+    BrowserCount,
+    CityCount,
+    CountryCount,
+    DateClicks,
+    DateCount,
+    DeviceCount,
+    HourCount,
+    OSCount,
+    ReferrerCount,
+    WorkspaceSummaryData,
+)
 
 logger = get_logger(__name__)
 
 _CACHE_TTL = 300  # 5 minutes
 
 
-async def _cache_get(key: str):
+async def _cache_get(key: str) -> object:
     try:
         from app.core.redis import get_redis
+
         r = await get_redis()
         val = await r.get(key)
         if val:
@@ -25,18 +39,20 @@ async def _cache_get(key: str):
     return None
 
 
-async def _cache_set(key: str, value, ttl: int = _CACHE_TTL):
+async def _cache_set(key: str, value: object, ttl: int = _CACHE_TTL) -> None:
     try:
         from app.core.redis import get_redis
+
         r = await get_redis()
         await r.setex(key, ttl, json.dumps(value))
     except Exception:
         pass
 
 
-async def _cache_del(key: str):
+async def _cache_del(key: str) -> None:
     try:
         from app.core.redis import get_redis
+
         r = await get_redis()
         await r.delete(key)
     except Exception:
@@ -53,24 +69,20 @@ async def invalidate_analytics_cache(link_id: str, workspace_id: str | None = No
 async def get_total_clicks(db: AsyncSession, link_id: str) -> int:
     cache_key = f"analytics:link:{link_id}:total_clicks"
     cached = await _cache_get(cache_key)
-    if cached is not None:
+    if isinstance(cached, int):
         return cached
-    result = await db.execute(
-        select(func.count(Click.id)).where(Click.link_id == link_id)
-    )
+    result = await db.execute(select(func.count(Click.id)).where(Click.link_id == link_id))
     total = result.scalar() or 0
     await _cache_set(cache_key, total)
     return total
 
 
-async def get_clicks_over_time(
-    db: AsyncSession, link_id: str, days: int = 30
-) -> list[dict]:
+async def get_clicks_over_time(db: AsyncSession, link_id: str, days: int = 30) -> list[DateCount]:
     cache_key = f"analytics:link:{link_id}:clicks_over_time:{days}"
     cached = await _cache_get(cache_key)
     if cached is not None:
-        return cached
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        return TypeAdapter(list[DateCount]).validate_python(cached)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     result = await db.execute(
         select(
             func.date(Click.timestamp).label("date"),
@@ -80,14 +92,14 @@ async def get_clicks_over_time(
         .group_by(func.date(Click.timestamp))
         .order_by(func.date(Click.timestamp))
     )
-    items = [{"date": str(row.date), "count": row.count} for row in result]
+    items: list[DateCount] = [
+        {"date": str(row.date), "count": row._mapping["count"]} for row in result
+    ]
     await _cache_set(cache_key, items)
     return items
 
 
-async def get_top_referrers(
-    db: AsyncSession, link_id: str, limit: int = 10
-) -> list[dict]:
+async def get_top_referrers(db: AsyncSession, link_id: str, limit: int = 10) -> list[ReferrerCount]:
     result = await db.execute(
         select(Click.referrer_domain, func.count(Click.id).label("count"))
         .where(
@@ -99,47 +111,47 @@ async def get_top_referrers(
         .order_by(func.count(Click.id).desc())
         .limit(limit)
     )
-    return [{"domain": row.referrer_domain, "count": row.count} for row in result]
+    return [{"domain": row.referrer_domain, "count": row._mapping["count"]} for row in result]
 
 
-async def get_browser_stats(db: AsyncSession, link_id: str) -> list[dict]:
+async def get_browser_stats(db: AsyncSession, link_id: str) -> list[BrowserCount]:
     result = await db.execute(
         select(Click.browser, func.count(Click.id).label("count"))
         .where(Click.link_id == link_id, Click.browser.isnot(None))
         .group_by(Click.browser)
         .order_by(func.count(Click.id).desc())
     )
-    return [{"browser": row.browser, "count": row.count} for row in result]
+    return [{"browser": row.browser, "count": row._mapping["count"]} for row in result]
 
 
-async def get_device_stats(db: AsyncSession, link_id: str) -> list[dict]:
+async def get_device_stats(db: AsyncSession, link_id: str) -> list[DeviceCount]:
     result = await db.execute(
         select(Click.device_type, func.count(Click.id).label("count"))
         .where(Click.link_id == link_id, Click.device_type.isnot(None))
         .group_by(Click.device_type)
         .order_by(func.count(Click.id).desc())
     )
-    return [{"device": row.device_type, "count": row.count} for row in result]
+    return [{"device": row.device_type, "count": row._mapping["count"]} for row in result]
 
 
-async def get_os_stats(db: AsyncSession, link_id: str) -> list[dict]:
+async def get_os_stats(db: AsyncSession, link_id: str) -> list[OSCount]:
     result = await db.execute(
         select(Click.os, func.count(Click.id).label("count"))
         .where(Click.link_id == link_id, Click.os.isnot(None))
         .group_by(Click.os)
         .order_by(func.count(Click.id).desc())
     )
-    return [{"os": row.os, "count": row.count} for row in result]
+    return [{"os": row.os, "count": row._mapping["count"]} for row in result]
 
 
 async def get_workspace_summary(
     db: AsyncSession, workspace_id: str, days: int = 7
-) -> dict:
+) -> WorkspaceSummaryData:
     cache_key = f"analytics:workspace:{workspace_id}:summary:{days}"
     cached = await _cache_get(cache_key)
     if cached is not None:
-        return cached
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        return TypeAdapter(WorkspaceSummaryData).validate_python(cached)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     result = await db.execute(
         select(
             Link.id,
@@ -154,7 +166,7 @@ async def get_workspace_summary(
         .order_by(func.count(Click.id).desc())
     )
     rows = result.all()
-    summary = {
+    summary: WorkspaceSummaryData = {
         "total_clicks": sum(r.clicks for r in rows),
         "total_links": len(rows),
         "links": [
@@ -172,12 +184,12 @@ async def get_workspace_summary(
     return summary
 
 
-async def get_variant_stats(db: AsyncSession, variant_id: str) -> dict:
-    from app.models.click import Click
+async def get_variant_stats(db: AsyncSession, variant_id: str) -> dict[str, str | int]:
     from sqlalchemy import func
-    count_result = await db.execute(
-        select(func.count()).where(Click.variant_id == variant_id)
-    )
+
+    from app.models.click import Click
+
+    count_result = await db.execute(select(func.count()).where(Click.variant_id == variant_id))
     total = count_result.scalar() or 0
     return {"variant_id": variant_id, "clicks": total}
 
@@ -191,7 +203,7 @@ async def get_unique_clicks(db: AsyncSession, link_id: str) -> int:
     return result.scalar() or 0
 
 
-async def get_top_countries(db: AsyncSession, link_id: str, limit: int = 10) -> list[dict]:
+async def get_top_countries(db: AsyncSession, link_id: str, limit: int = 10) -> list[CountryCount]:
     result = await db.execute(
         select(Click.country, func.count(Click.id).label("count"))
         .where(Click.link_id == link_id, Click.country.isnot(None), Click.country != "")
@@ -199,10 +211,10 @@ async def get_top_countries(db: AsyncSession, link_id: str, limit: int = 10) -> 
         .order_by(func.count(Click.id).desc())
         .limit(limit)
     )
-    return [{"country": row.country, "count": row.count} for row in result]
+    return [{"country": row.country, "count": row._mapping["count"]} for row in result]
 
 
-async def get_top_cities(db: AsyncSession, link_id: str, limit: int = 10) -> list[dict]:
+async def get_top_cities(db: AsyncSession, link_id: str, limit: int = 10) -> list[CityCount]:
     result = await db.execute(
         select(Click.city, Click.country, func.count(Click.id).label("count"))
         .where(Click.link_id == link_id, Click.city.isnot(None), Click.city != "")
@@ -210,27 +222,32 @@ async def get_top_cities(db: AsyncSession, link_id: str, limit: int = 10) -> lis
         .order_by(func.count(Click.id).desc())
         .limit(limit)
     )
-    return [{"city": row.city, "country": row.country, "count": row.count} for row in result]
+    return [
+        {("city"): row.city, ("country"): row.country, ("count"): row._mapping[("count")]}
+        for row in result
+    ]
 
 
-async def get_hourly_stats(db: AsyncSession, link_id: str) -> list[dict]:
-    # SQLite-compatible: use strftime for hour extraction
+async def get_hourly_stats(db: AsyncSession, link_id: str) -> list[HourCount]:
+    # SQLAlchemy compiles EXTRACT for both PostgreSQL and the SQLite test engine.
     result = await db.execute(
         select(
-            func.strftime("%H", Click.timestamp).label("hour"),
+            extract("hour", Click.timestamp).label("hour"),
             func.count(Click.id).label("count"),
         )
         .where(Click.link_id == link_id)
-        .group_by(func.strftime("%H", Click.timestamp))
-        .order_by(func.strftime("%H", Click.timestamp))
+        .group_by(extract("hour", Click.timestamp))
+        .order_by(extract("hour", Click.timestamp))
     )
-    return [{"hour": row.hour, "count": row.count} for row in result]
+    return [{"hour": f"{int(row.hour):02d}", "count": row._mapping["count"]} for row in result]
 
 
-async def get_variant_clicks_over_time(db: AsyncSession, variant_id: str, days: int = 30) -> list[dict]:
+async def get_variant_clicks_over_time(
+    db: AsyncSession, variant_id: str, days: int = 30
+) -> list[DateClicks]:
     from app.models.click import Click
-    from app.core.dependencies import get_redis_client
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     result = await db.execute(
         select(
             func.date(Click.timestamp).label("date"),
@@ -240,4 +257,4 @@ async def get_variant_clicks_over_time(db: AsyncSession, variant_id: str, days: 
         .group_by(func.date(Click.timestamp))
         .order_by(func.date(Click.timestamp))
     )
-    return [{"date": str(r.date), "clicks": r.count} for r in result]
+    return [{"date": str(r.date), "clicks": r._mapping["count"]} for r in result]
