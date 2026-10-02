@@ -62,3 +62,12 @@ Then implement Identity integration and the product lifecycle: owned pools,
 reserved links with no destination, confirmed visitor subscriptions, first
 activation, durable notifications and non-recycled public codes. Do not use
 marketing contacts as activation subscribers.
+
+## Subsequent Identity slice
+
+The next slice replaces the deployed authentication and core dashboard surface.
+See `IDENTITY.md` for the current, explicit boundary: Identity is now the default;
+legacy authentication and unfinished network-heavy management features are absent
+from that profile. The inherited marketing dashboard is retained only for isolated
+legacy regression work, not presented as repaired or production-approved. Pools,
+subscriber verification and durable activation notifications remain separate work.

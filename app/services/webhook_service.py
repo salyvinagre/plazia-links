@@ -6,6 +6,7 @@ from pydantic import JsonValue
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.webhook import Webhook
 from app.schemas.webhook import WebhookCreate, WebhookUpdate
 
@@ -71,6 +72,8 @@ async def trigger_webhooks(
     event: str,
     payload: Mapping[str, JsonValue],
 ) -> list[dict[str, str]]:
+    if settings.auth_mode == "identity":
+        return []
     result = await db.execute(
         select(Webhook).where(
             Webhook.workspace_id == workspace_id,

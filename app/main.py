@@ -1,19 +1,21 @@
+"""Application composition. Identity is the default; legacy mode is local/test-only."""
+
 import os
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from app.api.email_tracking import router as email_tracking_router
-from app.api.router import api_router, redirect_router
-from app.config import settings
-from app.core.csrf import CSRFMiddleware
+from app.config import IdentitySettings, settings
+from app.contexts.access.domain.principal import AccessDeniedError
+from app.contexts.links.application.management import LinkConflictError, LinkNotFoundError
 from app.core.exceptions import (
     http_exception_handler,
     unhandled_exception_handler,
@@ -24,154 +26,176 @@ from app.core.rate_limiter import setup_rate_limiter
 from app.core.redis import close_redis, get_redis
 from app.core.request_id import RequestIDMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
-from app.routes.auth_routes import router as auth_router
-from app.routes.dashboard import router as dashboard_router
+from app.platform.access import AccessRuntime
 
 START_TIME = time.time()
+health_router = APIRouter()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     logger = get_logger(__name__)
+    production = settings.environment.lower() in {"production", "prod"}
+    settings.validate_runtime_profile(app.state.auth_mode)
+    if app.state.auth_mode == "identity":
+        config = app.state.identity_config
+        config.validate_deployment(production=production)
+        if app.state.access is None:
+            app.state.access = AccessRuntime.build(config)
+    elif production:
+        raise RuntimeError("Legacy authentication is forbidden in production")
 
-    try:
-        from app.db import get_session_factory
+    from app.core.schema import verify_schema
+    from app.db import get_engine, get_session_factory
 
-        factory = get_session_factory()
-        async with factory() as session:
-            await session.execute(text("SELECT 1"))
-        logger.info("Database connection verified")
-        from app.core.schema import verify_schema
-        from app.db import get_engine
-
-        await verify_schema(get_engine())
-    except Exception as e:
-        logger.critical("Database startup verification failed", extra={"error": str(e)})
-        raise
-
+    async with get_session_factory()() as session:
+        await session.execute(text("SELECT 1"))
+    await verify_schema(get_engine())
     try:
         redis = await get_redis()
         await redis.ping()
-        logger.info("Redis connection verified")
     except Exception:
-        logger.warning("Redis unreachable on startup — some features degraded")
+        if app.state.auth_mode == "identity":
+            raise RuntimeError("Identity browser sessions and DPoP require Redis") from None
+        logger.warning("Redis unavailable in local legacy profile")
+    try:
+        yield
+    finally:
+        from app.core.arq_pool import close_arq_pool
 
-    is_prod = os.getenv("ENVIRONMENT", "").lower() in ("production", "prod")
-    default_warnings = []
-    if settings.secret_key == "change-me-in-production":
-        default_warnings.append("SECRET_KEY")
-    if settings.jwt_secret == "change-me-in-production":
-        default_warnings.append("JWT_SECRET")
-    if default_warnings:
-        msg = (
-            f"Default secrets in use: {', '.join(default_warnings)}. "
-            "Set strong values in production."
+        await close_arq_pool()
+        await close_redis()
+        await get_engine().dispose()
+
+
+async def access_denied(request: Request, exc: Exception) -> JSONResponse:
+    permission = str(exc)
+    headers = {"Cache-Control": "no-store"}
+    if permission in {"read:links", "create:links", "update:links", "delete:links"}:
+        scheme = (
+            "DPoP"
+            if request.headers.get("authorization", "").lower().startswith("dpop ")
+            else "Bearer"
         )
-        if is_prod:
-            logger.critical(msg)
-            raise RuntimeError(msg)
-        logger.warning(msg)
-
-    yield
-    from app.core.arq_pool import close_arq_pool
-    from app.db import get_engine
-
-    await close_arq_pool()
-    await close_redis()
-    await get_engine().dispose()
+        headers["WWW-Authenticate"] = f'{scheme} error="insufficient_scope", scope="{permission}"'
+    return JSONResponse({"detail": "access_denied"}, status_code=403, headers=headers)
 
 
-app = FastAPI(
-    title="Zly API",
-    description=(
-        "Open-source URL shortener and marketing platform. "
-        "Shorten URLs, track clicks, manage campaigns, and more."
-    ),
-    version="0.1.0",
-    docs_url=None if os.getenv("ENVIRONMENT", "").lower() in ("production", "prod") else "/docs",
-    redoc_url=None if os.getenv("ENVIRONMENT", "").lower() in ("production", "prod") else "/redoc",
-    contact={
-        "name": "PythonPlumber",
-        "url": "https://senuka.me",
-        "email": "pythonplumber@senuka.me",
-    },
-    license_info={
-        "name": "MIT",
-        "url": "https://github.com/pythonplumber/zly/blob/main/LICENSE",
-    },
-    lifespan=lifespan,
-    openapi_tags=[
-        {"name": "auth", "description": "Authentication and user registration"},
-        {"name": "links", "description": "Create, update, delete, and manage short links"},
-        {"name": "workspaces", "description": "Workspace management"},
-        {"name": "tags", "description": "Organize links with tags"},
-        {"name": "webhooks", "description": "Webhook integrations for events"},
-        {"name": "api-keys", "description": "API key management for programmatic access"},
-        {"name": "analytics", "description": "Click analytics and statistics"},
-        {"name": "domains", "description": "Custom domain management"},
-        {"name": "invites", "description": "Workspace member invites"},
-        {"name": "bio", "description": "Link-in-bio pages"},
-        {"name": "ab-testing", "description": "A/B testing variants for links"},
-        {"name": "bulk", "description": "Bulk import and export operations"},
-        {"name": "email-campaigns", "description": "Email campaign management"},
-        {"name": "email-tracking", "description": "Email open and click tracking"},
-        {"name": "audit", "description": "Audit log access"},
-        {"name": "admin", "description": "Superuser admin operations"},
-        {"name": "oauth", "description": "OAuth/SSO login with Google and GitHub"},
-        {"name": "users", "description": "User profile and settings"},
-        {"name": "sessions", "description": "Session management and revocation"},
-    ],
-)
-
-sentry_dsn = os.getenv("SENTRY_DSN", "")
-if sentry_dsn:
-    import sentry_sdk
-
-    sentry_sdk.init(dsn=sentry_dsn, traces_sample_rate=0.1)
-
-app.add_exception_handler(HTTPException, http_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(Exception, unhandled_exception_handler)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.add_middleware(RequestIDMiddleware)
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(CSRFMiddleware)
-
-# Static files — serves app/static/* at /static/*
-_static_dir = os.path.join(os.path.dirname(__file__), "static")
-if os.path.isdir(_static_dir):
-    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
-
-if settings.rate_limit_enabled:
-    setup_rate_limiter(
-        app,
-        redirect_requests=settings.rate_limit_redirect,
-        redirect_window=settings.rate_limit_window,
-        api_requests=settings.rate_limit_api,
-        api_window=settings.rate_limit_window,
-        auth_requests=settings.rate_limit_auth,
-        auth_window=settings.rate_limit_window,
-        tracking_requests=settings.rate_limit_tracking,
-        tracking_window=settings.rate_limit_window,
+async def link_error(request: Request, exc: Exception) -> JSONResponse:
+    conflict = isinstance(exc, LinkConflictError)
+    return JSONResponse(
+        {"detail": "short_code_unavailable" if conflict else "link_not_found"},
+        status_code=409 if conflict else 404,
+        headers={"Cache-Control": "no-store"},
     )
 
-app.include_router(auth_router)
-app.include_router(dashboard_router)
-app.include_router(api_router, prefix="/api/v1")
-app.include_router(email_tracking_router)
+
+def create_app(
+    *, auth_mode: Literal["identity", "legacy"] | None = None, access: AccessRuntime | None = None
+) -> FastAPI:
+    mode = auth_mode or settings.auth_mode
+    production = settings.environment.lower() in {"production", "prod"}
+    application = FastAPI(
+        title="Plazia Links API",
+        version="0.1.0",
+        description="Organization-scoped link management. Identity-backed credentials required.",
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
+        openapi_url=None if production else "/openapi.json",
+        lifespan=lifespan,
+        license_info={"name": "MIT"},
+    )
+    application.state.auth_mode = mode
+    application.state.identity_config = access.config if access else IdentitySettings()
+    application.state.access = access
+    application.add_exception_handler(HTTPException, http_exception_handler)
+    application.add_exception_handler(RequestValidationError, validation_exception_handler)
+    application.add_exception_handler(Exception, unhandled_exception_handler)
+    application.add_exception_handler(AccessDeniedError, access_denied)
+    application.add_exception_handler(LinkNotFoundError, link_error)
+    application.add_exception_handler(LinkConflictError, link_error)
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origin_list,
+        allow_credentials=mode == "legacy",
+        allow_methods=["*"],
+        allow_headers=["Authorization", "Content-Type", "DPoP"],
+    )
+    application.add_middleware(RequestIDMiddleware)
+    application.add_middleware(SecurityHeadersMiddleware)
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    application.mount("/static", StaticFiles(directory=static_dir), name="static")
+    if settings.rate_limit_enabled:
+        setup_rate_limiter(
+            application,
+            redirect_requests=settings.rate_limit_redirect,
+            redirect_window=settings.rate_limit_window,
+            api_requests=settings.rate_limit_api,
+            api_window=settings.rate_limit_window,
+            auth_requests=settings.rate_limit_auth,
+            auth_window=settings.rate_limit_window,
+            tracking_requests=settings.rate_limit_tracking,
+            tracking_window=settings.rate_limit_window,
+        )
+    if mode == "identity":
+        from app.api.managed_links import router as links_router
+        from app.routes.identity import router as browser_router
+
+        application.include_router(links_router)
+        application.include_router(browser_router)
+    else:
+        from app.api.email_tracking import router as tracking_router
+        from app.api.router import api_router
+        from app.core.csrf import CSRFMiddleware
+        from app.routes.auth_routes import router as auth_router
+        from app.routes.dashboard import router as dashboard_router
+
+        application.add_middleware(CSRFMiddleware)
+        application.include_router(auth_router)
+        application.include_router(dashboard_router)
+        application.include_router(api_router, prefix="/api/v1")
+        application.include_router(tracking_router)
+    application.include_router(health_router)
+    from app.api.redirect import router as redirect_router
+
+    application.include_router(redirect_router)
+    if mode == "identity":
+        from fastapi.openapi.utils import get_openapi
+
+        schema = get_openapi(
+            title=application.title,
+            version=application.version,
+            routes=application.routes,
+            description=application.description,
+        )
+        config = application.state.identity_config
+        scopes = {
+            f"{action}:links": f"{action.capitalize()} links in the bound organization"
+            for action in ("read", "create", "update", "delete")
+        }
+        schema.setdefault("components", {}).setdefault("securitySchemes", {})["IdentityAccess"] = {
+            "type": "oauth2",
+            "description": (
+                "Identity RS256 RFC 9068 access tokens. Unbound tokens use Bearer; "
+                "cnf.jkt tokens require Authorization: DPoP and a fresh DPoP proof. "
+                "The API never accepts browser session cookies."
+            ),
+            "flows": {
+                "authorizationCode": {
+                    "authorizationUrl": config.authorization_endpoint,
+                    "tokenUrl": config.token_endpoint,
+                    "scopes": scopes,
+                },
+                "clientCredentials": {"tokenUrl": config.token_endpoint, "scopes": scopes},
+            },
+        }
+        application.openapi_schema = schema
+    return application
 
 
-@app.get("/health")
-async def health() -> JSONResponse:
+@health_router.get("/health")
+async def health(request: Request) -> JSONResponse:
     db_ok = "unknown"
     redis_ok = "unknown"
 
@@ -192,10 +216,11 @@ async def health() -> JSONResponse:
     except Exception:
         redis_ok = "error"
 
+    ready = db_ok == "ok" and (request.app.state.auth_mode != "identity" or redis_ok == "ok")
     return JSONResponse(
-        status_code=200 if db_ok == "ok" else 503,
+        status_code=200 if ready else 503,
         content={
-            "status": "ok" if db_ok == "ok" else "error",
+            "status": "ok" if ready else "error",
             "database": db_ok,
             "redis": redis_ok,
             "version": "0.1.0",
@@ -204,9 +229,14 @@ async def health() -> JSONResponse:
     )
 
 
-@app.get("/health/live", include_in_schema=False)
+@health_router.get("/health/live", include_in_schema=False)
 async def liveness() -> dict[str, str]:
     return {"status": "ok"}
 
 
-app.include_router(redirect_router)
+app = create_app()
+
+if settings.sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(dsn=settings.sentry_dsn, traces_sample_rate=0.1)

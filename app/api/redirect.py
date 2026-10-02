@@ -45,7 +45,11 @@ async def redirect(
     from app.services.domain_service import get_workspace_by_domain
 
     host = (request.url.hostname or "").lower().rstrip(".")
-    primary_host = (urlparse(settings.base_url).hostname or "").lower().rstrip(".")
+    identity_profile = getattr(request.app.state, "auth_mode", "legacy") == "identity"
+    public_base = (
+        request.app.state.identity_config.public_base_url if identity_profile else settings.base_url
+    )
+    primary_host = (urlparse(public_base).hostname or "").lower().rstrip(".")
     workspace_id = None
     if host != primary_host:
         workspace_id = await get_workspace_by_domain(db, host)
@@ -196,24 +200,25 @@ async def redirect(
             variant_id=selected_variant.id if selected_variant else None,
         )
 
-    asyncio.create_task(
-        _fire_webhooks(
-            link.workspace_id,
-            "click.created",
-            {
-                "event": "click.created",
-                "link_id": link.id,
-                "short_code": link.short_code,
-                "destination_url": target_url,
-                "variant_id": selected_variant.id if selected_variant else None,
-                "browser": parsed["browser"],
-                "os": parsed["os"],
-                "device_type": parsed["device_type"],
-                "referrer_domain": extract_domain(referer),
-                "timestamp": datetime.now(UTC).isoformat(),
-            },
+    if not identity_profile:
+        asyncio.create_task(
+            _fire_webhooks(
+                link.workspace_id,
+                "click.created",
+                {
+                    "event": "click.created",
+                    "link_id": link.id,
+                    "short_code": link.short_code,
+                    "destination_url": target_url,
+                    "variant_id": selected_variant.id if selected_variant else None,
+                    "browser": parsed["browser"],
+                    "os": parsed["os"],
+                    "device_type": parsed["device_type"],
+                    "referrer_domain": extract_domain(referer),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
         )
-    )
 
     return Response(
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,

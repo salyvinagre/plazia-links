@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Plazia Links{% endblock %}</title>
+<link rel="stylesheet" href="/static/css/identity.css"></head>
+<body><header><a class="brand" href="/dashboard/links">Plazia <strong>Links</strong></a>
+{% if session %}<form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ session.csrf_token }}"><button class="secondary" type="submit">Sign out</button></form>{% endif %}</header>
+<main>{% block content %}{% endblock %}</main>
+<footer>Plazia Links · Organization-scoped link management</footer></body></html>

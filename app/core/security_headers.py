@@ -23,4 +23,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
         for name, value in HEADERS.items():
             response.headers[name] = value
+        if getattr(request.app.state, "auth_mode", "legacy") == "identity":
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Pragma"] = "no-cache"
+            # Native same-origin form POSTs must retain a non-null Origin for CSRF.
+            # Authorization callbacks must never leak their code/state in a referrer.
+            response.headers["Referrer-Policy"] = (
+                "same-origin" if request.url.path.startswith("/dashboard") else "no-referrer"
+            )
+            if not request.url.path.startswith(("/docs", "/redoc", "/openapi")):
+                response.headers["Content-Security-Policy"] = (
+                    "default-src 'self'; script-src 'none'; style-src 'self'; "
+                    "img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; "
+                    "form-action 'self'; object-src 'none'"
+                )
         return response

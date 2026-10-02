@@ -48,7 +48,13 @@ async def _invalidate_link_cache(short_code: str, link_id: str, workspace_id: st
         logger.debug("Cache invalidation skipped (Redis unavailable)")
 
 
-async def create_link(db: AsyncSession, data: LinkCreate, user_id: str | None = None) -> Link:
+async def create_link(
+    db: AsyncSession,
+    data: LinkCreate,
+    user_id: str | None = None,
+    *,
+    emit_webhooks: bool = True,
+) -> Link:
     short_code = data.short_code or generate_short_code()
     destination_url = _append_utm(data.destination_url, data)
     link = Link(
@@ -76,7 +82,8 @@ async def create_link(db: AsyncSession, data: LinkCreate, user_id: str | None = 
         "timestamp": datetime.now(UTC).isoformat(),
     }
     try:
-        await trigger_webhooks(db, link.workspace_id, "link.created", payload)
+        if emit_webhooks:
+            await trigger_webhooks(db, link.workspace_id, "link.created", payload)
     except Exception:
         pass
     await db.refresh(link)
@@ -167,7 +174,7 @@ async def update_link(db: AsyncSession, link: Link, data: LinkUpdate) -> Link:
     return link
 
 
-async def delete_link(db: AsyncSession, link: Link) -> None:
+async def delete_link(db: AsyncSession, link: Link, *, emit_webhooks: bool = True) -> None:
     short_code = link.short_code
     link_id = link.id
     workspace_id = link.workspace_id
@@ -179,7 +186,8 @@ async def delete_link(db: AsyncSession, link: Link) -> None:
         "timestamp": datetime.now(UTC).isoformat(),
     }
     try:
-        await trigger_webhooks(db, link.workspace_id, "link.deleted", payload)
+        if emit_webhooks:
+            await trigger_webhooks(db, link.workspace_id, "link.deleted", payload)
     except Exception:
         pass
     await db.delete(link)

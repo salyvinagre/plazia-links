@@ -111,3 +111,40 @@ async def test_postgres_hourly_analytics(postgres_session: AsyncSession) -> None
         len((await postgres_session.scalars(select(Click).where(Click.link_id == link.id))).all())
         == 3
     )
+
+
+@pytest.mark.asyncio
+async def test_postgres_identity_binding_and_management(
+    postgres_session: AsyncSession, monkeypatch
+) -> None:
+    from time import time
+    from unittest.mock import AsyncMock
+    from uuid import uuid7
+
+    from app.contexts.access.adapters.provisioning import WorkspaceProvisioning
+    from app.contexts.access.contracts import Principal
+    from app.contexts.links.application.management import LinkDraft, LinkNotFoundError
+    from app.platform.access import link_management
+
+    monkeypatch.setattr("app.services.link_service._invalidate_link_cache", AsyncMock())
+    issuer = "https://issuer.example.test"
+    organization = f"org_{uuid7()}"
+    operator = WorkspaceProvisioning(postgres_session, issuer)
+    workspace_id = await operator.bind(organization, "Identity PostgreSQL test")
+    principal = Principal(
+        issuer,
+        "user-fixture",
+        "client-fixture",
+        organization,
+        frozenset({"read:links", "create:links", "delete:links"}),
+        int(time()) + 300,
+        str(uuid7()),
+    )
+    manager = await link_management(postgres_session, principal)
+    link = await manager.create(LinkDraft("https://example.com/identity"))
+    assert (await manager.get(link.id)).id == link.id
+    loaded = await postgres_session.get(Workspace, workspace_id)
+    assert loaded.owner_id is None
+    await manager.delete(link.id)
+    with pytest.raises(LinkNotFoundError):
+        await manager.get(link.id)
