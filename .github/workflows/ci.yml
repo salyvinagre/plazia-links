@@ -2,42 +2,103 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'chore/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
+permissions:
+  contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd 'redis-cli ping'
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      ENVIRONMENT: test
+      REDIS_URL: redis://localhost:6379/15
+      RATE_LIMIT_ENABLED: 'false'
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-
+          python-version: '3.12'
       - name: Install dependencies
+        id: install
+        run: pip install -e '.[dev]'
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        shell: bash
         run: |
-          pip install -e ".[dev]"
-
-      - name: Lint with ruff
-        run: ruff check . 2>&1 | tee logs-ruff.txt
-
-      - name: Type check with mypy
-        run: mypy app/ --ignore-missing-imports 2>&1 | tee logs-mypy.txt
-
-      - name: Test with pytest
-        run: pytest -v 2>&1 | tee logs-pytest.txt
-
-      - name: Upload logs as artifacts
-        uses: actions/upload-artifact@v4
+          set -o pipefail
+          ruff check . 2>&1 | tee logs-ruff.txt
+      - name: Type check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          mypy app/ --ignore-missing-imports 2>&1 | tee logs-mypy.txt
+      - name: Tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -q --junitxml=reports/pytest.xml 2>&1 | tee logs-pytest.txt
+      - name: Capture reproducible review inputs
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          mkdir -p reports
+          git archive --format=tar --output=reports/source.tar HEAD
+          git rev-parse HEAD > reports/commit.txt
+          python -m pip freeze > reports/environment.txt
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
-          name: ci-logs
+          name: validation-${{ github.sha }}
           path: |
-            logs-ruff.txt
-            logs-mypy.txt
-            logs-pytest.txt
-          if-no-files-found: warn
+            logs-*.txt
+            reports/
+          retention-days: 7
+          if-no-files-found: error
+
+  postgres-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: zly_test
+          POSTGRES_PASSWORD: local-ci-only
+          POSTGRES_DB: zly_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U zly_test'
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+asyncpg://zly_test:local-ci-only@localhost:5432/zly_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e '.[dev]'
+      - name: Upgrade a fresh PostgreSQL database
+        run: alembic upgrade head
+      - name: Check migration history
+        run: alembic current
+      - name: Detect model/schema drift
+        run: alembic check
