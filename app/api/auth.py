@@ -52,7 +52,7 @@ async def api_register(
             key="zly_token",
             value=access,
             httponly=True,
-            secure=True,
+            secure=settings.secure_cookies,
             samesite="lax",
             max_age=settings.jwt_expire_minutes * 60,
             path="/",
@@ -82,7 +82,7 @@ async def api_login(
         key="zly_token",
         value=token_data.access_token,
         httponly=True,
-        secure=True,
+        secure=settings.secure_cookies,
         samesite="lax",
         max_age=settings.jwt_expire_minutes * 60,
         path="/",
@@ -127,7 +127,7 @@ async def api_forgot_password(
     email_data = {
         "user_id": user.id,
         "to_email": user.email,
-        "reset_url": f"{settings.default_domain}/auth/reset-password?token={user.password_reset_token}",
+        "reset_url": f"{settings.base_url}/auth/reset-password?token={getattr(user, '_plain_reset_token', '')}",
         "expires_at": user.password_reset_expires_at.strftime("%Y-%m-%d %H:%M UTC"),
     }
     try:

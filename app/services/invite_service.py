@@ -31,6 +31,11 @@ async def create_invite(
     return invite
 
 
+async def get_invite_by_token(db: AsyncSession, token: str) -> Invite | None:
+    result = await db.execute(select(Invite).where(Invite.token == token))
+    return result.scalar_one_or_none()
+
+
 async def get_invite_email_data(
     db: AsyncSession,
     invite: Invite,
@@ -48,9 +53,11 @@ async def get_invite_email_data(
     return {
         "invite_id": invite.id,
         "to_email": invite.email,
+        "workspace_id": invite.workspace_id,
+        "role": invite.role,
         "workspace_name": ws.name,
         "invited_by_name": inviter.display_name or inviter.email,
-        "invite_url": f"{base_url}/invites/{invite.token}",
+        "invite_url": f"{base_url}/invite/{invite.token}",
         "expires_at": invite.expires_at.strftime("%Y-%m-%d %H:%M UTC"),
     }
 

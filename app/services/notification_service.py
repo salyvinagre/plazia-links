@@ -71,7 +71,7 @@ async def check_expiring_links(
                     to_email=owner_email,
                     link_title=link.title or link.short_code,
                     short_code=link.short_code,
-                    short_url=f"{settings.default_domain}/{link.short_code}",
+                    short_url=f"{settings.base_url}/{link.short_code}",
                     destination_url=link.destination_url,
                     expires_at=str(link.expires_at),
                     hours_remaining=hours_remaining,

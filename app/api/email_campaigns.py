@@ -43,6 +43,22 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/workspaces/{workspace_id}/email", tags=["email_campaigns"])
 
 
+async def _validate_from_email(db: AsyncSession, workspace_id: str, from_email: str | None) -> None:
+    if not from_email:
+        return
+    from app.config import settings
+    from app.services.domain_service import is_domain_verified_for_workspace
+    domain = from_email.split("@", 1)[1].lower() if "@" in from_email else ""
+    default_domain = settings.default_domain.split(":")[0].lower()
+    if domain == default_domain:
+        return
+    if not domain or not await is_domain_verified_for_workspace(db, workspace_id, domain):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="From address domain must be a verified custom domain for this workspace",
+        )
+
+
 @router.get("/contacts", response_model=PaginatedResponse)
 async def api_list_contacts(
     workspace_id: str,
@@ -239,6 +255,7 @@ async def api_create_campaign(
     current_user: User = Depends(get_current_user),
 ):
     await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+    await _validate_from_email(db, workspace_id, data.from_email)
     campaign = await create_campaign(db, workspace_id, data)
     await log_audit_event(
         db,
@@ -276,6 +293,7 @@ async def api_update_campaign(
     current_user: User = Depends(get_current_user),
 ):
     await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+    await _validate_from_email(db, workspace_id, data.from_email)
     campaign = await get_campaign(db, campaign_id)
     if not campaign or campaign.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
@@ -336,12 +354,12 @@ async def api_send_campaign(
             "send_campaign_job",
             campaign_id=campaign_id,
             contact_ids=contact_ids or [],
-            base_url=settings.default_domain,
+            base_url=settings.base_url,
         )
     except Exception as exc:
         logger.warning("Failed to enqueue campaign send, sending sync", extra={"campaign_id": campaign_id, "error": str(exc)})
         from app.services.email_campaign_service import send_campaign_sync
-        await send_campaign_sync(db, campaign_id, contact_ids or [], settings.default_domain)
+        await send_campaign_sync(db, campaign_id, contact_ids or [], settings.base_url)
 
     return {"status": "enqueued", "campaign_id": campaign_id}
 

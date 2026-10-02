@@ -148,7 +148,7 @@ async def get_workspace_summary(
             Link.title,
             func.count(Click.id).label("clicks"),
         )
-        .outerjoin(Click, Click.link_id == Link.id)
+        .outerjoin(Click, (Click.link_id == Link.id) & (Click.timestamp >= cutoff))
         .where(Link.workspace_id == workspace_id)
         .group_by(Link.id)
         .order_by(func.count(Click.id).desc())
@@ -180,6 +180,51 @@ async def get_variant_stats(db: AsyncSession, variant_id: str) -> dict:
     )
     total = count_result.scalar() or 0
     return {"variant_id": variant_id, "clicks": total}
+
+
+async def get_unique_clicks(db: AsyncSession, link_id: str) -> int:
+    result = await db.execute(
+        select(func.count(func.distinct(Click.ip_hash))).where(
+            Click.link_id == link_id, Click.ip_hash.isnot(None)
+        )
+    )
+    return result.scalar() or 0
+
+
+async def get_top_countries(db: AsyncSession, link_id: str, limit: int = 10) -> list[dict]:
+    result = await db.execute(
+        select(Click.country, func.count(Click.id).label("count"))
+        .where(Click.link_id == link_id, Click.country.isnot(None), Click.country != "")
+        .group_by(Click.country)
+        .order_by(func.count(Click.id).desc())
+        .limit(limit)
+    )
+    return [{"country": row.country, "count": row.count} for row in result]
+
+
+async def get_top_cities(db: AsyncSession, link_id: str, limit: int = 10) -> list[dict]:
+    result = await db.execute(
+        select(Click.city, Click.country, func.count(Click.id).label("count"))
+        .where(Click.link_id == link_id, Click.city.isnot(None), Click.city != "")
+        .group_by(Click.city, Click.country)
+        .order_by(func.count(Click.id).desc())
+        .limit(limit)
+    )
+    return [{"city": row.city, "country": row.country, "count": row.count} for row in result]
+
+
+async def get_hourly_stats(db: AsyncSession, link_id: str) -> list[dict]:
+    # SQLite-compatible: use strftime for hour extraction
+    result = await db.execute(
+        select(
+            func.strftime("%H", Click.timestamp).label("hour"),
+            func.count(Click.id).label("count"),
+        )
+        .where(Click.link_id == link_id)
+        .group_by(func.strftime("%H", Click.timestamp))
+        .order_by(func.strftime("%H", Click.timestamp))
+    )
+    return [{"hour": row.hour, "count": row.count} for row in result]
 
 
 async def get_variant_clicks_over_time(db: AsyncSession, variant_id: str, days: int = 30) -> list[dict]:

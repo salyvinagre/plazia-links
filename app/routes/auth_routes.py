@@ -41,11 +41,14 @@ async def invite_page(
     token: str,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.services.invite_service import get_invite_email_data
-    invite_data = await get_invite_email_data(db, token, str(request.base_url))
+    from app.services.invite_service import get_invite_by_token, get_invite_email_data
+    invite = await get_invite_by_token(db, token)
+    if not invite or invite.status != "pending":
+        return templates.TemplateResponse(request, "errors/404.html", {"user": None})
+    invite_data = await get_invite_email_data(db, invite, str(request.base_url))
     if not invite_data:
-        return templates.TemplateResponse(request, "errors/404.html")
-    return templates.TemplateResponse(request, "auth/invite.html", {"invite": invite_data, "token": token})
+        return templates.TemplateResponse(request, "errors/404.html", {"user": None})
+    return templates.TemplateResponse(request, "auth/invite.html", {"invite": invite_data, "token": token, "user": None})
 
 
 @router.post("/logout")

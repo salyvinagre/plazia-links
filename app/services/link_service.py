@@ -49,6 +49,8 @@ async def create_link(db: AsyncSession, data: LinkCreate, user_id: str | None = 
         title=data.title,
         workspace_id=data.workspace_id,
         user_id=user_id,
+        folder_id=getattr(data, "folder_id", None),
+        max_clicks=getattr(data, "max_clicks", None),
         password_hash=hash_password(data.password) if data.password else None,
         expires_at=data.expires_at,
         activate_at=data.activate_at,
@@ -83,11 +85,26 @@ async def get_link_by_id(db: AsyncSession, link_id: str) -> Link | None:
 
 
 async def get_links(
-    db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 20
+    db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 20,
+    search: str | None = None, folder_id: str | None = None, is_archived: bool | None = None,
 ) -> tuple[list[Link], int, bool]:
-    from sqlalchemy import func, select
+    from sqlalchemy import func, select, or_
 
-    base = select(Link).where(Link.workspace_id == workspace_id).order_by(Link.created_at.desc())
+    filters = [Link.workspace_id == workspace_id]
+    if search:
+        like = f"%{search}%"
+        # include notes in search
+        has_notes = hasattr(Link, "notes")
+        if has_notes:
+            filters.append(or_(Link.short_code.ilike(like), Link.destination_url.ilike(like), Link.title.ilike(like), Link.notes.ilike(like)))
+        else:
+            filters.append(or_(Link.short_code.ilike(like), Link.destination_url.ilike(like), Link.title.ilike(like)))
+    if folder_id is not None:
+        filters.append(Link.folder_id == folder_id)
+    if is_archived is not None:
+        filters.append(Link.is_archived == is_archived)
+
+    base = select(Link).where(*filters).order_by(Link.created_at.desc())
 
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar() or 0
@@ -186,20 +203,35 @@ async def bulk_create_links(
 
     for link in links:
         db.add(link)
-    await db.flush()
+    try:
+        await db.flush()
+    except Exception as exc:
+        await db.rollback()
+        return {"created": 0, "errors": [{"row": -1, "error": f"Bulk import failed: {exc}"}]}
     return {"created": len(links), "errors": []}
 
 
 async def export_links_csv(db: AsyncSession, workspace_id: str) -> str:
     import csv
     from io import StringIO
+    from urllib.parse import parse_qs, urlparse
+
     links = await get_links_all(db, workspace_id)
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(["short_code", "destination_url", "title", "is_active", "expires_at", "created_at", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"])
+    writer.writerow(["short_code", "destination_url", "title", "is_active", "activate_at", "expires_at", "created_at", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"])
     for link in links:
+        # Extract UTM from destination_url if present
+        utm = {k: "" for k in ("utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content")}
+        try:
+            qs = parse_qs(urlparse(link.destination_url).query)
+            for k in utm:
+                utm[k] = qs.get(k, [""])[0]
+        except Exception:
+            pass
         writer.writerow([
             link.short_code, link.destination_url, link.title or "",
-            str(link.is_active), str(link.expires_at or ""), str(link.created_at),
+            str(link.is_active), str(link.activate_at or ""), str(link.expires_at or ""), str(link.created_at),
+            utm["utm_source"], utm["utm_medium"], utm["utm_campaign"], utm["utm_term"], utm["utm_content"],
         ])
     return output.getvalue()

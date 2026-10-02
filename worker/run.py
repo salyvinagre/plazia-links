@@ -37,6 +37,13 @@ async def process_click(ctx: dict, link_id: str, ip: str, user_agent: str, refer
                 longitude=geo["longitude"],
             )
             await db.commit()
+            from app.services.analytics_service import invalidate_analytics_cache
+            from app.models.link import Link
+            from sqlalchemy import select
+            link_result = await db.execute(select(Link).where(Link.id == link_id))
+            link_row = link_result.scalar_one_or_none()
+            if link_row:
+                await invalidate_analytics_cache(link_id, link_row.workspace_id)
         except Exception:
             await db.rollback()
             raise
@@ -52,6 +59,17 @@ async def check_expiring_links_worker(ctx: dict, workspace_id: str) -> None:
         except Exception:
             await db.rollback()
             raise
+
+
+async def sweep_expiring_links(ctx: dict) -> None:
+    from app.models.workspace import Workspace
+    from sqlalchemy import select
+
+    async with ctx["session_factory"]() as db:
+        result = await db.execute(select(Workspace.id))
+        workspace_ids = [row[0] for row in result.all()]
+    for ws_id in workspace_ids:
+        await check_expiring_links_worker(ctx, ws_id)
 
 
 async def send_invite_email_job(ctx: dict, invite_id: str, to_email: str, workspace_name: str, invited_by_name: str, invite_url: str, expires_at: str) -> None:
@@ -125,12 +143,12 @@ async def cleanup_old_data(ctx: dict) -> None:
             deleted_clicks = result.rowcount
 
             result = await db.execute(
-                delete(EmailCampaignOpen).where(EmailCampaignOpen.created_at < cutoff)
+                delete(EmailCampaignOpen).where(EmailCampaignOpen.opened_at < cutoff)
             )
             deleted_opens = result.rowcount
 
             result = await db.execute(
-                delete(EmailCampaignClick).where(EmailCampaignClick.created_at < cutoff)
+                delete(EmailCampaignClick).where(EmailCampaignClick.clicked_at < cutoff)
             )
             deleted_click_events = result.rowcount
 
@@ -174,6 +192,7 @@ class WorkerSettings:
     functions = [
         process_click,
         check_expiring_links_worker,
+        sweep_expiring_links,
         send_invite_email_job,
         send_password_reset_email_job,
         send_expiry_alert_email_job,
@@ -183,6 +202,7 @@ class WorkerSettings:
     ]
     cron_jobs = [
         {"func": cleanup_old_data, "cron": "0 3 * * *"},
+        {"func": sweep_expiring_links, "cron": "0 * * * *"},
     ]
     on_startup = startup
     on_shutdown = shutdown

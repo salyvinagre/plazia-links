@@ -49,10 +49,12 @@ async def test_reset_password_valid_token(client: AsyncClient, db_session: Async
     result = await db_session.execute(select(User).where(User.email == email))
     db_user = result.scalar_one()
     assert db_user.password_reset_token is not None
+    plain_token = getattr(db_user, "_plain_reset_token", None)
+    assert plain_token, "plain reset token must be retained for the email link"
 
     rp_resp = await client.post(
         "/api/v1/auth/reset-password",
-        json={"token": db_user.password_reset_token, "new_password": "newpass123456"},
+        json={"token": plain_token, "new_password": "newpass123456"},
     )
     assert rp_resp.status_code == 200
     assert rp_resp.json() == {"status": "ok"}

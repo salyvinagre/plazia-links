@@ -126,6 +126,58 @@ async def api_delete_webhook(
     )
 
 
+@router.post("/{webhook_id}/test", status_code=status.HTTP_200_OK)
+async def api_test_webhook(
+    workspace_id: str,
+    webhook_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await verify_workspace_access(db, workspace_id, current_user, required_permission="webhooks:manage")
+    wh = await get_webhook(db, webhook_id)
+    if not wh or wh.workspace_id != workspace_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
+    from datetime import datetime, timezone
+    payload = {"event": "webhook.test", "webhook_id": wh.id, "workspace_id": workspace_id, "timestamp": datetime.now(timezone.utc).isoformat()}
+    from app.services.webhook_delivery_service import create_webhook_delivery, deliver_webhook
+    delivery = await create_webhook_delivery(db, wh.id, "webhook.test", payload)
+    try:
+        from app.core.arq_pool import get_arq_pool
+        pool = await get_arq_pool()
+        await pool.enqueue_job("deliver_webhook", delivery_id=delivery.id)
+        return {"status": "enqueued", "delivery_id": delivery.id}
+    except Exception:
+        result = await deliver_webhook(db, delivery.id)
+        return {"status": "delivered_sync", "delivery_id": delivery.id, "result": result}
+
+
+@router.post("/{webhook_id}/deliveries/{delivery_id}/replay", status_code=status.HTTP_200_OK)
+async def api_replay_delivery(
+    workspace_id: str,
+    webhook_id: str,
+    delivery_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await verify_workspace_access(db, workspace_id, current_user, required_permission="webhooks:manage")
+    wh = await get_webhook(db, webhook_id)
+    if not wh or wh.workspace_id != workspace_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
+    from app.services.webhook_delivery_service import get_delivery
+    delivery = await get_delivery(db, delivery_id)
+    if not delivery or delivery.webhook_id != webhook_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery not found")
+    try:
+        from app.core.arq_pool import get_arq_pool
+        pool = await get_arq_pool()
+        await pool.enqueue_job("deliver_webhook", delivery_id=delivery.id)
+        return {"status": "enqueued", "delivery_id": delivery.id}
+    except Exception:
+        from app.services.webhook_delivery_service import deliver_webhook
+        result = await deliver_webhook(db, delivery.id)
+        return {"status": "delivered_sync", "delivery_id": delivery.id, "result": result}
+
+
 @router.get("/{webhook_id}/deliveries", response_model=WebhookDeliveryListResponse)
 async def api_list_webhook_deliveries(
     workspace_id: str,

@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",")]
 
+    @property
+    def base_url(self) -> str:
+        domain = self.default_domain
+        if "://" in domain:
+            return domain.rstrip("/")
+        return f"https://{domain}"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

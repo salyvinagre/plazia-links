@@ -27,10 +27,38 @@ router = APIRouter(prefix="/auth/oauth", tags=["oauth"])
 _STATE_STORE: dict[str, str] = {}
 
 
+_STATE_PREFIX = "oauth_state:"
+_STATE_TTL = 600
+
+
+async def _store_state(state: str, provider: str) -> None:
+    try:
+        from app.core.redis import get_redis
+        r = await get_redis()
+        await r.setex(f"{_STATE_PREFIX}{state}", _STATE_TTL, provider)
+        return
+    except Exception:
+        pass
+    _STATE_STORE[state] = provider
+
+
+async def _pop_state(state: str) -> str | None:
+    try:
+        from app.core.redis import get_redis
+        r = await get_redis()
+        provider = await r.get(f"{_STATE_PREFIX}{state}")
+        if provider:
+            await r.delete(f"{_STATE_PREFIX}{state}")
+            return provider
+    except Exception:
+        pass
+    return _STATE_STORE.pop(state, None)
+
+
 @router.get("/google/login")
 async def google_login():
     state = _generate_state()
-    _STATE_STORE[state] = "google"
+    await _store_state(state, "google")
     url = get_google_login_url(state)
     return {"url": url}
 
@@ -38,7 +66,7 @@ async def google_login():
 @router.get("/github/login")
 async def github_login():
     state = _generate_state()
-    _STATE_STORE[state] = "github"
+    await _store_state(state, "github")
     url = get_github_login_url(state)
     return {"url": url}
 
@@ -50,7 +78,7 @@ async def oauth_callback(
     state: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
-    provider = _STATE_STORE.pop(state, None)
+    provider = await _pop_state(state)
     if not provider:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired state parameter")
 
@@ -105,6 +133,10 @@ async def oauth_callback(
             db.add(user)
             from app.models.workspace import Workspace, WorkspaceMember
             slug = email.split("@")[0]
+            from app.services.workspace_service import get_workspace
+            existing_ws = await db.execute(select(Workspace).where(Workspace.slug == slug))
+            if existing_ws.scalar_one_or_none():
+                slug = f"{slug}-{state[:6]}"
             ws = Workspace(
                 name=f"{display_name or slug}'s Workspace",
                 slug=slug,
@@ -133,7 +165,7 @@ async def oauth_callback(
         key="zly_token",
         value=access,
         httponly=True,
-        secure=False,
+        secure=settings.secure_cookies,
         samesite="lax",
         max_age=86400 * 7,
     )

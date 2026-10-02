@@ -33,6 +33,8 @@ class LinkCreate(LinkBase):
     password: str | None = Field(None, min_length=1)
     expires_at: datetime | None = None
     activate_at: datetime | None = None
+    folder_id: str | None = None
+    max_clicks: int | None = Field(None, ge=1)
     utm_source: str | None = None
     utm_medium: str | None = None
     utm_campaign: str | None = None
@@ -44,6 +46,10 @@ class LinkUpdate(BaseModel):
     destination_url: str | None = None
     title: str | None = None
     is_active: bool | None = None
+    is_archived: bool | None = None
+    folder_id: str | None = None
+    max_clicks: int | None = None
+    notes: str | None = None
     password: str | None = None
     expires_at: datetime | None = None
     activate_at: datetime | None = None
@@ -62,6 +68,10 @@ class LinkResponse(LinkBase):
     destination_url: str
     title: str | None = None
     is_active: bool
+    is_archived: bool = False
+    folder_id: str | None = None
+    max_clicks: int | None = None
+    notes: str | None = None
     expires_at: datetime | None = None
     activate_at: datetime | None = None
     workspace_id: str

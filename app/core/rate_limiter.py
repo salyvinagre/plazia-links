@@ -111,14 +111,15 @@ async def _check_rate_limit(key: str, zone: str) -> tuple[bool, int, int]:
         pipe = redis_client.pipeline()
         pipe.zremrangebyscore(key, 0, cutoff)
         pipe.zcard(key)
-        pipe.zadd(key, {str(now): now})
-        pipe.expire(key, ZONES[zone]["window"])
         results = await pipe.execute()
         count = results[1]
-        remaining = ZONES[zone]["max"] - count - 1
         if count >= ZONES[zone]["max"]:
-            retry_after = int(ZONES[zone]["window"] - (now - cutoff))
-            return False, max(1, retry_after), 0
+            return False, ZONES[zone]["window"], 0
+        add_pipe = redis_client.pipeline()
+        add_pipe.zadd(key, {str(now): now})
+        add_pipe.expire(key, ZONES[zone]["window"])
+        await add_pipe.execute()
+        remaining = ZONES[zone]["max"] - count - 1
         return True, 0, max(0, remaining)
     except Exception:
         logger.warning("Redis rate limiter unavailable, falling back to in-memory", extra={"zone": zone})

@@ -2,13 +2,6 @@
 {% block title %}Link — Zly{% endblock %}
 {% block head %}
 <meta name="link-id" content="{{ link.id }}">
-<style>
-.tab-btn.active-tab { background: rgba(34,197,94,0.08); color: var(--zly-emerald); border-bottom: 2px solid var(--zly-emerald); }
-.tab-btn { padding: 0.625rem 1.25rem; font-family: 'Space Grotesk', sans-serif; font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--zly-muted); cursor: pointer; border: none; background: none; transition: all 0.15s ease; border-bottom: 2px solid transparent; }
-.tab-btn:hover { color: var(--zly-cream); background: rgba(255,255,255,0.02); }
-.tab-panel { display: none; }
-.tab-panel.active-panel { display: block; }
-</style>
 {% endblock %}
 {% block content %}
 <div style="max-width: 72rem; margin: 0 auto;">
@@ -17,36 +10,58 @@
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
             Back to links
         </a>
-        <div style="display: flex; align-items: center; gap: 1rem; margin-top: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-top: 0.75rem; flex-wrap: wrap;">
             <h1 style="font-size: 1.25rem; letter-spacing: 0.1em;">{{ link.title or link.short_code }}</h1>
             <button onclick="downloadQR('{{ link.id }}', 'qr-{{ link.short_code }}')"
                class="zly-btn zly-btn-secondary" style="font-size: 0.65rem; padding: 0.4rem 0.85rem;">
                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
                 QR Code
             </button>
-            <button class="zly-btn zly-btn-secondary" style="font-size: 0.65rem; padding: 0.4rem 0.85rem;" onclick="copyToClipboard('{{ link.short_code }}')">
+            <button class="zly-btn zly-btn-secondary" style="font-size: 0.65rem; padding: 0.4rem 0.85rem;" onclick="copyToClipboard(window.location.origin + '/{{ link.short_code }}')">
                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                 Copy
             </button>
         </div>
         <p style="color: var(--zly-muted); font-size: 0.85rem; word-break: break-all; margin-top: 0.5rem; font-family: 'Lora', serif;">{{ link.destination_url }}</p>
         <code style="color: var(--zly-emerald); font-size: 0.8rem; font-family: 'Space Mono', monospace;">/{{ link.short_code }}</code>
+        {% if link.notes %}<div class="zly-card" style="margin-top:0.75rem; padding:0.75rem; font-size:0.75rem; color:var(--zly-cream); background:rgba(96,165,250,0.06); border-color:rgba(96,165,250,0.15);"><span style="font-family:'Space Mono',monospace;font-size:0.6rem;color:var(--zly-info);">NOTES:</span> {{ link.notes }}</div>{% endif %}
+        {% if link.is_archived %}<span class="zly-badge zly-badge-hidden" style="margin-left: 0.5rem;">Archived</span>{% endif %}
+        {% if not link.is_active %}<span class="zly-badge zly-badge-danger" style="margin-left: 0.5rem;">Inactive</span>{% endif %}
+        {% if link.max_clicks %}<span class="zly-badge zly-badge-info" style="margin-left: 0.25rem;">{{ link.max_clicks }} max clicks</span>{% endif %}
+        {% if link.expires_at %}<span class="zly-badge zly-badge-warning" style="margin-left: 0.25rem;">Expires {{ link.expires_at.strftime('%Y-%m-%d') if link.expires_at.strftime else link.expires_at }}</span>{% endif %}
+        <span class="zly-badge" style="margin-left:0.25rem;"><a href="/api/v1/links/{{ link.id }}/analytics/export?format=csv" style="color:inherit;text-decoration:none;">Export CSV</a></span>
     </div>
 
-    <div style="border-bottom: 1px solid var(--zly-line); margin-bottom: 1.5rem; display: flex;">
-        <button class="tab-btn active-tab" onclick="switchTab('analytics', this)">Analytics</button>
-        <button class="tab-btn" onclick="switchTab('variants', this)">A/B Variants</button>
+    <div style="border-bottom: 1px solid var(--zly-line); margin-bottom: 1.5rem; display: flex; overflow-x: auto;">
+        <button class="tab-btn active-tab" onclick="switchTab('analytics', this)" data-tab="analytics">Analytics</button>
+        <button class="tab-btn" onclick="switchTab('geo', this)" data-tab="geo">Geography</button>
+        <button class="tab-btn" onclick="switchTab('variants', this)" data-tab="variants">A/B Variants</button>
+        <button class="tab-btn" onclick="switchTab('rules', this)" data-tab="rules">Smart Rules</button>
+        <button class="tab-btn" onclick="switchTab('health', this)" data-tab="health">Health</button>
     </div>
     <div id="variant-form-modal"></div>
+    <div id="rule-form-modal"></div>
 
     <div id="tab-analytics" class="tab-panel active-panel">
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;" id="stats-cards">
-            <div class="zly-card">
-                <p style="color: var(--zly-muted); font-size: 0.6rem; font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.12em; text-transform: uppercase;">Total Clicks</p>
-                <p style="font-size: 1.75rem; font-weight: 700; font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.05em;" id="total-clicks">—</p>
+        <div class="grid-4" id="stats-cards" style="margin-bottom: 1.5rem;">
+            <div class="stat-card">
+                <p class="stat-card-label">Total Clicks</p>
+                <p class="stat-card-value" id="total-clicks">—</p>
+            </div>
+            <div class="stat-card">
+                <p class="stat-card-label">Unique Visitors</p>
+                <p class="stat-card-value" id="unique-clicks">—</p>
+            </div>
+            <div class="stat-card">
+                <p class="stat-card-label">Top Country</p>
+                <p class="stat-card-value" id="top-country" style="font-size: 1.1rem;">—</p>
+            </div>
+            <div class="stat-card">
+                <p class="stat-card-label">Click Rate (7d)</p>
+                <p class="stat-card-value" id="click-rate">—</p>
             </div>
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div class="grid-2">
             <div class="zly-card">
                 <h3 style="font-size: 0.6rem; letter-spacing: 0.15em; color: var(--zly-muted); margin-bottom: 1rem;">Clicks Over Time</h3>
                 <canvas id="clicksChart" height="200"></canvas>
@@ -61,37 +76,83 @@
             </div>
             <div class="zly-card">
                 <h3 style="font-size: 0.6rem; letter-spacing: 0.15em; color: var(--zly-muted); margin-bottom: 1rem;">Top Referrers</h3>
-                <div id="referrers-list" style="font-size: 0.8rem;"></div>
+                <div id="referrers-list" style="font-size: 0.8rem;"><div class="skeleton skeleton-text" style="width:80%"></div><div class="skeleton skeleton-text" style="width:60%"></div></div>
+            </div>
+            <div class="zly-card">
+                <h3 style="font-size: 0.6rem; letter-spacing: 0.15em; color: var(--zly-muted); margin-bottom: 1rem;">Hourly Distribution (24h)</h3>
+                <canvas id="hourlyChart" height="200"></canvas>
+            </div>
+            <div class="zly-card">
+                <h3 style="font-size: 0.6rem; letter-spacing: 0.15em; color: var(--zly-muted); margin-bottom: 1rem;">OS Breakdown</h3>
+                <div id="os-list" style="font-size:0.8rem;"><div class="skeleton skeleton-text" style="width:60%"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-geo" class="tab-panel">
+        <div class="grid-2">
+            <div class="zly-card">
+                <h3 style="font-size: 0.6rem; letter-spacing: 0.15em; color: var(--zly-muted); margin-bottom: 1rem;">Top Countries</h3>
+                <div id="geo-countries" style="font-size: 0.8rem;"><div class="skeleton skeleton-text" style="width:70%"></div></div>
+            </div>
+            <div class="zly-card">
+                <h3 style="font-size: 0.6rem; letter-spacing: 0.15em; color: var(--zly-muted); margin-bottom: 1rem;">Top Cities</h3>
+                <div id="geo-cities" style="font-size: 0.8rem;"><div class="skeleton skeleton-text" style="width:70%"></div></div>
             </div>
         </div>
     </div>
 
     <div id="tab-variants" class="tab-panel">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-            <h3 style="font-size: 0.65rem; letter-spacing: 0.15em; color: var(--zly-muted);">Variants</h3>
+            <h3 style="font-size: 0.65rem; letter-spacing: 0.15em; color: var(--zly-muted);">A/B Variants</h3>
             <button class="zly-btn zly-btn-primary" style="font-size: 0.6rem; padding: 0.35rem 0.75rem;"
                     hx-get="/dashboard/links/{{ link.id }}/variants/new-form" hx-target="#variant-form-modal" hx-swap="innerHTML">+ Add Variant</button>
         </div>
-        <div class="zly-card" style="padding: 0; overflow: hidden;">
+        <div class="table-wrap">
             <table class="zly-table">
                 <thead>
                     <tr><th>Destination</th><th>Weight</th><th>Type</th><th style="text-align: right;">Actions</th></tr>
                 </thead>
                 <tbody id="variants-tbody" hx-get="/dashboard/links/{{ link.id }}/variants/list" hx-trigger="load" hx-swap="innerHTML">
-                    <tr><td colspan="4" style="text-align: center; padding: 2rem 1rem; color: var(--zly-muted); font-family: 'Space Grotesk', sans-serif; font-size: 0.7rem; letter-spacing: 0.05em;">Loading variants...</td></tr>
+                    <tr><td colspan="4" style="text-align: center; padding: 2rem 1rem;"><div class="zly-spinner" style="margin: 0 auto;"></div><p style="color:var(--zly-muted);font-size:0.65rem;letter-spacing:0.05em;margin-top:0.5rem;">LOADING VARIANTS…</p></td></tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <div id="tab-rules" class="tab-panel">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+            <div>
+                <h3 style="font-size: 0.65rem; letter-spacing: 0.15em; color: var(--zly-muted);">Smart Rules</h3>
+                <p style="font-size:0.6rem;color:var(--zly-muted);">Route by country, device, OS, language or referrer. Highest priority wins.</p>
+            </div>
+            <button class="zly-btn zly-btn-primary" style="font-size: 0.6rem; padding: 0.35rem 0.75rem;"
+                    hx-get="/dashboard/links/{{ link.id }}/rules/new-form" hx-target="#rule-form-modal" hx-swap="innerHTML">+ Add Rule</button>
+        </div>
+        <div class="table-wrap">
+            <table class="zly-table">
+                <thead><tr><th>Type</th><th>Match</th><th>Destination</th><th>Priority</th><th style="text-align:right;">Actions</th></tr></thead>
+                <tbody id="rules-tbody" hx-get="/dashboard/links/{{ link.id }}/rules/list" hx-trigger="load" hx-swap="innerHTML">
+                    <tr><td colspan="5" style="text-align:center;padding:2rem;"><div class="zly-spinner" style="margin:0 auto;"></div><p style="color:var(--zly-muted);font-size:0.65rem;margin-top:0.5rem;">LOADING RULES…</p></td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="zly-card" style="margin-top:1rem; padding:1rem; font-size:0.7rem; color:var(--zly-muted);">
+            <strong style="color:var(--zly-cream);">Examples:</strong> country = US/GB/JP, device = mobile/desktop, os = ios/android, language = en/fr, referrer = google.com
+        </div>
+    </div>
+
+    <div id="tab-health" class="tab-panel">
+        <div class="zly-card" style="padding:1.5rem;">
+            <h3 style="font-size:0.65rem;letter-spacing:0.12em;color:var(--zly-muted);margin-bottom:1rem;">Link Health Check</h3>
+            <div id="health-result"><div style="display:flex;justify-content:center;padding:1rem;"><div class="zly-spinner"></div></div></div>
+            <button class="zly-btn zly-btn-secondary" style="margin-top:1rem;font-size:0.6rem;" onclick="checkHealth('{{ link.id }}')">Recheck</button>
+            <p style="font-size:0.6rem;color:var(--zly-muted);margin-top:0.75rem;">Checks destination URL via HEAD request (SSRF-protected). 200-399 = healthy.</p>
         </div>
     </div>
 </div>
 
 <script>
-function switchTab(tabId, btn) {
-    document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active-panel'); });
-    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active-tab'); });
-    document.getElementById('tab-' + tabId).classList.add('active-panel');
-    btn.classList.add('active-tab');
-}
 function downloadQR(linkId, filename) {
     fetch('/api/v1/links/' + linkId + '/qrcode', { credentials: 'same-origin' })
         .then(function(r) { if (!r.ok) throw new Error(); return r.blob(); })
@@ -102,39 +163,62 @@ function downloadQR(linkId, filename) {
             document.body.appendChild(a); a.click();
             a.remove(); URL.revokeObjectURL(url);
         })
-        .catch(function() { alert('Failed to download QR code'); });
+        .catch(function() { zlyToast('Failed to download QR code', 'error'); });
 }
+function checkHealth(linkId) {
+    var el = document.getElementById('health-result');
+    el.innerHTML = '<div style="display:flex;justify-content:center;padding:1rem;"><div class="zly-spinner"></div></div>';
+    fetch('/api/v1/links/' + linkId + '/health', {credentials:'same-origin'})
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            var badge = d.status === 'healthy' ? '<span class="zly-badge zly-badge-active">✓ Healthy</span>' : (d.status === 'unhealthy' ? '<span class="zly-badge zly-badge-danger">✗ Unhealthy ('+(d.http_code||'')+')</span>' : '<span class="zly-badge zly-badge-warning">'+(d.status||'unknown')+'</span>');
+            el.innerHTML = '<div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">'+badge+'<span style="font-family:Space Mono,monospace;font-size:0.7rem;color:var(--zly-muted);">'+(d.reason||'')+'</span></div>';
+        })
+        .catch(function(){ el.innerHTML = '<span class="zly-badge zly-badge-danger">Check failed</span>'; });
+}
+// Auto-check on load when health tab becomes visible or immediately
+setTimeout(function(){ var h=document.getElementById('health-result'); if(h) checkHealth(document.querySelector('meta[name="link-id"]').content); }, 500);
 (function(){
     var linkId = document.querySelector('meta[name="link-id"]').content;
-    if (!linkId) { return; }
+    if (!linkId) return;
     fetch('/api/v1/links/' + linkId + '/analytics')
         .then(function(r) { if (!r.ok) throw new Error('Failed to load analytics'); return r.json(); })
         .then(function(data) {
             document.getElementById('total-clicks').textContent = data.total_clicks;
-            new Chart(document.getElementById('clicksChart'), {
-                type: 'line', data: {
-                    labels: data.clicks_over_time.map(function(d) { return d.date; }),
-                    datasets: [{ label: 'Clicks', data: data.clicks_over_time.map(function(d) { return d.count; }), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.08)', fill: true, tension: 0.4 }]
-                },
-                options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9a968f' } }, y: { ticks: { color: '#9a968f' } } } }
-            });
-            new Chart(document.getElementById('browsersChart'), {
-                type: 'doughnut', data: {
-                    labels: data.browsers.map(function(b) { return b.browser; }),
-                    datasets: [{ data: data.browsers.map(function(b) { return b.count; }), backgroundColor: ['#22c55e', '#16a34a', '#4ade80', '#86efac', '#bbf7d0'] }]
-                },
-                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#9a968f' } } } }
-            });
-            new Chart(document.getElementById('devicesChart'), {
-                type: 'doughnut', data: {
-                    labels: data.devices.map(function(d) { return d.device; }),
-                    datasets: [{ data: data.devices.map(function(d) { return d.count; }), backgroundColor: ['#22c55e', '#4ade80', '#86efac'] }]
-                },
-                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#9a968f' } } } }
-            });
+            document.getElementById('unique-clicks').textContent = data.unique_clicks != null ? data.unique_clicks : '—';
+            document.getElementById('top-country').textContent = (data.top_countries && data.top_countries[0]) ? data.top_countries[0].country + ' (' + data.top_countries[0].count + ')' : '—';
+            // Click rate: clicks in last 7d vs total
+            var recent = 0;
+            if (data.clicks_over_time) {
+                for (var i = Math.max(0, data.clicks_over_time.length - 7); i < data.clicks_over_time.length; i++) recent += data.clicks_over_time[i].count;
+            }
+            document.getElementById('click-rate').textContent = recent + ' /7d';
+            if (typeof Chart !== 'undefined') {
+                new Chart(document.getElementById('clicksChart'), {
+                    type: 'line', data: {
+                        labels: data.clicks_over_time.map(function(d) { return d.date; }),
+                        datasets: [{ label: 'Clicks', data: data.clicks_over_time.map(function(d) { return d.count; }), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.08)', fill: true, tension: 0.4 }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9a968f' } }, y: { ticks: { color: '#9a968f' } } } }
+                });
+                new Chart(document.getElementById('browsersChart'), {
+                    type: 'doughnut', data: {
+                        labels: data.browsers.map(function(b) { return b.browser; }),
+                        datasets: [{ data: data.browsers.map(function(b) { return b.count; }), backgroundColor: ['#22c55e', '#16a34a', '#4ade80', '#86efac', '#bbf7d0'] }]
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#9a968f' } } } }
+                });
+                new Chart(document.getElementById('devicesChart'), {
+                    type: 'doughnut', data: {
+                        labels: data.devices.map(function(d) { return d.device; }),
+                        datasets: [{ data: data.devices.map(function(d) { return d.count; }), backgroundColor: ['#22c55e', '#4ade80', '#86efac'] }]
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#9a968f' } } } }
+                });
+            }
             var refList = document.getElementById('referrers-list');
             refList.textContent = '';
-            if (data.top_referrers.length === 0) {
+            if (!data.top_referrers || data.top_referrers.length === 0) {
                 var p = document.createElement('p');
                 p.style.cssText = "color:var(--zly-muted);font-family:'Space Grotesk',sans-serif;font-size:0.65rem;letter-spacing:0.05em;";
                 p.textContent = 'NO REFERRER DATA YET';
@@ -153,10 +237,62 @@ function downloadQR(linkId, filename) {
                     refList.appendChild(row);
                 }
             }
+            // Hourly + OS
+            if (typeof Chart !== 'undefined' && data.hourly_stats) {
+                var hourLabels = []; var hourData = [];
+                for(var h=0; h<24; h++) hourLabels.push(String(h).padStart(2,'0')+':00');
+                hourData = Array(24).fill(0);
+                data.hourly_stats.forEach(function(e){ var idx=parseInt(e.hour)||0; hourData[idx]=e.count; });
+                new Chart(document.getElementById('hourlyChart'), {
+                    type: 'bar',
+                    data: { labels: hourLabels, datasets: [{ label:'Clicks', data: hourData, backgroundColor:'rgba(34,197,94,0.5)', borderColor:'#22c55e', borderWidth:1 }] },
+                    options: { responsive:true, plugins:{legend:{display:false}}, scales:{ x:{ticks:{color:'#9a968f', maxRotation:0, autoSkip:true, maxTicksLimit:12}}, y:{ticks:{color:'#9a968f'}} } }
+                });
+            }
+            var osList = document.getElementById('os-list');
+            if (osList) {
+                osList.textContent='';
+                if(!data.oss || data.oss.length===0) osList.innerHTML='<p style="color:var(--zly-muted);font-size:0.65rem;">NO OS DATA</p>';
+                else data.oss.forEach(function(o){
+                    var row=document.createElement('div');
+                    row.style.cssText='display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid rgba(244,240,234,0.06);';
+                    row.innerHTML='<span>'+o.os+'</span><span style="color:var(--zly-muted);font-family:Space Mono,monospace;">'+o.count+'</span>';
+                    osList.appendChild(row);
+                });
+            }
+            // Geo
+            var cEl = document.getElementById('geo-countries');
+            var ciEl = document.getElementById('geo-cities');
+            if (cEl) {
+                cEl.textContent = '';
+                if (!data.top_countries || data.top_countries.length === 0) {
+                    cEl.innerHTML = '<p style="color:var(--zly-muted);font-size:0.65rem;letter-spacing:0.05em;">NO GEO DATA YET</p>';
+                } else {
+                    data.top_countries.forEach(function(c) {
+                        var row = document.createElement('div');
+                        row.style.cssText = 'display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid rgba(244,240,234,0.06);';
+                        row.innerHTML = '<span>' + c.country + '</span><span style="color:var(--zly-muted);font-family:Space Mono,monospace;">' + c.count + '</span>';
+                        cEl.appendChild(row);
+                    });
+                }
+            }
+            if (ciEl) {
+                ciEl.textContent = '';
+                if (!data.top_cities || data.top_cities.length === 0) {
+                    ciEl.innerHTML = '<p style="color:var(--zly-muted);font-size:0.65rem;letter-spacing:0.05em;">NO CITY DATA YET</p>';
+                } else {
+                    data.top_cities.forEach(function(c) {
+                        var row = document.createElement('div');
+                        row.style.cssText = 'display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid rgba(244,240,234,0.06);';
+                        row.innerHTML = '<span>' + (c.city || 'Unknown') + (c.country ? ' (' + c.country + ')' : '') + '</span><span style="color:var(--zly-muted);font-family:Space Mono,monospace;">' + c.count + '</span>';
+                        ciEl.appendChild(row);
+                    });
+                }
+            }
         })
         .catch(function() {
             document.getElementById('total-clicks').textContent = 'ERR';
-            document.querySelectorAll('#stats-cards .zly-card').forEach(function(c) { c.style.borderColor = 'rgba(239,68,68,0.3)'; });
+            document.querySelectorAll('#stats-cards .stat-card').forEach(function(c) { c.style.borderColor = 'rgba(239,68,68,0.3)'; });
         });
 })();
 </script>

@@ -14,6 +14,6 @@
             <button type="submit" class="zly-btn zly-btn-danger" style="font-size:0.6rem;padding:0.4rem 0.8rem;">Decline</button>
         </form>
     </div>
-    <p style="font-size:0.55rem;color:var(--zly-muted);margin-top:1.5rem;">Invited by {{ invite.invited_by_name }}. Expires {{ invite.expires_at.strftime('%Y-%m-%d') if invite.expires_at else 'soon' }}.</p>
+    <p style="font-size:0.55rem;color:var(--zly-muted);margin-top:1.5rem;">Invited by {{ invite.invited_by_name }}. Expires {{ invite.expires_at or 'soon' }}.</p>
 </div>
 {% endblock %}

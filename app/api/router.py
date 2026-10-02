@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api import ab_testing, admin, analytics, api_keys, audit_logs, auth, bio, bulk, domains, email_campaigns, invites, links, oauth, redirect, sessions, tags, users, webhooks, workspaces
+from app.api import ab_testing, admin, analytics, api_keys, audit_logs, auth, bio, bulk, domains, email_campaigns, folders, invites, link_rules, links, oauth, redirect, sessions, tags, users, webhooks, workspaces
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
@@ -14,6 +14,8 @@ api_router.include_router(domains.router)
 api_router.include_router(ab_testing.router)
 api_router.include_router(webhooks.router)
 api_router.include_router(bulk.router)
+api_router.include_router(folders.router)
+api_router.include_router(link_rules.router)
 api_router.include_router(tags.router)
 api_router.include_router(users.router)
 api_router.include_router(admin.router)

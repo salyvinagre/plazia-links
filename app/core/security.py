@@ -28,10 +28,51 @@ _PRIVATE_HOST_PATTERNS = [
 ]
 
 
+def _is_private_ip(ip_str: str) -> bool:
+    import ipaddress
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    if ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified:
+        return True
+    if ip.is_private:
+        # is_private includes the TEST-NET documentation ranges
+        # (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) which are not
+        # internal hosts; allow them.
+        for net in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24"):
+            if ip in ipaddress.ip_network(net):
+                return False
+        return True
+    return False
+
+
 def validate_private_url(url: str) -> str:
-    host = urlparse(url).hostname
-    if host and any(p.match(host) for p in _PRIVATE_HOST_PATTERNS):
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise ValueError("Invalid URL")
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("URL must use http or https scheme")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("URL must include a host")
+    if any(p.match(host) for p in _PRIVATE_HOST_PATTERNS):
         raise ValueError("URL pointing to a private or internal host is not allowed")
+    # Decode alternative IP encodings (decimal, hex, octal, IPv6-mapped) so
+    # forms like 127.1, 2130706433, 0x7f000001, ::ffff:127.0.0.1 are caught.
+    try:
+        import ipaddress
+        normalized = host.rstrip(".")
+        candidate = normalized
+        if ":" in normalized and "%" in normalized:
+            candidate = normalized.split("%", 1)[0]
+        ip = ipaddress.ip_address(candidate)
+        if _is_private_ip(str(ip)):
+            raise ValueError("URL pointing to a private or internal host is not allowed")
+    except ValueError as exc:
+        if str(exc).startswith("URL pointing"):
+            raise
     return url
 
 
@@ -111,6 +152,8 @@ async def get_current_user(
         user = await _authenticate_via_api_key(db, raw)
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+        if not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
         return user
 
     payload = decode_access_token(raw)
@@ -130,6 +173,8 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
     return user
 
 
@@ -148,6 +193,8 @@ async def get_current_user_from_cookie(
         user = await _authenticate_via_api_key(db, token)
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+        if not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
         return user
 
     payload = decode_access_token(token)
@@ -156,10 +203,19 @@ async def get_current_user_from_cookie(
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    jti = payload.get("jti")
+    if jti:
+        from app.services.session_service import is_jti_blacklisted
+        if await is_jti_blacklisted(jti):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked")
+
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
     return user
 
 

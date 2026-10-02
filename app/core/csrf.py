@@ -22,7 +22,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 response.set_cookie(
                     key=CSRF_COOKIE_NAME,
                     value=secrets.token_hex(32),
-                    httponly=True,
+                    httponly=False,
                     secure=settings.secure_cookies,
                     samesite="strict",
                     path="/",

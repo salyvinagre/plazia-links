@@ -35,7 +35,7 @@ async def api_bulk_import(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"File too large. Maximum is {settings.max_upload_size_mb}MB.",
         )
-    reader = csv.DictReader(StringIO(content.decode()))
+    reader = csv.DictReader(StringIO(content.decode("utf-8-sig", errors="replace")))
     rows = list(reader)
     result = await bulk_create_links(db, rows, workspace_id, current_user.id)
     await log_audit_event(
@@ -60,8 +60,15 @@ async def api_export_links(
     await verify_workspace_access(db, workspace_id, current_user, required_permission="analytics:view")
     if format == "json":
         from app.services.link_service import get_links
-        links, total, has_next = await get_links(db, workspace_id, page=1, page_size=10000)
-        return JSONResponse(content={"links": [{"short_code": l.short_code, "destination_url": l.destination_url, "title": l.title, "is_active": l.is_active, "expires_at": str(l.expires_at) if l.expires_at else None, "created_at": str(l.created_at) if l.created_at else None} for l in links]})
+        page = 1
+        all_links = []
+        while True:
+            links, total, has_next = await get_links(db, workspace_id, page=page, page_size=500)
+            all_links.extend(links)
+            if not has_next:
+                break
+            page += 1
+        return JSONResponse(content={"links": [{"short_code": l.short_code, "destination_url": l.destination_url, "title": l.title, "is_active": l.is_active, "expires_at": str(l.expires_at) if l.expires_at else None, "created_at": str(l.created_at) if l.created_at else None} for l in all_links]})
     csv_content = await export_links_csv(db, workspace_id)
     return Response(
         content=csv_content,

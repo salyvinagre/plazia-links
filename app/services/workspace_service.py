@@ -11,6 +11,9 @@ from app.services.short_code import generate_short_code
 
 async def create_workspace(db: AsyncSession, data: WorkspaceCreate, owner_id: str) -> Workspace:
     slug = data.slug or generate_short_code(length=8).lower()
+    existing = await db.execute(select(Workspace).where(Workspace.slug == slug))
+    if existing.scalar_one_or_none():
+        slug = f"{slug}-{generate_short_code(length=4).lower()}"
     ws = Workspace(name=data.name, slug=slug, owner_id=owner_id)
     db.add(ws)
     await db.flush()

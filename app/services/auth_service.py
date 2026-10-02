@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import secrets
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,9 @@ async def register_user(db: AsyncSession, data: RegisterRequest) -> User:
     await db.flush()
 
     slug = data.email.split("@")[0]
+    existing_slug = await db.execute(select(Workspace).where(Workspace.slug == slug))
+    if existing_slug.scalar_one_or_none():
+        slug = f"{slug}-{secrets.token_hex(3)}"
     ws = Workspace(
         name=f"{data.display_name or slug}'s Workspace",
         slug=slug,
@@ -48,6 +52,8 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
     if not user or not user.password_hash:
         return None
     if not verify_password(password, user.password_hash):
+        return None
+    if not user.is_active:
         return None
     return user
 
@@ -81,12 +87,14 @@ async def refresh_user_token(
         user = result.scalar_one_or_none()
         if not user:
             return None
+        if not user.is_active:
+            return None
         if user.token_version != token_version:
             return None
         user.token_version += 1
         await db.flush()
 
-    access = create_access_token({"sub": user_id})
+    access = create_access_token({"sub": user_id}, jti=generate_jti())
     refresh = create_refresh_token({"sub": user_id}, token_version=token_version + 1 if db else token_version)
     return access, refresh
 
@@ -97,23 +105,27 @@ async def get_user_by_id(db: AsyncSession, user_id: str) -> User | None:
 
 
 async def create_password_reset_token(db: AsyncSession, email: str) -> User | None:
+    import hashlib
     import secrets
     from datetime import timedelta
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if not user:
         return None
-    user.password_reset_token = secrets.token_urlsafe(48)
+    token = secrets.token_urlsafe(48)
+    user.password_reset_token = hashlib.sha256(token.encode()).hexdigest()
     user.password_reset_expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
     await db.flush()
     await db.refresh(user)
+    setattr(user, "_plain_reset_token", token)
     return user
 
 
 async def reset_password_with_token(db: AsyncSession, token: str, new_password: str) -> User | None:
+    import hashlib
     result = await db.execute(
         select(User).where(
-            User.password_reset_token == token,
+            User.password_reset_token == hashlib.sha256(token.encode()).hexdigest(),
             User.password_reset_expires_at > datetime.now(timezone.utc),
         )
     )
@@ -123,5 +135,6 @@ async def reset_password_with_token(db: AsyncSession, token: str, new_password: 
     user.password_hash = hash_password(new_password)
     user.password_reset_token = None
     user.password_reset_expires_at = None
+    user.token_version += 1
     await db.flush()
     return user

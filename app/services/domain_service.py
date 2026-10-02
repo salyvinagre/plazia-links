@@ -81,3 +81,14 @@ async def get_workspace_by_domain(db: AsyncSession, domain: str) -> str | None:
     if custom_domain:
         return custom_domain.workspace_id
     return None
+
+
+async def is_domain_verified_for_workspace(db: AsyncSession, workspace_id: str, domain: str) -> bool:
+    result = await db.execute(
+        select(CustomDomain).where(
+            CustomDomain.workspace_id == workspace_id,
+            CustomDomain.domain == domain,
+            CustomDomain.is_verified == True,
+        )
+    )
+    return result.scalar_one_or_none() is not None

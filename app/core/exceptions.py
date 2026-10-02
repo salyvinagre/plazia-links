@@ -12,7 +12,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> HTMLRe
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
         template = "errors/404.html" if exc.status_code == HTTP_404_NOT_FOUND else "errors/500.html"
-        return templates.TemplateResponse(request, template, status_code=exc.status_code)
+        return templates.TemplateResponse(request, template, {"user": None}, status_code=exc.status_code)
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
@@ -32,7 +32,12 @@ async def validation_exception_handler(request: Request, exc) -> JSONResponse:
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> HTMLResponse | JSONResponse:
     logger.exception("Unhandled exception", extra={"path": str(request.url.path)})
+    try:
+        import sentry_sdk
+        sentry_sdk.capture_exception(exc)
+    except Exception:
+        pass
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
-        return templates.TemplateResponse(request, "errors/500.html", status_code=500)
+        return templates.TemplateResponse(request, "errors/500.html", {"user": None}, status_code=500)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})

@@ -27,17 +27,6 @@ async def _fire_webhooks(workspace_id: str, event: str, payload: dict) -> None:
             await session.rollback()
 
 
-async def _check_expiry_on_redirect(workspace_id: str) -> None:
-    from app.services.notification_service import check_expiring_links
-    factory = get_session_factory()
-    async with factory() as session:
-        try:
-            await check_expiring_links(session, workspace_id)
-            await session.commit()
-        except Exception:
-            await session.rollback()
-
-
 router = APIRouter()
 
 
@@ -61,7 +50,7 @@ async def redirect(
                     break
 
     try:
-        cached_url = await redis.get(f"link:{short_code}")
+        cached_url = await redis.get(f"link:v2:{short_code}")
         if cached_url:
             try:
                 validate_private_url(cached_url)
@@ -79,7 +68,7 @@ async def redirect(
     link = await get_link_by_code(db, short_code)
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
-    if not link.is_active:
+    if not link.is_active or getattr(link, "is_archived", False):
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Link is inactive")
 
     now = datetime.now(timezone.utc)
@@ -87,6 +76,13 @@ async def redirect(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not yet active")
     if link.expires_at and link.expires_at < now:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Link has expired")
+    # Max clicks guard
+    if getattr(link, "max_clicks", None):
+        from sqlalchemy import func, select
+        from app.models.click import Click
+        cnt = await db.execute(select(func.count()).select_from(Click).where(Click.link_id == link.id))
+        if (cnt.scalar() or 0) >= link.max_clicks:
+            raise HTTPException(status_code=status.HTTP_410_GONE, detail="Link has reached its click limit")
 
     if link.password_hash:
         password = request.query_params.get("password", "")
@@ -98,14 +94,61 @@ async def redirect(
                 headers={"X-Link-Id": link.id, "X-Require-Password": "true"},
             )
 
-    variants_list = await list_variants(db, link.id)
-    variants, _, _ = variants_list if isinstance(variants_list, tuple) else (variants_list, 0, False)
-    target_url = link.destination_url
-    selected_variant = None
-    if variants:
-        selected_variant = select_variant(variants)
-        if selected_variant:
-            target_url = selected_variant.destination_url
+    # Smart rules evaluation (geo/device/os/referrer)
+    try:
+        from app.services.link_rule_service import get_rules, evaluate_rules
+        from app.services.geoip_service import resolve_ip as _resolve_ip
+        rules = await get_rules(db, link.id)
+        if rules:
+            ip_for_geo = request.client.host if request.client else ""
+            ctx = {}
+            try:
+                geo = await _resolve_ip(ip_for_geo) if ip_for_geo else None
+                if geo:
+                    ctx["country"] = geo.get("country")
+                    ctx["city"] = geo.get("city")
+            except Exception:
+                pass
+            ua_for_rules = request.headers.get("user-agent", "")
+            parsed_for_rules = parse_user_agent(ua_for_rules)
+            ctx["device"] = parsed_for_rules.get("device_type")
+            ctx["os"] = parsed_for_rules.get("os")
+            ctx["referrer"] = request.headers.get("referer") or request.headers.get("referrer")
+            ctx["accept_language"] = request.headers.get("accept-language")
+            matched = evaluate_rules(rules, ctx)
+            if matched:
+                target_url = matched
+                selected_variant = None
+                # Skip variant selection if rule matched
+                variants = []
+            else:
+                # No rule matched, fall through to variant/primary
+                variants_list = await list_variants(db, link.id)
+                variants, _, _ = variants_list if isinstance(variants_list, tuple) else (variants_list, 0, False)
+                target_url = link.destination_url
+                selected_variant = None
+                if variants:
+                    selected_variant = select_variant(variants)
+                    if selected_variant:
+                        target_url = selected_variant.destination_url
+        else:
+            variants_list = await list_variants(db, link.id)
+            variants, _, _ = variants_list if isinstance(variants_list, tuple) else (variants_list, 0, False)
+            target_url = link.destination_url
+            selected_variant = None
+            if variants:
+                selected_variant = select_variant(variants)
+                if selected_variant:
+                    target_url = selected_variant.destination_url
+    except Exception:
+        variants_list = await list_variants(db, link.id)
+        variants, _, _ = variants_list if isinstance(variants_list, tuple) else (variants_list, 0, False)
+        target_url = link.destination_url
+        selected_variant = None
+        if variants:
+            selected_variant = select_variant(variants)
+            if selected_variant:
+                target_url = selected_variant.destination_url
 
     try:
         validate_private_url(target_url)
@@ -116,7 +159,16 @@ async def redirect(
         )
 
     try:
-        await redis.set(f"link:{short_code}", target_url)
+        has_rules = False
+        try:
+            from app.services.link_rule_service import get_rules as _gr
+            _r = await _gr(db, link.id)
+            has_rules = bool(_r)
+        except Exception:
+            pass
+        cacheable = not link.password_hash and not link.expires_at and not variants and not has_rules and not getattr(link, "is_archived", False) and not getattr(link, "max_clicks", None)
+        if cacheable:
+            await redis.set(f"link:v2:{short_code}", target_url, ex=300)
     except Exception as exc:
         logger.warning("Redis set failed, cache will be cold", extra={"short_code": short_code, "error": str(exc)})
 
@@ -162,8 +214,6 @@ async def redirect(
             },
         )
     )
-
-    asyncio.create_task(_check_expiry_on_redirect(link.workspace_id))
 
     return Response(
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,

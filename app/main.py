@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.api.router import api_router, redirect_router
@@ -38,6 +39,30 @@ async def lifespan(app: FastAPI):
         async with factory() as session:
             await session.execute(text("SELECT 1"))
         logger.info("Database connection verified")
+        # Ensure power-feature tables exist (for dev SQLite without alembic)
+        try:
+            from app.db import Base, get_engine
+            import app.models  # noqa: F401 ensure models registered
+            eng = get_engine()
+            async with eng.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+            try:
+                async with factory() as session:
+                    for ddl in [
+                        "ALTER TABLE links ADD COLUMN folder_id VARCHAR(36)",
+                        "ALTER TABLE links ADD COLUMN is_archived BOOLEAN DEFAULT 0",
+                        "ALTER TABLE links ADD COLUMN max_clicks INTEGER",
+                        "ALTER TABLE links ADD COLUMN notes TEXT",
+                    ]:
+                        try:
+                            await session.execute(text(ddl))
+                        except Exception:
+                            pass
+                    await session.commit()
+            except Exception:
+                pass
+        except Exception:
+            pass
     except Exception as e:
         logger.critical("Database unreachable on startup", extra={"error": str(e)})
         raise
@@ -70,6 +95,8 @@ app = FastAPI(
     title="Zly API",
     description="Open-source URL shortener and marketing platform. Shorten URLs, track clicks, manage campaigns, and more.",
     version="0.1.0",
+    docs_url=None if os.getenv("ENVIRONMENT", "").lower() in ("production", "prod") else "/docs",
+    redoc_url=None if os.getenv("ENVIRONMENT", "").lower() in ("production", "prod") else "/redoc",
     contact={
         "name": "PythonPlumber",
         "url": "https://senuka.me",
@@ -123,6 +150,12 @@ app.add_middleware(
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CSRFMiddleware)
+
+# Static files — serves app/static/* at /static/*
+import os as _os
+_static_dir = _os.path.join(_os.path.dirname(__file__), "static")
+if _os.path.isdir(_static_dir):
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 if settings.rate_limit_enabled:
     setup_rate_limiter(

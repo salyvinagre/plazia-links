@@ -1,18 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — Zly{% endblock %}
 {% block content %}
-<style>
-.tab-btn.active-tab { background: rgba(34,197,94,0.08); color: var(--zly-emerald); border-bottom: 2px solid var(--zly-emerald); }
-.tab-btn { padding: 0.625rem 1.25rem; font-family: 'Space Grotesk', sans-serif; font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--zly-muted); cursor: pointer; border: none; background: none; transition: all 0.15s ease; border-bottom: 2px solid transparent; }
-.tab-btn:hover { color: var(--zly-cream); background: rgba(255,255,255,0.02); }
-.tab-panel { display: none; }
-.tab-panel.active-panel { display: block; }
-</style>
 <div style="max-width: 72rem; margin: 0 auto;">
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;">
         <div style="display: flex; align-items: center; gap: 0.75rem;">
             <h1 style="font-size: 1.25rem; letter-spacing: 0.1em;">Dashboard</h1>
-            <div style="width: 0.4rem; height: 0.4rem; background: var(--zly-emerald); animation: pulse-glow 2s ease-in-out infinite;"></div>
+            <div style="width: 0.4rem; height: 0.4rem; background: var(--zly-emerald); animation: pulse-glow 2s ease-in-out infinite; border-radius: 50%;"></div>
         </div>
         {% if workspaces and workspaces|length > 1 %}
         <select id="workspace-select" class="zly-input" style="width: auto; font-family: 'Space Grotesk', sans-serif; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;"
@@ -26,39 +19,31 @@
     </div>
 
     <div style="border-bottom: 1px solid var(--zly-line); margin-bottom: 1.5rem; display: flex;">
-        <button class="tab-btn active-tab" onclick="switchDashTab('summary', this)">Summary</button>
-        <button class="tab-btn" onclick="switchDashTab('top-links', this)">Top Links</button>
+        <button class="tab-btn active-tab" onclick="switchDashTab('summary', this)" data-tab="summary">Summary</button>
+        <button class="tab-btn" onclick="switchDashTab('top-links', this)" data-tab="top-links">Top Links</button>
     </div>
 
     <div id="tab-summary" class="tab-panel active-panel">
     {% if default_ws %}
         <div hx-get="/dashboard/summary" hx-trigger="load" hx-swap="outerHTML">
-            <div style="display: flex; justify-content: center; padding: 3rem 0;">
-                <div class="zly-spinner"></div>
-            </div>
+            {% include "partials/skeletons/stat_cards.html" %}
         </div>
     {% else %}
-        <div class="zly-card" style="text-align: center; padding: 3rem;">
-            <p style="color: var(--zly-muted); font-size: 0.9rem; font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.05em;">
-                NO WORKSPACE FOUND. CREATE ONE TO GET STARTED.
-            </p>
-        </div>
+        {% set title="No workspace yet" %}
+        {% set message="Create a workspace to start shortening links and tracking clicks." %}
+        {% include "components/empty_state.html" %}
     {% endif %}
     </div>
 
     <div id="tab-top-links" class="tab-panel">
     {% if default_ws %}
         <div hx-get="/dashboard/top-links" hx-trigger="load" hx-swap="outerHTML">
-            <div style="display: flex; justify-content: center; padding: 3rem 0;">
-                <div class="zly-spinner"></div>
-            </div>
+            <div class="table-wrap"><table class="zly-table"><tbody><tr><td colspan="4">{% include "partials/skeletons/table_rows.html" with context %}</td></tr></tbody></table></div>
         </div>
     {% else %}
-        <div class="zly-card" style="text-align: center; padding: 3rem;">
-            <p style="color: var(--zly-muted); font-size: 0.9rem; font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.05em;">
-                NO WORKSPACE FOUND.
-            </p>
-        </div>
+        {% set title="No workspace" %}
+        {% set message="Create a workspace first." %}
+        {% include "components/empty_state.html" %}
     {% endif %}
     </div>
 </div>

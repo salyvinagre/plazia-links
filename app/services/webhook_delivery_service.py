@@ -43,6 +43,11 @@ async def create_webhook_delivery(
     return delivery
 
 
+async def get_delivery(db: AsyncSession, delivery_id: str) -> WebhookDelivery | None:
+    result = await db.execute(select(WebhookDelivery).where(WebhookDelivery.id == delivery_id))
+    return result.scalar_one_or_none()
+
+
 async def get_deliveries(
     db: AsyncSession,
     webhook_id: str,

@@ -37,7 +37,7 @@ async def api_create_invite(
     ws = await verify_workspace_access(db, workspace_id, current_user, require_owner=True, required_permission="members:manage")
     invite = await create_invite(db, workspace_id, current_user.id, data.email, data.role)
 
-    email_data = await get_invite_email_data(db, invite, settings.default_domain)
+    email_data = await get_invite_email_data(db, invite, settings.base_url)
     if email_data:
         try:
             from app.core.arq_pool import get_arq_pool

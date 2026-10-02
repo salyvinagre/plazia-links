@@ -282,13 +282,20 @@ async def update_campaign_stats(db: AsyncSession, campaign_id: str) -> None:
 
     campaign = await get_campaign(db, campaign_id)
     if campaign:
+        unsub_result = await db.execute(
+            select(func.count()).select_from(EmailContact).where(
+                EmailContact.workspace_id == campaign.workspace_id,
+                EmailContact.status == "unsubscribed",
+            )
+        )
+        unsubscribed = unsub_result.scalar() or 0
         campaign.stats = {
             "sent": sent,
             "delivered": sent,
             "opened": opened,
             "clicked": clicked,
             "bounced": 0,
-            "unsubscribed": 0,
+            "unsubscribed": unsubscribed,
         }
         await db.flush()
 
