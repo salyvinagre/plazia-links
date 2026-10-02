@@ -52,8 +52,10 @@ jobs:
           data = base64.b64decode(''.join(parts), validate=True)
           assert hashlib.sha256(data).hexdigest() == '14a1125f64b04dec0c9ebdd1f172a62eb60b7f9342c71a7f084b63524c95d713'
           subprocess.run(['git', 'apply', '--index', '-'], input=lzma.decompress(data), check=True)
-          subprocess.run(['git', 'apply', '--index', '.github/identity-fixes.patch'], check=True)
-          pathlib.Path('.github/identity-fixes.patch').unlink()
+          for name in ('identity-fixes.patch', 'identity-fixture-fix.patch'):
+              path = pathlib.Path('.github', name)
+              subprocess.run(['git', 'apply', '--index', str(path)], check=True)
+              path.unlink()
           for path in pathlib.Path('.github').glob('identity-patch-*.b64'):
               path.unlink()
           for name in ('identity-apply.yml', 'identity-review.yml'):
@@ -69,8 +71,6 @@ jobs:
           uv run --locked ruff format --check .
           uv run --locked mypy app/ worker/
           git diff --check
-      - name: Complete unit, API and acceptance suite
-        run: uv run --locked pytest -q --junitxml="$RUNNER_TEMP/unit.xml"
       - name: PostgreSQL 18 migrations and application tests
         env:
           DATABASE_URL: postgresql+asyncpg://plazia_test:local-ci-only@localhost:5432/plazia_test
@@ -87,6 +87,8 @@ jobs:
         run: |
           uv run --locked playwright install --with-deps chromium
           uv run --locked pytest -q tests/e2e --junitxml="$RUNNER_TEMP/browser.xml"
+      - name: Complete unit, API and acceptance suite
+        run: uv run --locked pytest -q --junitxml="$RUNNER_TEMP/unit.xml"
       - name: Packaging and production image
         run: |
           uv build --no-sources
