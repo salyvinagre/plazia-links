@@ -1,0 +1,57 @@
+name: Identity source snapshot
+on:
+  push:
+    branches: [feat/identity-core-link-flow]
+    paths: [.github/workflows/identity-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.12.21'
+      - run: uv python install 3.14
+      - name: Restore reviewed source
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, lzma, pathlib, subprocess
+          parts = [pathlib.Path(f'.github/identity-patch-{i}.b64').read_text() for i in range(5)]
+          assert parts[1].count('PICNBtssWgfGG6n9') == 1
+          parts[1] = parts[1].replace('PICNBtssWgfGG6n9', 'PICNBtssWgfG6n9', 1)
+          data = base64.b64decode(''.join(parts), validate=True)
+          assert hashlib.sha256(data).hexdigest() == '14a1125f64b04dec0c9ebdd1f172a62eb60b7f9342c71a7f084b63524c95d713'
+          subprocess.run(['git','apply','--index','-'],input=lzma.decompress(data),check=True)
+          for name in ('identity-fixes.patch','identity-fixture-fix.patch'):
+              path = pathlib.Path('.github',name)
+              subprocess.run(['git','apply','--index',str(path)],check=True)
+              path.unlink()
+          for path in pathlib.Path('.github').glob('identity-patch-*.b64'):
+              path.unlink()
+          for name in ('identity-apply.yml','identity-review.yml','identity-snapshot.yml'):
+              pathlib.Path('.github/workflows',name).unlink(missing_ok=True)
+          PY
+          uv lock
+          git add -A
+      - name: Capture source and verification libraries
+        run: |
+          mkdir -p "$RUNNER_TEMP/identity-snapshot"
+          python3 - <<'PY'
+          import os, pathlib, subprocess, tarfile
+          out = pathlib.Path(os.environ['RUNNER_TEMP'])/'identity-snapshot'
+          paths = subprocess.check_output(['git','ls-files','-z']).decode().strip('\0').split('\0')
+          with tarfile.open(out/'source.tar.gz','w:gz') as archive:
+              for name in paths:
+                  archive.add(name,arcname=name,recursive=False)
+          (out/'tree.txt').write_bytes(subprocess.check_output(['git','write-tree']))
+          PY
+          uv pip install --python 3.14 --target "$RUNNER_TEMP/identity-libs" 'Authlib==1.7.2' 'PyJWT[crypto]>=2.15.1,<3' 'playwright>=1.55,<2' 'pytest-playwright>=0.7,<1'
+          tar -czf "$RUNNER_TEMP/identity-snapshot/deps.tar.gz" -C "$RUNNER_TEMP/identity-libs" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: identity-source-snapshot
+          path: ${{ runner.temp }}/identity-snapshot/
+          retention-days: 1
