@@ -51,3 +51,10 @@ async def test_hourly_analytics_also_supports_sqlite(
     db_session.add(Click(link_id=link.id, timestamp=datetime(2026, 10, 2, 9, tzinfo=UTC)))
     await db_session.flush()
     assert await get_hourly_stats(db_session, link.id) == [{"hour": "09", "count": 1}]
+
+
+def test_legacy_asgi_entrypoint_reexports_application() -> None:
+    from api.index import app as compatibility_app
+    from app.main import app
+
+    assert compatibility_app is app
