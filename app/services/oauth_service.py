@@ -1,7 +1,9 @@
 import secrets
+from typing import Any
 from urllib.parse import urlencode
 
 import httpx
+from pydantic import TypeAdapter
 
 from app.config import settings
 
@@ -33,7 +35,7 @@ def get_github_login_url(state: str) -> str:
     return f"https://github.com/login/oauth/authorize?{urlencode(params)}"
 
 
-async def exchange_google_code(code: str) -> dict | None:
+async def exchange_google_code(code: str) -> dict[str, Any] | None:
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
             "https://oauth2.googleapis.com/token",
@@ -57,10 +59,10 @@ async def exchange_google_code(code: str) -> dict | None:
         )
         if user_resp.status_code != 200:
             return None
-        return user_resp.json()
+        return TypeAdapter(dict[str, Any]).validate_python(user_resp.json())
 
 
-async def exchange_github_code(code: str) -> dict | None:
+async def exchange_github_code(code: str) -> dict[str, Any] | None:
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
             "https://github.com/login/oauth/access_token",
@@ -87,7 +89,7 @@ async def exchange_github_code(code: str) -> dict | None:
         )
         if user_resp.status_code != 200:
             return None
-        data = user_resp.json()
+        data = TypeAdapter(dict[str, Any]).validate_python(user_resp.json())
         emails_resp = await client.get(
             "https://api.github.com/user/emails",
             headers={

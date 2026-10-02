@@ -2,8 +2,8 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.link import Link
 from app.models.click import Click
+from app.models.link import Link
 from app.models.user import User
 
 
@@ -27,7 +27,11 @@ async def test_create_link(db_session: AsyncSession, test_workspace_id: str):
 
 @pytest.mark.asyncio
 async def test_create_click(db_session: AsyncSession, test_workspace_id: str):
-    link = Link(short_code="clicktest", destination_url="https://example.com", workspace_id=test_workspace_id)
+    link = Link(
+        short_code="clicktest",
+        destination_url="https://example.com",
+        workspace_id=test_workspace_id,
+    )
     db_session.add(link)
     await db_session.flush()
 

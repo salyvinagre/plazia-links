@@ -1,20 +1,32 @@
 from pydantic import BaseModel
 
+from app.schemas.internal import (
+    BrowserCount,
+    CityCount,
+    CountryCount,
+    DateCount,
+    DeviceCount,
+    HourCount,
+    OSCount,
+    ReferrerCount,
+    WorkspaceLinkSummary,
+)
+
 
 class ClickStats(BaseModel):
     total_clicks: int
-    clicks_over_time: list[dict]
-    top_referrers: list[dict]
-    browsers: list[dict]
-    devices: list[dict]
-    oss: list[dict]
+    clicks_over_time: list[DateCount]
+    top_referrers: list[ReferrerCount]
+    browsers: list[BrowserCount]
+    devices: list[DeviceCount]
+    oss: list[OSCount]
     unique_clicks: int = 0
-    top_countries: list[dict] = []
-    top_cities: list[dict] = []
-    hourly_stats: list[dict] = []
+    top_countries: list[CountryCount] = []
+    top_cities: list[CityCount] = []
+    hourly_stats: list[HourCount] = []
 
 
 class WorkspaceSummary(BaseModel):
     total_clicks: int
     total_links: int
-    links: list[dict]
+    links: list[WorkspaceLinkSummary]

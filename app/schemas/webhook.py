@@ -1,13 +1,10 @@
 import re
-from urllib.parse import urlparse
-
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.security import validate_private_url
 from app.schemas.link import _validate_url_scheme
-
 
 PRIVATE_HOST_PATTERNS = [
     re.compile(r"^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$"),
@@ -32,7 +29,7 @@ def _reject_private_url(v: str) -> str:
 class WebhookCreate(BaseModel):
     name: str
     url: str
-    secret: str | None = Field(None, max_length=255)
+    secret: str | None = Field(default=None, max_length=255)
     events: str = "click.created"
     is_active: bool = True
 
@@ -62,16 +59,17 @@ class WebhookResponse(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _mark_secret(cls, data):
+    def _mark_secret(cls, data: object) -> dict[str, object]:
         if isinstance(data, dict):
             has_secret = bool(data.get("secret"))
             data = dict(data)
             data.pop("secret", None)
             data["has_secret"] = has_secret
             return data
-        secret = getattr(data, "secret", None)
-        data.secret = None
-        data.has_secret = bool(secret)
-        return data
+        # A response serializer must not dirty the SQLAlchemy entity. Otherwise
+        # a read can silently erase the signing secret when the session commits.
+        result = {name: getattr(data, name) for name in cls.model_fields if name != "has_secret"}
+        result["has_secret"] = bool(getattr(data, "secret", None))
+        return result
 
     model_config = {"from_attributes": True}

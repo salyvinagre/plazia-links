@@ -4,9 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.dependencies import get_db
-from app.core.security import get_current_user
 from app.core.logging import get_logger
-logger = get_logger(__name__)
+from app.core.security import get_current_user
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.auth import (
@@ -28,6 +27,8 @@ from app.services.auth_service import (
 )
 from app.services.workspace_service import create_workspace
 
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
@@ -35,15 +36,20 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 async def api_register(
     data: RegisterRequest,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
-    response: Response = None,
-):
+) -> User:
     try:
         user = await register_user(db, data)
-        ws_count = await db.execute(select(func.count()).select_from(Workspace).where(Workspace.owner_id == user.id))
+        ws_count = await db.execute(
+            select(func.count()).select_from(Workspace).where(Workspace.owner_id == user.id)
+        )
         if (ws_count.scalar() or 0) == 0:
             from app.schemas.workspace import WorkspaceCreate
-            await create_workspace(db, WorkspaceCreate(name=f"{user.email.split('@')[0]}'s Workspace"), user.id)
+
+            await create_workspace(
+                db, WorkspaceCreate(name=f"{user.email.split('@')[0]}'s Workspace"), user.id
+            )
         logger.info("User registered", extra={"user_id": user.id, "email": user.email})
         ip = request.client.host if request.client else None
         ua = request.headers.get("user-agent")
@@ -66,9 +72,9 @@ async def api_register(
 async def api_login(
     data: LoginRequest,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
-    response: Response = None,
-):
+) -> TokenResponse:
     user = await authenticate_user(db, data.email, data.password)
     if not user:
         logger.warning("Login failed", extra={"email": data.email})
@@ -94,16 +100,18 @@ async def api_login(
 async def api_refresh(
     data: RefreshRequest,
     db: AsyncSession = Depends(get_db),
-):
+) -> TokenResponse:
     result = await refresh_user_token(data.refresh_token, db=db)
     if not result:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+        )
     access, refresh = result
     return TokenResponse(access_token=access, refresh_token=refresh)
 
 
 @router.get("/me", response_model=UserResponse)
-async def api_me(current_user: User = Depends(get_current_user)):
+async def api_me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
@@ -112,30 +120,47 @@ async def api_forgot_password(
     data: ForgotPasswordRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
-    from app.core.rate_limiter import _check_rate_limit, ZONES
+) -> dict[str, str]:
+    from app.core.rate_limiter import ZONES, _check_rate_limit
+
     zone = "_forgot_pw"
     if zone not in ZONES:
         ZONES[zone] = {"max": 3, "window": 300}
-    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (
+        request.client.host if request.client else "unknown"
+    )
     allowed, _, _ = await _check_rate_limit(f"rl:forgot:{client_ip}:{data.email}", zone)
     if not allowed:
         return {"status": "ok"}
     user = await create_password_reset_token(db, data.email)
-    if not user:
+    if not user or user.password_reset_expires_at is None:
         return {"status": "ok"}
     email_data = {
         "user_id": user.id,
         "to_email": user.email,
-        "reset_url": f"{settings.base_url}/auth/reset-password?token={getattr(user, '_plain_reset_token', '')}",
+        ("reset_url"): (
+            f"{settings.base_url}"
+            "/auth/reset-password?token="
+            f"{getattr(user, '_plain_reset_token', '')}"
+        ),
         "expires_at": user.password_reset_expires_at.strftime("%Y-%m-%d %H:%M UTC"),
     }
     try:
         from app.core.arq_pool import get_arq_pool
+
         pool = await get_arq_pool()
-        await pool.enqueue_job("send_password_reset_email_job", **email_data)
+        await pool.enqueue_job(
+            "send_password_reset_email_job",
+            user_id=email_data["user_id"],
+            to_email=email_data["to_email"],
+            reset_url=email_data["reset_url"],
+            expires_at=email_data["expires_at"],
+        )
     except Exception as exc:
-        logger.warning("Failed to enqueue password reset email, skipping", extra={"user_id": user.id, "error": str(exc)})
+        logger.warning(
+            "Failed to enqueue password reset email, skipping",
+            extra={"user_id": user.id, "error": str(exc)},
+        )
     return {"status": "ok"}
 
 
@@ -144,17 +169,24 @@ async def api_reset_password(
     data: ResetPasswordRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
-    from app.core.rate_limiter import _check_rate_limit, ZONES
+) -> dict[str, str]:
+    from app.core.rate_limiter import ZONES, _check_rate_limit
+
     zone = "_reset_pw"
     if zone not in ZONES:
         ZONES[zone] = {"max": 5, "window": 300}
-    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (
+        request.client.host if request.client else "unknown"
+    )
     allowed, _, _ = await _check_rate_limit(f"rl:reset:{client_ip}", zone)
     if not allowed:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many reset attempts")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many reset attempts"
+        )
     user = await reset_password_with_token(db, data.token, data.new_password)
     if not user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token"
+        )
     logger.info("Password reset successful", extra={"user_id": user.id})
     return {"status": "ok"}

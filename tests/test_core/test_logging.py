@@ -1,9 +1,8 @@
 import json
 import logging
-import pytest
 from io import StringIO
 
-from app.core.request_id import request_id_var
+import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -37,8 +36,8 @@ def test_json_formatter_output():
 
 
 def test_get_logger_injects_request_id():
-    from app.core.logging import get_logger, JSONFormatter
     import app.core.request_id as req_id_mod
+    from app.core.logging import JSONFormatter, get_logger
 
     req_id_mod.request_id_var.set("test-req-456")
 

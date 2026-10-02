@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -8,6 +9,11 @@ from app.db import Base
 
 
 class User(Base):
+    if TYPE_CHECKING:
+        _key_workspace_id: str | None
+        _key_permissions: set[str] | None
+        _plain_reset_token: str
+
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -19,7 +25,9 @@ class User(Base):
     oauth_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     password_reset_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    password_reset_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -5,7 +5,9 @@ from pydantic import BaseModel, Field
 
 class ApiKeyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
-    permissions: str | None = Field(None, description="Comma-separated list of permissions (empty = all)")
+    permissions: str | None = Field(
+        None, description="Comma-separated list of permissions (empty = all)"
+    )
 
 
 class ApiKeyResponse(BaseModel):

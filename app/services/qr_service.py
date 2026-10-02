@@ -7,7 +7,21 @@ from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, SquareModuleD
 from qrcode.image.svg import SvgPathFillImage
 
 _COLOR_PATTERN = re.compile(r"^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})$")
-_NAMED_COLORS = {"black", "white", "red", "green", "blue", "yellow", "cyan", "magenta", "gray", "grey", "orange", "purple", "transparent"}
+_NAMED_COLORS = {
+    "black",
+    "white",
+    "red",
+    "green",
+    "blue",
+    "yellow",
+    "cyan",
+    "magenta",
+    "gray",
+    "grey",
+    "orange",
+    "purple",
+    "transparent",
+}
 
 _ERROR_LEVELS = {
     "L": qrcode.constants.ERROR_CORRECT_L,
@@ -49,10 +63,15 @@ def generate_qr_png(
     return buf.getvalue()
 
 
-def generate_qr_svg(url: str, fill_color: str = "black", back_color: str = "white", error_correction: str = "M") -> str:
+def generate_qr_svg(
+    url: str, fill_color: str = "black", back_color: str = "white", error_correction: str = "M"
+) -> str:
     ec = _ERROR_LEVELS.get(error_correction.upper(), qrcode.constants.ERROR_CORRECT_M)
     qr = qrcode.QRCode(image_factory=SvgPathFillImage, error_correction=ec)
     qr.add_data(url)
     qr.make(fit=True)
-    img = qr.make_image(fill_color=_sanitize_color(fill_color, "black"), back_color=_sanitize_color(back_color, "white"))
+    img = qr.make_image(
+        fill_color=_sanitize_color(fill_color, "black"),
+        back_color=_sanitize_color(back_color, "white"),
+    )
     return img.to_string().decode()

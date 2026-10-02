@@ -1,11 +1,12 @@
 import secrets
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.status import HTTP_403_FORBIDDEN
 
 from app.core.logging import get_logger
+
 logger = get_logger(__name__)
 
 CSRF_COOKIE_NAME = "zly_csrf_token"
@@ -14,11 +15,12 @@ SKIP_PREFIXES = {"/api/v1/auth", "/bio", "/health", "/login", "/register"}
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.method in ("GET", "HEAD", "OPTIONS"):
             response: Response = await call_next(request)
             if not request.cookies.get(CSRF_COOKIE_NAME):
                 from app.config import settings
+
                 response.set_cookie(
                     key=CSRF_COOKIE_NAME,
                     value=secrets.token_hex(32),
@@ -43,12 +45,15 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         header_token = request.headers.get(CSRF_HEADER_NAME)
 
         if not cookie_token or not header_token or cookie_token != header_token:
-            logger.warning("CSRF validation failed", extra={
-                "path": str(request.url.path),
-                "method": request.method,
-                "has_cookie": bool(cookie_token),
-                "has_header": bool(header_token),
-            })
+            logger.warning(
+                "CSRF validation failed",
+                extra={
+                    "path": str(request.url.path),
+                    "method": request.method,
+                    "has_cookie": bool(cookie_token),
+                    "has_header": bool(header_token),
+                },
+            )
             return JSONResponse(
                 status_code=HTTP_403_FORBIDDEN,
                 content={"detail": "CSRF token missing or invalid"},

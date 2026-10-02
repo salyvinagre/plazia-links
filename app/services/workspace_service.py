@@ -28,7 +28,9 @@ async def get_workspace(db: AsyncSession, workspace_id: str) -> Workspace | None
     return result.scalar_one_or_none()
 
 
-async def get_workspaces_for_user(db: AsyncSession, user_id: str, page: int = 1, page_size: int = 50) -> tuple[list[Workspace], int, bool]:
+async def get_workspaces_for_user(
+    db: AsyncSession, user_id: str, page: int = 1, page_size: int = 50
+) -> tuple[list[Workspace], int, bool]:
     base = (
         select(Workspace)
         .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
@@ -68,16 +70,16 @@ async def verify_workspace_access(
     ws = await get_workspace(db, workspace_id)
     if not ws:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    key_workspace = getattr(user, "_key_workspace_id", None)
+    if key_workspace is not None and key_workspace != workspace_id:
+        raise HTTPException(status_code=403, detail="API key belongs to another workspace")
+    key_perms = getattr(user, "_key_permissions", None)
+    if key_perms is not None and required_permission and required_permission not in key_perms:
+        raise HTTPException(status_code=403, detail="API key lacks the required permission")
     if ws.owner_id == user.id:
         return ws
     if require_owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not workspace owner")
-    key_perms = getattr(user, "_key_permissions", None)
-    if key_perms is not None and required_permission and required_permission not in key_perms:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"API key does not have permission '{required_permission}'",
-        )
     result = await db.execute(
         select(WorkspaceMember).where(
             WorkspaceMember.workspace_id == workspace_id,

@@ -1,4 +1,4 @@
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.folder import Folder
@@ -13,7 +13,9 @@ async def create_folder(db: AsyncSession, workspace_id: str, name: str) -> Folde
 
 
 async def get_folders(db: AsyncSession, workspace_id: str) -> list[Folder]:
-    result = await db.execute(select(Folder).where(Folder.workspace_id == workspace_id).order_by(Folder.created_at.desc()))
+    result = await db.execute(
+        select(Folder).where(Folder.workspace_id == workspace_id).order_by(Folder.created_at.desc())
+    )
     return list(result.scalars().all())
 
 

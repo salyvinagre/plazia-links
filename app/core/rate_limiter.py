@@ -1,11 +1,9 @@
 import asyncio
-import logging
 import time
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.types import ASGIApp
+from starlette.middleware.base import RequestResponseEndpoint
 
 from app.core.logging import get_logger
 
@@ -17,7 +15,7 @@ _IN_MEMORY_LOCK = asyncio.Lock()
 _MAX_BUCKET_KEYS = 10000
 
 
-def _cleanup_stale_buckets():
+def _cleanup_stale_buckets() -> None:
     now = time.time()
     stale = []
     for key, timestamps in list(_IN_MEMORY_BUCKETS.items()):
@@ -65,14 +63,15 @@ def setup_rate_limiter(
     ZONES["tracking"] = {"max": tracking_requests, "window": tracking_window}
 
     @app.middleware("http")
-    async def rate_limit_middleware(request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def rate_limit_middleware(
+        request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         zone = _get_zone(request.url.path)
         if zone is None or zone not in ZONES:
             return await call_next(request)
 
-        client_ip = (
-            request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-            or (request.client.host if request.client else "unknown")
+        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (
+            request.client.host if request.client else "unknown"
         )
         auth_header = request.headers.get("Authorization", "")
         api_key_prefix = ""
@@ -84,7 +83,10 @@ def setup_rate_limiter(
         if not allowed:
             return Response(
                 status_code=429,
-                content='{"error":"Too Many Requests","detail":"Rate limit exceeded. Please wait and retry."}',
+                content=(
+                    '{"error":"Too Many Requests","detail":"Rate limit exceeded. '
+                    'Please wait and retry."}'
+                ),
                 media_type="application/json",
                 headers={
                     "Retry-After": str(retry_after),
@@ -122,7 +124,9 @@ async def _check_rate_limit(key: str, zone: str) -> tuple[bool, int, int]:
         remaining = ZONES[zone]["max"] - count - 1
         return True, 0, max(0, remaining)
     except Exception:
-        logger.warning("Redis rate limiter unavailable, falling back to in-memory", extra={"zone": zone})
+        logger.warning(
+            "Redis rate limiter unavailable, falling back to in-memory", extra={"zone": zone}
+        )
         return await _memory_check(key, zone)
 
 
@@ -133,6 +137,11 @@ def _get_zone(path: str) -> str | None:
         return "api"
     if path.startswith("/track/") or path.startswith("/l/track/"):
         return "tracking"
-    if len(path) > 1 and "/" not in path.strip("/") and path != "/health" and not path.startswith("/dashboard"):
+    if (
+        len(path) > 1
+        and "/" not in path.strip("/")
+        and path != "/health"
+        and not path.startswith("/dashboard")
+    ):
         return "redirect"
     return None

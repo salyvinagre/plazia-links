@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.schemas.analytics import ClickStats, WorkspaceSummary
+from app.schemas.internal import WorkspaceSummaryData
 from app.services.analytics_service import (
     get_browser_stats,
     get_clicks_over_time,
@@ -30,11 +32,13 @@ async def api_link_analytics(
     days: int = 30,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ClickStats:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
-    await verify_workspace_access(db, link.workspace_id, current_user, required_permission="analytics:view")
+    await verify_workspace_access(
+        db, link.workspace_id, current_user, required_permission="analytics:view"
+    )
 
     return ClickStats(
         total_clicks=await get_total_clicks(db, link_id),
@@ -56,25 +60,59 @@ async def api_link_analytics_export(
     format: str = "csv",
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Response:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
-    await verify_workspace_access(db, link.workspace_id, current_user, required_permission="analytics:view")
+    await verify_workspace_access(
+        db, link.workspace_id, current_user, required_permission="analytics:view"
+    )
     if format == "csv":
-        from io import StringIO
         import csv
-        from app.models.click import Click
+        from io import StringIO
+
         from sqlalchemy import select
-        result = await db.execute(select(Click).where(Click.link_id == link_id).order_by(Click.timestamp.desc()))
+
+        from app.models.click import Click
+
+        result = await db.execute(
+            select(Click).where(Click.link_id == link_id).order_by(Click.timestamp.desc())
+        )
         clicks = result.scalars().all()
         output = StringIO()
         writer = csv.writer(output)
-        writer.writerow(["timestamp", "country", "city", "browser", "os", "device_type", "referrer_domain", "ip_hash"])
+        writer.writerow(
+            [
+                "timestamp",
+                "country",
+                "city",
+                "browser",
+                "os",
+                "device_type",
+                "referrer_domain",
+                "ip_hash",
+            ]
+        )
         for c in clicks:
-            writer.writerow([c.timestamp, c.country or "", c.city or "", c.browser or "", c.os or "", c.device_type or "", c.referrer_domain or "", c.ip_hash or ""])
+            writer.writerow(
+                [
+                    c.timestamp,
+                    c.country or "",
+                    c.city or "",
+                    c.browser or "",
+                    c.os or "",
+                    c.device_type or "",
+                    c.referrer_domain or "",
+                    c.ip_hash or "",
+                ]
+            )
         from fastapi.responses import Response
-        return Response(content=output.getvalue(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename=analytics-{link_id}.csv"})
+
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=analytics-{link_id}.csv"},
+        )
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported format")
 
 
@@ -84,6 +122,8 @@ async def api_workspace_summary(
     days: int = 7,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="analytics:view")
+) -> WorkspaceSummaryData:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="analytics:view"
+    )
     return await get_workspace_summary(db, workspace_id, days)

@@ -49,7 +49,9 @@ async def test_delete_tag(auth_client: AsyncClient):
     ws_r = await auth_client.post("/api/v1/workspaces", json={"name": "DelT", "slug": "delt"})
     ws_id = ws_r.json()["id"]
 
-    created = await auth_client.post(f"/api/v1/workspaces/{ws_id}/tags", json={"name": "delete-me"})
+    created = await auth_client.post(
+        (f"/api/v1/workspaces/{ws_id}/tags"), json={("name"): ("delete-me")}
+    )
     tag_id = created.json()["id"]
     r = await auth_client.delete(f"/api/v1/tags/{tag_id}")
     assert r.status_code == 204

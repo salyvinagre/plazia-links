@@ -11,7 +11,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.get("/me", response_model=UserResponse)
-async def api_get_me(current_user: User = Depends(get_current_user)):
+async def api_get_me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
@@ -20,7 +20,7 @@ async def api_update_me(
     data: UserUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> User:
     return await update_user(db, current_user, data)
 
 
@@ -29,7 +29,7 @@ async def api_change_password(
     data: ChangePasswordRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     await change_user_password(db, current_user, data)
     return {"status": "ok"}
 
@@ -39,6 +39,6 @@ async def api_set_password(
     data: SetPasswordRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     await set_user_password(db, current_user, data)
     return {"status": "ok"}

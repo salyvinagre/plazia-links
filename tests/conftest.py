@@ -34,7 +34,7 @@ async def test_engine():
 
 
 @pytest_asyncio.fixture
-async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
+async def db_session(test_engine) -> AsyncGenerator[AsyncSession]:
     session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         yield session
@@ -69,8 +69,11 @@ async def mock_redis():
 
 
 @pytest_asyncio.fixture
-async def client(db_session: AsyncSession, mock_redis) -> AsyncGenerator[AsyncClient, None]:
+async def client(db_session: AsyncSession, mock_redis, monkeypatch) -> AsyncGenerator[AsyncClient]:
+    from app.config import settings
     from app.core.rate_limiter import ZONES
+
+    monkeypatch.setattr(settings, "default_domain", "test")
     ZONES.clear()
 
     async def override_get_db():
@@ -90,6 +93,7 @@ async def client(db_session: AsyncSession, mock_redis) -> AsyncGenerator[AsyncCl
 @pytest_asyncio.fixture
 async def test_user_id(db_session: AsyncSession) -> str:
     from uuid import uuid4
+
     from app.core.security import hash_password
     from app.models.user import User
 
@@ -118,6 +122,7 @@ async def test_workspace_id(db_session: AsyncSession, test_user_id: str) -> str:
 @pytest_asyncio.fixture
 async def auth_client(client: AsyncClient, db_session: AsyncSession) -> AsyncClient:
     import uuid
+
     from app.schemas.auth import RegisterRequest
     from app.services.auth_service import register_user
 

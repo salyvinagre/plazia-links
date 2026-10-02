@@ -1,7 +1,4 @@
-import random
-from typing import Optional
-
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.schemas.link import _validate_url_scheme
 
@@ -16,8 +13,8 @@ class ABVariantCreate(BaseModel):
 
 class ABVariantUpdate(BaseModel):
     destination_url: str | None = None
-    weight: Optional[int] = None
-    is_default: Optional[bool] = None
+    weight: int | None = None
+    is_default: bool | None = None
 
     _validate_url = field_validator("destination_url")(_validate_url_scheme)
 

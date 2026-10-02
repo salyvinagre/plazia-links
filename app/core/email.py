@@ -1,16 +1,13 @@
-import asyncio
-from typing import Any
-
-from email.base64mime import body_encode
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.config import settings
 from app.core.logging import get_logger
+from app.schemas.internal import EmailSendResult
 
 logger = get_logger(__name__)
 
-_email_backend: "EmailBackend | None" = None
+_email_backend: EmailBackend | None = None
 
 
 class EmailBackend:
@@ -40,7 +37,7 @@ class EmailBackend:
         text_body: str | None = None,
         from_email: str | None = None,
         from_name: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> EmailSendResult:
         if isinstance(to, list):
             recipients = to
         else:
@@ -57,6 +54,7 @@ class EmailBackend:
 
         try:
             import aiosmtplib
+
             await aiosmtplib.send(
                 msg,
                 hostname=self.host,
@@ -69,7 +67,10 @@ class EmailBackend:
             logger.info("Email sent", extra={"to": recipients, "subject": subject})
             return {"status": "sent", "to": recipients}
         except Exception as exc:
-            logger.error("Email send failed", extra={"to": recipients, "subject": subject, "error": str(exc)})
+            logger.error(
+                ("Email send failed"),
+                extra={("to"): recipients, ("subject"): subject, ("error"): str(exc)},
+            )
             return {"status": "failed", "to": recipients, "error": str(exc)}
 
     def _format_from(self, from_email: str | None, from_name: str | None) -> str:

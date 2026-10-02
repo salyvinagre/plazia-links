@@ -5,12 +5,12 @@ from fastapi import APIRouter, Depends, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.dependencies import get_db
 from app.core.security import get_current_user
-from app.config import settings
 from app.models.user import User
+from app.schemas.internal import BulkImportResult, ExpiryNotice
 from app.services.audit_service import log_audit_event
-from app.schemas.link import BulkImportResponse
 from app.services.link_service import bulk_create_links, export_links_csv
 from app.services.notification_service import check_expiring_links
 from app.services.workspace_service import verify_workspace_access
@@ -25,12 +25,15 @@ async def api_bulk_import(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="links:create")
+) -> BulkImportResult:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="links:create"
+    )
     content = await file.read()
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
     if len(content) > max_bytes:
         from fastapi import HTTPException, status
+
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"File too large. Maximum is {settings.max_upload_size_mb}MB.",
@@ -56,10 +59,13 @@ async def api_export_links(
     format: str = Query("csv", pattern="^(csv|json)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="analytics:view")
+) -> Response:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="analytics:view"
+    )
     if format == "json":
         from app.services.link_service import get_links
+
         page = 1
         all_links = []
         while True:
@@ -68,7 +74,21 @@ async def api_export_links(
             if not has_next:
                 break
             page += 1
-        return JSONResponse(content={"links": [{"short_code": l.short_code, "destination_url": l.destination_url, "title": l.title, "is_active": l.is_active, "expires_at": str(l.expires_at) if l.expires_at else None, "created_at": str(l.created_at) if l.created_at else None} for l in all_links]})
+        return JSONResponse(
+            content={
+                "links": [
+                    {
+                        "short_code": item.short_code,
+                        "destination_url": item.destination_url,
+                        "title": item.title,
+                        "is_active": item.is_active,
+                        "expires_at": str(item.expires_at) if item.expires_at else None,
+                        "created_at": str(item.created_at) if item.created_at else None,
+                    }
+                    for item in all_links
+                ]
+            }
+        )
     csv_content = await export_links_csv(db, workspace_id)
     return Response(
         content=csv_content,
@@ -83,7 +103,9 @@ async def api_check_expiring(
     within_hours: int = Query(24, ge=1, le=168),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="links:create")
+) -> dict[str, int | list[ExpiryNotice]]:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="links:create"
+    )
     result = await check_expiring_links(db, workspace_id, within_hours)
     return {"notified": len(result), "links": result}

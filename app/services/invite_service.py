@@ -1,15 +1,15 @@
-from datetime import datetime, timedelta, timezone
+import secrets
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import secrets
 from app.models.user import User
 from app.models.workspace import Invite, Workspace, WorkspaceMember
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 async def create_invite(
@@ -40,8 +40,9 @@ async def get_invite_email_data(
     db: AsyncSession,
     invite: Invite,
     base_url: str,
-) -> dict | None:
+) -> dict[str, str] | None:
     from sqlalchemy import select
+
     result = await db.execute(select(User).where(User.id == invite.invited_by_user_id))
     inviter = result.scalar_one_or_none()
     if not inviter:
@@ -62,8 +63,12 @@ async def get_invite_email_data(
     }
 
 
-async def accept_invite(db: AsyncSession, token: str, current_user: User | None = None) -> WorkspaceMember | None:
-    result = await db.execute(select(Invite).where(Invite.token == token, Invite.status == "pending"))
+async def accept_invite(
+    db: AsyncSession, token: str, current_user: User | None = None
+) -> WorkspaceMember | None:
+    result = await db.execute(
+        select(Invite).where(Invite.token == token, Invite.status == "pending")
+    )
     invite = result.scalar_one_or_none()
     if not invite:
         return None
@@ -93,7 +98,9 @@ async def accept_invite(db: AsyncSession, token: str, current_user: User | None 
 
 
 async def decline_invite(db: AsyncSession, token: str, current_user: User | None = None) -> bool:
-    result = await db.execute(select(Invite).where(Invite.token == token, Invite.status == "pending"))
+    result = await db.execute(
+        select(Invite).where(Invite.token == token, Invite.status == "pending")
+    )
     invite = result.scalar_one_or_none()
     if not invite:
         return False
@@ -104,8 +111,12 @@ async def decline_invite(db: AsyncSession, token: str, current_user: User | None
     return True
 
 
-async def list_invites(db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50) -> tuple[list[Invite], int, bool]:
-    base = select(Invite).where(Invite.workspace_id == workspace_id).order_by(Invite.created_at.desc())
+async def list_invites(
+    db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50
+) -> tuple[list[Invite], int, bool]:
+    base = (
+        select(Invite).where(Invite.workspace_id == workspace_id).order_by(Invite.created_at.desc())
+    )
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar() or 0
     offset = (page - 1) * page_size
@@ -125,8 +136,14 @@ async def cancel_invite(db: AsyncSession, invite_id: str) -> Invite | None:
     return invite
 
 
-async def list_members(db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50) -> tuple[list[WorkspaceMember], int, bool]:
-    base = select(WorkspaceMember).where(WorkspaceMember.workspace_id == workspace_id).order_by(WorkspaceMember.joined_at)
+async def list_members(
+    db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50
+) -> tuple[list[WorkspaceMember], int, bool]:
+    base = (
+        select(WorkspaceMember)
+        .where(WorkspaceMember.workspace_id == workspace_id)
+        .order_by(WorkspaceMember.joined_at)
+    )
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar() or 0
     offset = (page - 1) * page_size

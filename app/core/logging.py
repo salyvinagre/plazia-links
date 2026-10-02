@@ -1,14 +1,16 @@
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from collections.abc import MutableMapping
+from datetime import UTC, datetime
+from typing import Any
 
 
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         return json.dumps(
             {
-                "ts": datetime.now(timezone.utc).isoformat(),
+                "ts": datetime.now(UTC).isoformat(),
                 "level": record.levelname,
                 "logger": record.name,
                 "msg": record.getMessage(),
@@ -29,9 +31,12 @@ def setup_logging() -> None:
     root.setLevel(logging.INFO)
 
 
-class LoggerAdapter(logging.LoggerAdapter):
-    def process(self, msg, kwargs):
+class LoggerAdapter(logging.LoggerAdapter[logging.Logger]):
+    def process(
+        self, msg: object, kwargs: MutableMapping[str, Any]
+    ) -> tuple[object, MutableMapping[str, Any]]:
         from app.core.request_id import get_request_id
+
         rid = get_request_id()
         if rid:
             kwargs.setdefault("extra", {})["request_id"] = rid

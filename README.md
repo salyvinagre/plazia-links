@@ -1,248 +1,176 @@
-# Zly
+# Plazia Links
 
-**Next-gen open-source URL shortener and marketing platform.**
+Self-hosted link management for Plazia, built on the Python backend and web
+interface of [Zly](https://github.com/PythonPlumber/zly). This repository is an
+independently maintained fork, not a release of the upstream marketing platform.
 
-Zly is a full-featured URL shortening platform with analytics, custom domains, QR codes, link in bio pages, A/B testing, team collaboration, email campaigns, an admin panel, and a developer API, all self hosted.
+> **Status: stabilization / pre-production.** The existing shortening API is being
+> hardened before adding Plazia Identity and reserved-link pools. A green CI is
+> not a production-security approval. See [known limitations](#known-limitations).
 
-## Features
+## What is available
 
-| Category | Capabilities |
-|---|---|
-| **Short Links** | Custom slugs, password protection, scheduling (activate/expire), bulk import/export |
-| **Analytics** | Per-link and workspace dashboards; clicks over time, browser/OS/device, top referrers; Chart.js visualizations |
-| **QR Codes** | Auto-generated QR codes per link; PNG and SVG download; customizable colors |
-| **Link in Bio** | Profile pages with curated link collections; midnight/dark/light themes |
-| **A/B Testing** | Weighted destination variants with randomized traffic splitting; variant-level analytics |
-| **Custom Domains** | DNS TXT verification; workspace-scoped custom domains; CNAME-ready |
-| **Email Campaigns** | Contact management, email templates, campaign sending with open/click tracking |
-| **Teams** | Multi-user workspaces; owner/member roles; invite flow with accept/decline |
-| **Admin Panel** | User management, system stats, audit log with color-coded events |
-| **API** | Full REST API with auto-generated OpenAPI docs; scoped API keys per workspace |
-| **Security** | bcrypt password hashing; JWT auth with refresh tokens; rate limiting; CSRF protection; security headers (CSP, HSTS) |
+| Capability | Current state |
+| --- | --- |
+| Short links, custom codes, updates and deletion | Existing REST API |
+| Expiration, passwords, tags, folders, QR codes and click analytics | Inherited functionality with regression coverage for the core flows |
+| Web administration | Jinja2/HTMX pages; browser form integration still needs work |
+| PostgreSQL schema and service startup | Versioned Alembic migrations; startup checks, no automatic DDL |
+| Background processing | ARQ worker for clicks and existing email/webhook jobs |
+| Plazia Identity | Planned; the application still uses its original authentication |
+| Owned pools, unassigned links and activation subscriptions | Planned; not implemented |
 
-## Tech Stack
+The intended Plazia workflow is **reserve a pool → share a link → collect a
+confirmed email subscription → assign a destination → notify the subscriber**.
+Do not simulate this today with a dummy destination or a marketing contact:
+those domain concepts will have their own API and persistence.
 
-| Component | Technology |
-|---|---|
-| Framework | FastAPI (Python 3.12+) |
-| Database | PostgreSQL via SQLAlchemy 2.0 (async) |
-| Cache | Redis 7 (optional, graceful fallback) |
-| Auth | bcrypt + PyJWT |
-| Frontend | Jinja2 + HTMX + Tailwind CSS (CDN) + Chart.js |
-| Queue | arq (background jobs) |
-| Email | aiosmtplib (async SMTP) |
-| Migrations | Alembic |
-| Containers | Docker, Docker Compose |
-| Reverse Proxy | Caddy (auto HTTPS) |
+## Stack
 
-## Quick Start
+**Python ≥3.14 · uv/uv_build · FastAPI · PostgreSQL 18 · SQLAlchemy async ·
+Alembic · Redis/ARQ · Jinja2/HTMX.** There is no Node.js application server.
 
-### Zero config Local Dev (no Docker, no PostgreSQL, no Redis)
+`uv.lock` is committed. Development and CI use `uv sync --locked`; production
+builds install the same lock without development dependencies. `.python-version`
+selects Python 3.14, while package metadata allows newer Python versions.
 
-```bash
-# Clone
-git clone https://github.com/pythonplumber/zly.git
-cd zly
+## Local development
 
-# Install with dev dependencies
-pip install -e ".[dev]"
+Requirements: Git, [uv](https://docs.astral.sh/uv/getting-started/installation/)
+**0.12.21 or newer**, and Docker with Compose for PostgreSQL and Redis. Run the
+following from the repository root:
 
-# Start the dev server (auto-creates tables)
-uvicorn app.main:app --reload
-
-# Open http://localhost:8000/dashboard
+```sh
+git clone https://github.com/salyvinagre/plazia-links.git
+cd plazia-links
+uv python install 3.14
+uv sync --locked
+cp .env.example .env
 ```
 
-That's it. The app defaults to SQLite and gracefully handles Redis being unavailable.
+Edit `.env`: set a database password and two different random secrets. The
+password in `DATABASE_URL` must match `POSTGRES_PASSWORD`. Generate a secret
+without starting the application:
 
-## Deployment
-
-Zly is built for self hosting. A $5 to $10/month VPS with Docker Compose gives you full control, persistent storage, Redis caching, and auto-HTTPS via Caddy with no platform lock-in.
-
-### Recommended: VPS with Docker Compose
-
-```bash
-# SSH into your VPS (Ubuntu 24+)
-ssh root@your-server
-
-# Clone and deploy
-git clone https://github.com/pythonplumber/zly.git
-cd zly
-cp infrastructure/.env.example .env
-# Edit .env with secure secrets
-
-# Start everything
-docker compose -f infrastructure/docker-compose.yml up -d
-
-# Run migrations
-docker compose exec fastapi alembic upgrade head
+```sh
+uv run --locked python -c 'import secrets; print(secrets.token_hex(32))'
 ```
 
-Full guide in **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+Start the dependencies with loopback-only ports, migrate, and start the API:
 
-## Configuration
-
-All configuration lives in `app/config.py` and is driven by environment variables:
-
-| Variable | Default | Description |
-|---|---|---|
-| `DATABASE_URL` | `sqlite+aiosqlite:///./zly.db` | Database connection string |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection string (optional, graceful fallback) |
-| `SECRET_KEY` | `change-me-in-production` | General purpose secret |
-| `JWT_SECRET` | `change-me-in-production` | JWT signing key (min 32 bytes) |
-| `JWT_ALGORITHM` | `HS256` | JWT signing algorithm |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | JWT token lifetime (minutes) |
-| `CORS_ORIGINS` | `http://localhost:8000` | Comma-separated allowed origins |
-| `DEFAULT_DOMAIN` | `localhost:8000` | Base domain for short URLs |
-
-## API Overview
-
-Interactive OpenAPI docs at `/docs` (auto-generated by FastAPI). All routes prefixed `/api/v1`.
-
-### Auth
-- `POST /api/v1/auth/register`: Register a new user
-- `POST /api/v1/auth/login`: Login, receive JWT access + refresh tokens
-- `POST /api/v1/auth/refresh`: Refresh JWT token
-- `POST /api/v1/auth/forgot-password`: Request password reset email
-- `POST /api/v1/auth/reset-password`: Reset password with token
-- `GET /api/v1/auth/oauth/{provider}`: OAuth login (Google, GitHub)
-
-### Users
-- `GET /api/v1/users/me`: Get current user
-- `PATCH /api/v1/users/me`: Update profile
-- `POST /api/v1/users/me/change-password`: Change password
-- `POST /api/v1/users/me/set-password`: Set password (OAuth users)
-
-### Links
-- `POST /api/v1/links`: Create a short link
-- `GET /api/v1/links?workspace_id=`: List links for a workspace
-- `GET /api/v1/links/{id}`: Get link details
-- `PATCH /api/v1/links/{id}`: Update a link
-- `DELETE /api/v1/links/{id}`: Delete a link
-- `POST /api/v1/links/{id}/qrcode`: Generate QR code (PNG or SVG)
-- `POST /api/v1/links/{id}/verify-password`: Verify link password
-
-### Analytics
-- `GET /api/v1/links/{id}/analytics`: Per-link analytics
-- `GET /api/v1/workspaces/{id}/analytics/summary`: Workspace-level summary
-
-### A/B Testing
-- `POST /api/v1/links/{id}/variants`: Add an A/B variant
-- `GET /api/v1/links/{id}/variants`: List variants
-- `PATCH /api/v1/variants/{id}`: Update a variant
-- `DELETE /api/v1/variants/{id}`: Delete a variant
-
-### Workspaces and Teams
-- `GET/POST /api/v1/workspaces`: List/create workspaces
-- `GET/PUT/DELETE /api/v1/workspaces/{id}`: Workspace detail/update/delete
-- `POST /api/v1/workspaces/{id}/invites`: Invite a member
-- `GET /api/v1/workspaces/{id}/invites`: List invites
-- `GET /api/v1/workspaces/{id}/members`: List members
-
-### Email Campaigns
-- `GET/POST /api/v1/workspaces/{id}/email/contacts`: Manage contacts
-- `GET/POST /api/v1/workspaces/{id}/email/templates`: Manage templates
-- `GET/POST /api/v1/workspaces/{id}/email/campaigns`: Manage campaigns
-- `POST /api/v1/workspaces/{id}/email/campaigns/{id}/send`: Send campaign
-- `GET /api/v1/workspaces/{id}/email/campaigns/{id}/stats`: Campaign stats
-
-### Bio Pages
-- `POST /api/v1/workspaces/{id}/bio`: Create bio page
-- `GET /api/v1/workspaces/{id}/bio`: Get bio page
-- `PUT /api/v1/workspaces/{id}/bio`: Update bio page
-
-### Custom Domains
-- `POST /api/v1/workspaces/{id}/domains`: Add a custom domain
-- `GET /api/v1/workspaces/{id}/domains`: List domains
-- `POST /api/v1/workspaces/{id}/domains/{did}/verify`: Verify domain (TXT record)
-- `DELETE /api/v1/workspaces/{id}/domains/{did}`: Remove a domain
-
-### API Keys
-- `POST /api/v1/workspaces/{id}/api-keys`: Create API key
-- `GET /api/v1/workspaces/{id}/api-keys`: List API keys
-- `DELETE /api/v1/api-keys/{id}`: Delete API key
-
-### Admin
-- `GET /api/v1/admin/users`: List users (paginated)
-- `GET /api/v1/admin/users/{id}`: Get user details
-- `PATCH /api/v1/admin/users/{id}`: Update user (superuser, active)
-- `GET /api/v1/admin/stats`: System statistics
-- `GET /api/v1/admin/audit-logs`: Audit log (paginated, filterable)
-
-### Sessions
-- `GET /api/v1/sessions`: List active sessions
-- `DELETE /api/v1/sessions/{jti}`: Revoke a session
-- `POST /api/v1/sessions/revoke-all`: Revoke all sessions
-
-### Redirect
-- `GET /{short_code}`: Redirect to destination URL
-
-## Project Structure
-
-```
-zly/
-  app/               FastAPI application
-    api/             Route handlers
-    core/            Config, security, dependencies, rate limiter
-    models/          SQLAlchemy ORM models
-    schemas/         Pydantic schemas
-    services/        Business logic
-    templates/       Jinja2 HTML templates (auth, dashboard, bio, errors, partials)
-    routes/          Dashboard and auth HTML page routes
-    db.py            Database engine
-    config.py        Settings
-    cli.py           CLI management commands
-    main.py          App factory
-  api/index.py       Vercel serverless entrypoint
-  infrastructure/    Docker, Caddy, env config
-  migrations/        Alembic migrations
-  tests/             Pytest suite (210+)
-  worker/            arq background worker
-  docs/              Deployment and architecture guides
-  .github/           CI workflow
-  pyproject.toml     Project config
+```sh
+docker compose --env-file .env -f infrastructure/docker-compose.yml \
+  -f infrastructure/compose.dev.yml up -d postgres redis
+uv run --locked alembic upgrade head
+uv run --locked uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-## Architecture
+Run the worker in another terminal from the same directory:
 
-See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for detailed architecture documentation covering:
-
-- Data model relationships and migration strategy
-- Routing flow (redirect engine, caching, analytics recording)
-- Authentication and authorization model
-- Async job patterns and Redis integration
-- Multi-tenancy via workspaces and teams
-- Rate limiting and security middleware
-
-## Development
-
-### Running Tests
-
-```bash
-pytest -v          # 210+ tests covering all features
-pytest --cov=app   # With coverage
+```sh
+uv run --locked arq worker.run.WorkerSettings
 ```
 
-### Code Quality
+Open `http://localhost:8000/docs` for the API reference, or `/dashboard` for the
+existing web UI. The latter is not yet an end-to-end verified administration
+flow. Use `SECURE_COOKIES=false` only for local HTTP; HTTPS deployments must use
+secure cookies. PostgreSQL is the supported application database; SQLite is
+retained for the fast test suite, not as a production alternative.
 
-```bash
-ruff check .       # Linting (E, F, I, N, W, UP)
-mypy app/          # Strict type checking
+## API and authentication
+
+The management API is under `/api/v1`; public links resolve at `/{short_code}`.
+In development the schema is available at `/openapi.json` and the interactive
+reference at `/docs`. Interactive documentation is disabled in production.
+
+The current API accepts **Bearer tokens from Zly's original login API** or its
+workspace API keys. It does **not** yet accept Plazia Identity tokens. Ordinary
+management calls are JSON, for example:
+
+```sh
+curl --fail-with-body http://localhost:8000/api/v1/links \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  --data '{"workspace_id":"<workspace-id>","destination_url":"https://example.com"}'
 ```
 
-### Database Migrations
+Use `/docs` to register/login and obtain a workspace ID in an isolated development
+instance. Never publish a shared administrative API key in a browser application.
 
-```bash
-# Create a new migration
-alembic revision --autogenerate -m "description"
+## Container deployment
 
-# Apply migrations
-alembic upgrade head
+Use this only in an isolated evaluation environment until the limitations below
+are resolved. Copy `infrastructure/.env.example` to the root `.env` and replace
+all placeholders. Its database and Redis hosts are the Compose service names,
+not `localhost`.
 
-# Rollback
-alembic downgrade -1
+```sh
+docker compose --env-file .env -f infrastructure/docker-compose.yml up -d --build
 ```
 
-## License
+The stack runs PostgreSQL 18, Redis, a one-shot migration service, the API and the
+ARQ worker. The API binds only to `127.0.0.1:8000`. Put an existing reverse proxy
+in front; the optional `tls` profile enables Caddy after its configuration has
+been customized. Neither PostgreSQL nor Redis is published by the base Compose
+file. The runtime image uses Python 3.14 and a non-root user.
 
-MIT, see [LICENSE](LICENSE).
+**PostgreSQL major-version upgrades are not image-tag changes.** The PostgreSQL
+18 image stores data under `/var/lib/postgresql/18/docker`; the volume is mounted
+at `/var/lib/postgresql`. An existing 16/17 data directory must be migrated with
+a verified dump/restore or `pg_upgrade` into a compatible layout. Back it up
+first. Never remove an existing volume to make a failed upgrade start.
+
+### Health checks
+
+| Endpoint | Purpose |
+| --- | --- |
+| `/health/live` | Process liveness; no dependency checks |
+| `/health` | Readiness: HTTP 503 if the database is unavailable; Redis degradation is reported |
+
+Startup refuses an unapplied migration head. Migration failures must be corrected
+before serving traffic, not hidden by creating tables at application startup.
+
+## Tests and quality gates
+
+```sh
+uv sync --locked --all-extras
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked mypy app/ worker/
+uv run --locked pytest -q
+uv build --no-sources
+```
+
+The default unit/API suite uses SQLite and mocked boundaries. The PostgreSQL
+runtime tests are opt-in locally and run against a freshly migrated **PostgreSQL
+18** instance in CI. Point them only at a dedicated test database:
+
+```sh
+DATABASE_URL="$POSTGRES_TEST_URL" uv run --locked alembic upgrade head
+DATABASE_URL="$POSTGRES_TEST_URL" uv run --locked alembic check
+uv run --locked pytest -q tests/test_postgres_runtime.py
+```
+
+Set `POSTGRES_TEST_URL` beforehand to a dedicated PostgreSQL asyncpg URL. CI
+checks lint, strict typing, tests, packaging, the production image and PostgreSQL
+migrations independently. Failed checks are not skipped or downgraded to warnings.
+
+## Known limitations
+
+The current dashboard has unresolved form routing, encoding and authentication
+integration. Custom-domain verification still needs real DNS ownership proof.
+Outbound URL probes and webhooks need DNS/redirect-aware SSRF hardening, and
+notification delivery needs a durable transactional outbox/retry path. Click
+limits are not strict concurrency quotas. The unsafe redirect-destination cache
+has been removed; Redis still serves jobs and analytics caches.
+
+See [STABILIZATION.md](docs/STABILIZATION.md) for the remaining work and
+[UPSTREAM.md](docs/UPSTREAM.md) for the imported source revision. Do not expose
+unreviewed inherited marketing/admin features to untrusted tenants.
+
+## License and upstream
+
+MIT. The original Zly copyright and license are preserved in [LICENSE](LICENSE).
+The fork imports `PythonPlumber/zly@master` while retaining both upstream Git
+histories. Upstream fixes should be reviewed and integrated explicitly; this fork
+does not automatically track an upstream branch.

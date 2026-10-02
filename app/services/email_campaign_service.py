@@ -1,33 +1,33 @@
-import uuid
 import re
-from datetime import datetime, timezone
-
-from sqlalchemy import distinct, select, func, update
 from collections.abc import Sequence
+from datetime import UTC, datetime
+
+from sqlalchemy import distinct, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-
-logger = get_logger(__name__)
-
 from app.models.email_campaign import (
-    EmailContact,
-    EmailTemplate,
     EmailCampaign,
+    EmailCampaignClick,
     EmailCampaignContact,
     EmailCampaignOpen,
-    EmailCampaignClick,
+    EmailContact,
+    EmailTemplate,
 )
 from app.schemas.email_campaign import (
+    EmailCampaignCreate,
+    EmailCampaignUpdate,
     EmailContactCreate,
     EmailTemplateCreate,
     EmailTemplateUpdate,
-    EmailCampaignCreate,
-    EmailCampaignUpdate,
 )
 
+logger = get_logger(__name__)
 
-async def create_contact(db: AsyncSession, workspace_id: str, data: EmailContactCreate) -> EmailContact:
+
+async def create_contact(
+    db: AsyncSession, workspace_id: str, data: EmailContactCreate
+) -> EmailContact:
     existing = await db.execute(
         select(EmailContact).where(
             EmailContact.workspace_id == workspace_id,
@@ -48,8 +48,14 @@ async def create_contact(db: AsyncSession, workspace_id: str, data: EmailContact
     return contact
 
 
-async def list_contacts(db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50) -> tuple[Sequence[EmailContact], int, bool]:
-    base = select(EmailContact).where(EmailContact.workspace_id == workspace_id).order_by(EmailContact.created_at.desc())
+async def list_contacts(
+    db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50
+) -> tuple[Sequence[EmailContact], int, bool]:
+    base = (
+        select(EmailContact)
+        .where(EmailContact.workspace_id == workspace_id)
+        .order_by(EmailContact.created_at.desc())
+    )
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar() or 0
     offset = (page - 1) * page_size
@@ -80,7 +86,7 @@ async def unsubscribe_contact(db: AsyncSession, contact_id: str) -> bool:
     if not contact:
         return False
     contact.status = "unsubscribed"
-    contact.unsubscribed_at = datetime.now(timezone.utc)
+    contact.unsubscribed_at = datetime.now(UTC)
     await db.flush()
     return True
 
@@ -93,7 +99,7 @@ async def create_template(
             update(EmailTemplate)
             .where(
                 EmailTemplate.workspace_id == workspace_id,
-                EmailTemplate.is_default == True,
+                EmailTemplate.is_default.is_(True),
             )
             .values(is_default=False)
         )
@@ -110,8 +116,14 @@ async def create_template(
     return template
 
 
-async def list_templates(db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50) -> tuple[Sequence[EmailTemplate], int, bool]:
-    base = select(EmailTemplate).where(EmailTemplate.workspace_id == workspace_id).order_by(EmailTemplate.created_at.desc())
+async def list_templates(
+    db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50
+) -> tuple[Sequence[EmailTemplate], int, bool]:
+    base = (
+        select(EmailTemplate)
+        .where(EmailTemplate.workspace_id == workspace_id)
+        .order_by(EmailTemplate.created_at.desc())
+    )
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar() or 0
     offset = (page - 1) * page_size
@@ -134,7 +146,7 @@ async def update_template(
             update(EmailTemplate)
             .where(
                 EmailTemplate.workspace_id == template.workspace_id,
-                EmailTemplate.is_default == True,
+                EmailTemplate.is_default.is_(True),
             )
             .values(is_default=False)
         )
@@ -169,7 +181,14 @@ async def create_campaign(
         from_name=data.from_name,
         scheduled_at=data.scheduled_at,
         status="draft",
-        stats={"sent": 0, "delivered": 0, "opened": 0, "clicked": 0, "bounced": 0, "unsubscribed": 0},
+        stats={
+            "sent": 0,
+            "delivered": 0,
+            "opened": 0,
+            "clicked": 0,
+            "bounced": 0,
+            "unsubscribed": 0,
+        },
     )
     db.add(campaign)
     await db.flush()
@@ -177,8 +196,14 @@ async def create_campaign(
     return campaign
 
 
-async def list_campaigns(db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50) -> tuple[Sequence[EmailCampaign], int, bool]:
-    base = select(EmailCampaign).where(EmailCampaign.workspace_id == workspace_id).order_by(EmailCampaign.created_at.desc())
+async def list_campaigns(
+    db: AsyncSession, workspace_id: str, page: int = 1, page_size: int = 50
+) -> tuple[Sequence[EmailCampaign], int, bool]:
+    base = (
+        select(EmailCampaign)
+        .where(EmailCampaign.workspace_id == workspace_id)
+        .order_by(EmailCampaign.created_at.desc())
+    )
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar() or 0
     offset = (page - 1) * page_size
@@ -216,7 +241,11 @@ async def delete_campaign(db: AsyncSession, campaign_id: str) -> bool:
 
 
 async def record_open(
-    db: AsyncSession, campaign_id: str, contact_id: str, ip_hash: str | None = None, user_agent: str | None = None
+    db: AsyncSession,
+    campaign_id: str,
+    contact_id: str,
+    ip_hash: str | None = None,
+    user_agent: str | None = None,
 ) -> EmailCampaignOpen:
     open_record = EmailCampaignOpen(
         campaign_id=campaign_id,
@@ -230,7 +259,12 @@ async def record_open(
 
 
 async def record_click(
-    db: AsyncSession, campaign_id: str, contact_id: str, link_id: str | None = None, ip_hash: str | None = None, user_agent: str | None = None
+    db: AsyncSession,
+    campaign_id: str,
+    contact_id: str,
+    link_id: str | None = None,
+    ip_hash: str | None = None,
+    user_agent: str | None = None,
 ) -> EmailCampaignClick:
     click_record = EmailCampaignClick(
         campaign_id=campaign_id,
@@ -246,15 +280,18 @@ async def record_click(
 
 def rewrite_links_with_tracking(html_body: str, base_url: str, campaign_id: str) -> str:
     url_pattern = re.compile(r'href=["\'](https?://[^"\']+)["\']')
-    def replace_url(match):
+
+    def replace_url(match: re.Match[str]) -> str:
         original_url = match.group(1)
-        separator = "&" if "?" in original_url else "?"
         tracked_url = f"{base_url}/l/track/{campaign_id}?url={original_url}"
         return f'href="{tracked_url}"'
+
     return url_pattern.sub(replace_url, html_body)
 
 
-def inject_open_tracking_pixel(html_body: str, base_url: str, campaign_id: str, contact_id: str) -> str:
+def inject_open_tracking_pixel(
+    html_body: str, base_url: str, campaign_id: str, contact_id: str
+) -> str:
     pixel_url = f"{base_url}/track/open/{campaign_id}/{contact_id}.gif"
     pixel_html = f'<img src="{pixel_url}" width="1" height="1" style="display:none" alt="" />'
     if "</body>" in html_body:
@@ -264,26 +301,32 @@ def inject_open_tracking_pixel(html_body: str, base_url: str, campaign_id: str, 
 
 async def update_campaign_stats(db: AsyncSession, campaign_id: str) -> None:
     sent_result = await db.execute(
-        select(func.count()).select_from(EmailCampaignContact).where(EmailCampaignContact.campaign_id == campaign_id)
+        select(func.count())
+        .select_from(EmailCampaignContact)
+        .where(EmailCampaignContact.campaign_id == campaign_id)
     )
     sent = sent_result.scalar() or 0
 
     opens_result = await db.execute(
-        select(func.count(distinct(EmailCampaignOpen.contact_id)))
-        .where(EmailCampaignOpen.campaign_id == campaign_id)
+        select(func.count(distinct(EmailCampaignOpen.contact_id))).where(
+            EmailCampaignOpen.campaign_id == campaign_id
+        )
     )
     opened = opens_result.scalar() or 0
 
     clicks_result = await db.execute(
-        select(func.count(distinct(EmailCampaignClick.contact_id)))
-        .where(EmailCampaignClick.campaign_id == campaign_id)
+        select(func.count(distinct(EmailCampaignClick.contact_id))).where(
+            EmailCampaignClick.campaign_id == campaign_id
+        )
     )
     clicked = clicks_result.scalar() or 0
 
     campaign = await get_campaign(db, campaign_id)
     if campaign:
         unsub_result = await db.execute(
-            select(func.count()).select_from(EmailContact).where(
+            select(func.count())
+            .select_from(EmailContact)
+            .where(
                 EmailContact.workspace_id == campaign.workspace_id,
                 EmailContact.status == "unsubscribed",
             )
@@ -305,21 +348,26 @@ async def send_campaign_sync(
     campaign_id: str,
     contact_ids: list[str],
     base_url: str,
-) -> dict:
+) -> dict[str, str | int]:
     from app.core.email import get_email_backend
-    from app.models.email_campaign import EmailCampaignContact as ECC
 
     try:
         campaign_obj = await get_campaign(db, campaign_id)
         if campaign_obj:
             from app.services.webhook_service import trigger_webhooks
-            await trigger_webhooks(db, campaign_obj.workspace_id, "campaign.sent", {
-                "event": "campaign.sent",
-                "campaign_id": campaign_id,
-                "workspace_id": campaign_obj.workspace_id,
-                "campaign_name": campaign_obj.name,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            })
+
+            await trigger_webhooks(
+                db,
+                campaign_obj.workspace_id,
+                "campaign.sent",
+                {
+                    "event": "campaign.sent",
+                    "campaign_id": campaign_id,
+                    "workspace_id": campaign_obj.workspace_id,
+                    "campaign_name": campaign_obj.name,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
     except Exception:
         pass
 
@@ -332,6 +380,7 @@ async def send_campaign_sync(
 
     if not contact_ids:
         from app.models.email_campaign import EmailContact
+
         contacts_result = await db.execute(
             select(EmailContact).where(
                 EmailContact.workspace_id == campaign.workspace_id,
@@ -341,6 +390,7 @@ async def send_campaign_sync(
         contacts = contacts_result.scalars().all()
     else:
         from app.models.email_campaign import EmailContact
+
         contacts_result = await db.execute(
             select(EmailContact).where(
                 EmailContact.id.in_(contact_ids),
@@ -361,19 +411,24 @@ async def send_campaign_sync(
             await backend.send_email(
                 to=contact.email,
                 subject=campaign.subject,
-                html_body=inject_open_tracking_pixel(tracked_html, base_url, campaign_id, contact.id),
+                html_body=inject_open_tracking_pixel(
+                    tracked_html, base_url, campaign_id, contact.id
+                ),
                 from_email=from_email,
                 from_name=from_name,
             )
             sent_count += 1
         except Exception as exc:
-            logger.warning("Failed to send campaign email", extra={"contact_id": contact.id, "error": str(exc)})
+            logger.warning(
+                ("Failed to send campaign email"),
+                extra={("contact_id"): contact.id, ("error"): str(exc)},
+            )
 
         link_entry = EmailCampaignContact(campaign_id=campaign_id, contact_id=contact.id)
         db.add(link_entry)
 
     campaign.status = "sent" if sent_count > 0 else "failed"
-    campaign.sent_at = datetime.now(timezone.utc) if sent_count > 0 else None
+    campaign.sent_at = datetime.now(UTC) if sent_count > 0 else None
     await db.flush()
 
     await update_campaign_stats(db, campaign_id)

@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, func
+from pydantic import JsonValue, TypeAdapter
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -8,24 +9,24 @@ from app.models.click import Click
 from app.models.link import Link
 from app.models.user import User
 from app.models.workspace import Workspace
-
+from app.schemas.internal import ExpiryNotice
+from app.services.webhook_service import trigger_webhooks
 
 logger = get_logger(__name__)
-from app.services.webhook_service import trigger_webhooks
 
 
 async def check_expiring_links(
     db: AsyncSession, workspace_id: str, within_hours: int = 24
-) -> list[dict]:
-    cutoff = datetime.now(timezone.utc) + timedelta(hours=within_hours)
-    now = datetime.now(timezone.utc)
+) -> list[ExpiryNotice]:
+    cutoff = datetime.now(UTC) + timedelta(hours=within_hours)
+    now = datetime.now(UTC)
     result = await db.execute(
         select(Link).where(
             Link.workspace_id == workspace_id,
             Link.expires_at.isnot(None),
             Link.expires_at <= cutoff,
             Link.expires_at > now,
-            Link.is_active == True,
+            Link.is_active.is_(True),
         )
     )
     links = result.scalars().all()
@@ -43,7 +44,9 @@ async def check_expiring_links(
     for link in links:
         if link.last_notified_at and link.last_notified_at >= now - timedelta(hours=within_hours):
             continue
-        payload = {
+        if link.expires_at is None:
+            continue
+        payload: ExpiryNotice = {
             "event": "link.expiring_soon",
             "link_id": link.id,
             "short_code": link.short_code,
@@ -51,10 +54,17 @@ async def check_expiring_links(
             "destination_url": link.destination_url,
             "expires_at": str(link.expires_at),
         }
-        await trigger_webhooks(db, workspace_id, "link.expiring_soon", payload)
+        await trigger_webhooks(
+            db,
+            workspace_id,
+            "link.expiring_soon",
+            TypeAdapter(dict[str, JsonValue]).validate_python(payload),
+        )
 
         if owner_email:
-            expires_at_naive = link.expires_at.replace(tzinfo=None) if link.expires_at.tzinfo else link.expires_at
+            expires_at_naive = (
+                link.expires_at.replace(tzinfo=None) if link.expires_at.tzinfo else link.expires_at
+            )
             now_naive = now.replace(tzinfo=None)
             hours_remaining = int((expires_at_naive - now_naive).total_seconds() / 3600)
             click_count_result = await db.execute(
@@ -62,8 +72,9 @@ async def check_expiring_links(
             )
             total_clicks = click_count_result.scalar() or 0
             try:
-                from app.core.arq_pool import get_arq_pool
                 from app.config import settings
+                from app.core.arq_pool import get_arq_pool
+
                 pool = await get_arq_pool()
                 await pool.enqueue_job(
                     "send_expiry_alert_email_job",
@@ -78,7 +89,10 @@ async def check_expiring_links(
                     total_clicks=total_clicks,
                 )
             except Exception as exc:
-                logger.warning("Failed to enqueue expiry alert email", extra={"link_id": link.id, "error": str(exc)})
+                logger.warning(
+                    "Failed to enqueue expiry alert email",
+                    extra={"link_id": link.id, "error": str(exc)},
+                )
 
         link.last_notified_at = now
         fired.append(payload)

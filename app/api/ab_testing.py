@@ -3,10 +3,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.security import get_current_user
+from app.models.ab import ABVariant
 from app.models.user import User
 from app.schemas.ab import ABVariantCreate, ABVariantResponse, ABVariantUpdate
 from app.schemas.common import PaginatedResponse
-from app.services.ab_service import create_variant, delete_variant, get_variant, list_variants, update_variant
+from app.services.ab_service import (
+    create_variant,
+    delete_variant,
+    list_variants,
+    update_variant,
+)
 from app.services.audit_service import log_audit_event
 from app.services.link_service import get_link_by_id
 from app.services.workspace_service import verify_workspace_access
@@ -21,11 +27,13 @@ async def add_variant(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> ABVariant:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
-    await verify_workspace_access(db, link.workspace_id, user, require_owner=True, required_permission="links:update")
+    await verify_workspace_access(
+        db, link.workspace_id, user, require_owner=True, required_permission="links:update"
+    )
     variant = await create_variant(db, link_id, data)
     await log_audit_event(
         db,
@@ -39,14 +47,14 @@ async def add_variant(
     return variant
 
 
-@router.get("/links/{link_id}/variants", response_model=PaginatedResponse)
+@router.get("/links/{link_id}/variants", response_model=PaginatedResponse[ABVariantResponse])
 async def get_variants(
     link_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> PaginatedResponse[ABVariantResponse]:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
@@ -69,11 +77,13 @@ async def edit_variant(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> ABVariant:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
-    await verify_workspace_access(db, link.workspace_id, user, require_owner=True, required_permission="links:update")
+    await verify_workspace_access(
+        db, link.workspace_id, user, require_owner=True, required_permission="links:update"
+    )
     variant = await update_variant(db, variant_id, data)
     if not variant:
         raise HTTPException(status_code=404, detail="Variant not found")
@@ -96,11 +106,13 @@ async def remove_variant(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> None:
     link = await get_link_by_id(db, link_id)
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
-    await verify_workspace_access(db, link.workspace_id, user, require_owner=True, required_permission="links:update")
+    await verify_workspace_access(
+        db, link.workspace_id, user, require_owner=True, required_permission="links:update"
+    )
     deleted = await delete_variant(db, variant_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Variant not found")

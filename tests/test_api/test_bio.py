@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 @pytest.mark.asyncio
 async def test_create_bio_page(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"bio-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -37,9 +37,9 @@ async def test_create_bio_page(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_create_bio_page_duplicate(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"bio-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -68,9 +68,9 @@ async def test_create_bio_page_duplicate(client: AsyncClient, db_session: AsyncS
 
 @pytest.mark.asyncio
 async def test_get_bio_page(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"bio-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -98,9 +98,9 @@ async def test_get_bio_page(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_get_bio_page_not_found(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"bio-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -119,9 +119,9 @@ async def test_get_bio_page_not_found(client: AsyncClient, db_session: AsyncSess
 
 @pytest.mark.asyncio
 async def test_update_bio_page(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"bio-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -153,9 +153,9 @@ async def test_update_bio_page(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_delete_bio_page(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"bio-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -183,9 +183,9 @@ async def test_delete_bio_page(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_public_bio_page(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"bio-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -218,9 +218,9 @@ async def test_public_bio_page_not_found(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_add_bio_link(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"bio-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -235,6 +235,7 @@ async def test_add_bio_link(client: AsyncClient, db_session: AsyncSession):
     ws_id = ws_resp.json()["id"]
 
     from app.models.link import Link
+
     link = Link(
         workspace_id=ws_id,
         title="Test Link",
@@ -262,9 +263,9 @@ async def test_add_bio_link(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_remove_bio_link(client: AsyncClient, db_session: AsyncSession):
-    from app.services.auth_service import register_user
-    from app.schemas.auth import RegisterRequest
     from app.core.security import create_access_token
+    from app.schemas.auth import RegisterRequest
+    from app.services.auth_service import register_user
 
     email = f"bio-{uuid.uuid4().hex[:8]}@test.com"
     user = await register_user(db_session, RegisterRequest(email=email, password="testpass"))
@@ -279,6 +280,7 @@ async def test_remove_bio_link(client: AsyncClient, db_session: AsyncSession):
     ws_id = ws_resp.json()["id"]
 
     from app.models.link import Link
+
     link = Link(
         workspace_id=ws_id,
         title="Remove Link",
@@ -295,7 +297,12 @@ async def test_remove_bio_link(client: AsyncClient, db_session: AsyncSession):
     )
     add_resp = await client.post(
         f"/api/v1/workspaces/{ws_id}/bio/links",
-        json={"link_id": link.id, "title": "To Remove", "url": "https://example.com", "position": 0},
+        json={
+            "link_id": link.id,
+            "title": "To Remove",
+            "url": "https://example.com",
+            "position": 0,
+        },
         headers=headers,
     )
     link_id = add_resp.json()["id"]
@@ -309,11 +316,13 @@ async def test_remove_bio_link(client: AsyncClient, db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_bio_page_requires_auth(client: AsyncClient, db_session: AsyncSession):
-    from app.models.workspace import Workspace
     from app.models.user import User
+    from app.models.workspace import Workspace
     from app.services.auth_service import hash_password
 
-    user = User(email=f"bio-auth-{uuid.uuid4().hex[:8]}@test.com", password_hash=hash_password("pass"))
+    user = User(
+        email=f"bio-auth-{uuid.uuid4().hex[:8]}@test.com", password_hash=hash_password("pass")
+    )
     db_session.add(user)
     await db_session.flush()
     ws = Workspace(name="Auth WS", slug=f"auth-ws-{uuid.uuid4().hex[:8]}", owner_id=user.id)

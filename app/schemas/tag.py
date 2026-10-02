@@ -9,7 +9,9 @@ class TagCreate(BaseModel):
 
 
 class TagUpdate(BaseModel):
-    name: str | None = Field(None, min_length=1, max_length=50, pattern=r"^[a-zA-Z0-9 _-]+$")
+    name: str | None = Field(
+        default=None, min_length=1, max_length=50, pattern=r"^[a-zA-Z0-9 _-]+$"
+    )
     color: str | None = None
 
 

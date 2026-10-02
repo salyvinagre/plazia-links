@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
-from app.core.security import get_current_user
 from app.core.logging import get_logger
+from app.core.security import get_current_user
+from app.models.email_campaign import EmailCampaign, EmailContact, EmailTemplate
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
 from app.schemas.email_campaign import (
@@ -19,8 +21,8 @@ from app.schemas.email_campaign import (
 )
 from app.services.audit_service import log_audit_event
 from app.services.email_campaign_service import (
-    create_contact,
     create_campaign,
+    create_contact,
     create_template,
     delete_campaign,
     delete_contact,
@@ -30,8 +32,6 @@ from app.services.email_campaign_service import (
     list_campaigns,
     list_contacts,
     list_templates,
-    rewrite_links_with_tracking,
-    inject_open_tracking_pixel,
     update_campaign,
     update_campaign_stats,
     update_template,
@@ -48,6 +48,7 @@ async def _validate_from_email(db: AsyncSession, workspace_id: str, from_email: 
         return
     from app.config import settings
     from app.services.domain_service import is_domain_verified_for_workspace
+
     domain = from_email.split("@", 1)[1].lower() if "@" in from_email else ""
     default_domain = settings.default_domain.split(":")[0].lower()
     if domain == default_domain:
@@ -59,16 +60,20 @@ async def _validate_from_email(db: AsyncSession, workspace_id: str, from_email: 
         )
 
 
-@router.get("/contacts", response_model=PaginatedResponse)
+@router.get("/contacts", response_model=PaginatedResponse[EmailContactResponse])
 async def api_list_contacts(
     workspace_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
-    contacts, total, has_next = await list_contacts(db, workspace_id, page=page, page_size=page_size)
+) -> PaginatedResponse[EmailContactResponse]:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
+    contacts, total, has_next = await list_contacts(
+        db, workspace_id, page=page, page_size=page_size
+    )
     return PaginatedResponse(
         total=total,
         page=page,
@@ -85,8 +90,10 @@ async def api_create_contact(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+) -> EmailContact:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
     contact = await create_contact(db, workspace_id, data)
     await log_audit_event(
         db,
@@ -107,8 +114,10 @@ async def api_delete_contact(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+) -> None:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
     deleted = await delete_contact(db, workspace_id, contact_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
@@ -123,16 +132,20 @@ async def api_delete_contact(
     )
 
 
-@router.get("/templates", response_model=PaginatedResponse)
+@router.get("/templates", response_model=PaginatedResponse[EmailTemplateResponse])
 async def api_list_templates(
     workspace_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
-    templates, total, has_next = await list_templates(db, workspace_id, page=page, page_size=page_size)
+) -> PaginatedResponse[EmailTemplateResponse]:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
+    templates, total, has_next = await list_templates(
+        db, workspace_id, page=page, page_size=page_size
+    )
     return PaginatedResponse(
         total=total,
         page=page,
@@ -142,15 +155,19 @@ async def api_list_templates(
     )
 
 
-@router.post("/templates", response_model=EmailTemplateResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/templates", response_model=EmailTemplateResponse, status_code=status.HTTP_201_CREATED
+)
 async def api_create_template(
     workspace_id: str,
     data: EmailTemplateCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+) -> EmailTemplate:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
     template = await create_template(db, workspace_id, data)
     await log_audit_event(
         db,
@@ -170,8 +187,10 @@ async def api_get_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+) -> EmailTemplate:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
     template = await get_template(db, template_id)
     if not template or template.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
@@ -186,8 +205,10 @@ async def api_update_template(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+) -> EmailTemplate:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
     template = await get_template(db, template_id)
     if not template or template.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
@@ -211,8 +232,10 @@ async def api_delete_template(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+) -> None:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
     deleted = await delete_template(db, template_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
@@ -227,16 +250,20 @@ async def api_delete_template(
     )
 
 
-@router.get("/campaigns", response_model=PaginatedResponse)
+@router.get("/campaigns", response_model=PaginatedResponse[EmailCampaignResponse])
 async def api_list_campaigns(
     workspace_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
-    campaigns, total, has_next = await list_campaigns(db, workspace_id, page=page, page_size=page_size)
+) -> PaginatedResponse[EmailCampaignResponse]:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
+    campaigns, total, has_next = await list_campaigns(
+        db, workspace_id, page=page, page_size=page_size
+    )
     return PaginatedResponse(
         total=total,
         page=page,
@@ -246,15 +273,19 @@ async def api_list_campaigns(
     )
 
 
-@router.post("/campaigns", response_model=EmailCampaignResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/campaigns", response_model=EmailCampaignResponse, status_code=status.HTTP_201_CREATED
+)
 async def api_create_campaign(
     workspace_id: str,
     data: EmailCampaignCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+) -> EmailCampaign:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
     await _validate_from_email(db, workspace_id, data.from_email)
     campaign = await create_campaign(db, workspace_id, data)
     await log_audit_event(
@@ -275,8 +306,10 @@ async def api_get_campaign(
     campaign_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+) -> EmailCampaign:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
     campaign = await get_campaign(db, campaign_id)
     if not campaign or campaign.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
@@ -291,8 +324,10 @@ async def api_update_campaign(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+) -> EmailCampaign:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
     await _validate_from_email(db, workspace_id, data.from_email)
     campaign = await get_campaign(db, campaign_id)
     if not campaign or campaign.workspace_id != workspace_id:
@@ -317,8 +352,10 @@ async def api_delete_campaign(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+) -> None:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
     deleted = await delete_campaign(db, campaign_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
@@ -340,15 +377,19 @@ async def api_send_campaign(
     contact_ids: list[str] | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, require_owner=True, required_permission="campaigns:manage")
+) -> dict[str, JsonValue]:
+    await verify_workspace_access(
+        db, workspace_id, current_user, require_owner=True, required_permission="campaigns:manage"
+    )
     campaign = await get_campaign(db, campaign_id)
     if not campaign or campaign.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
 
     from app.config import settings
+
     try:
         from app.core.arq_pool import get_arq_pool
+
         pool = await get_arq_pool()
         await pool.enqueue_job(
             "send_campaign_job",
@@ -357,8 +398,12 @@ async def api_send_campaign(
             base_url=settings.base_url,
         )
     except Exception as exc:
-        logger.warning("Failed to enqueue campaign send, sending sync", extra={"campaign_id": campaign_id, "error": str(exc)})
+        logger.warning(
+            "Failed to enqueue campaign send, sending sync",
+            extra={"campaign_id": campaign_id, "error": str(exc)},
+        )
         from app.services.email_campaign_service import send_campaign_sync
+
         await send_campaign_sync(db, campaign_id, contact_ids or [], settings.base_url)
 
     return {"status": "enqueued", "campaign_id": campaign_id}
@@ -370,11 +415,15 @@ async def api_campaign_stats(
     campaign_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await verify_workspace_access(db, workspace_id, current_user, required_permission="campaigns:manage")
+) -> EmailCampaignStatsResponse:
+    await verify_workspace_access(
+        db, workspace_id, current_user, required_permission="campaigns:manage"
+    )
     campaign = await get_campaign(db, campaign_id)
     if not campaign or campaign.workspace_id != workspace_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
     await update_campaign_stats(db, campaign_id)
     campaign = await get_campaign(db, campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
     return EmailCampaignStatsResponse(**campaign.stats)

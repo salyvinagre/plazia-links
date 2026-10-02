@@ -5,14 +5,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 def _slug():
     import uuid
+
     return uuid.uuid4().hex[:8]
 
 
 @pytest.mark.asyncio
 async def test_create_api_key(auth_client: AsyncClient):
-    ws_resp = await auth_client.post("/api/v1/workspaces", json={"name": "API Key WS", "slug": _slug()})
+    ws_resp = await auth_client.post(
+        "/api/v1/workspaces", json={"name": "API Key WS", "slug": _slug()}
+    )
     ws_id = ws_resp.json()["id"]
-    response = await auth_client.post(f"/api/v1/workspaces/{ws_id}/api-keys", json={"name": "My Key"})
+    response = await auth_client.post(
+        f"/api/v1/workspaces/{ws_id}/api-keys", json={"name": "My Key"}
+    )
     assert response.status_code == 201
     data = response.json()
     assert data["name"] == "My Key"
@@ -22,9 +27,13 @@ async def test_create_api_key(auth_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_revoke_api_key(auth_client: AsyncClient):
-    ws_resp = await auth_client.post("/api/v1/workspaces", json={"name": "Revoke WS", "slug": _slug()})
+    ws_resp = await auth_client.post(
+        "/api/v1/workspaces", json={"name": "Revoke WS", "slug": _slug()}
+    )
     ws_id = ws_resp.json()["id"]
-    create_resp = await auth_client.post(f"/api/v1/workspaces/{ws_id}/api-keys", json={"name": "Kill Me"})
+    create_resp = await auth_client.post(
+        f"/api/v1/workspaces/{ws_id}/api-keys", json={"name": "Kill Me"}
+    )
     key_id = create_resp.json()["id"]
     response = await auth_client.delete(f"/api/v1/workspaces/{ws_id}/api-keys/{key_id}")
     assert response.status_code == 204
@@ -36,6 +45,7 @@ async def test_authenticate_via_api_key(
 ):
     from app.schemas.api_key import ApiKeyCreate
     from app.services.api_key_service import create_api_key
+
     key, raw = await create_api_key(
         db_session, ApiKeyCreate(name="Auth Key"), test_user_id, test_workspace_id
     )

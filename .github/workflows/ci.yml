@@ -2,42 +2,126 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'chore/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
+permissions:
+  contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ENVIRONMENT: test
+  SECRET_KEY: ci-only-test-secret-not-for-production-0001
+  JWT_SECRET: ci-only-test-secret-not-for-production-0002
+  RATE_LIMIT_ENABLED: 'false'
+  UV_PYTHON: '3.14'
+
+jobs:
+  quality:
+    name: ${{ matrix.check }} (Python 3.14)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [lint, typing, packaging]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.12"
-
-      - name: Install dependencies
+          version: '0.12.21'
+          enable-cache: true
+      - run: uv python install 3.14
+      - run: uv sync --locked --all-extras
+      - name: Lint and formatting
+        if: matrix.check == 'lint'
         run: |
-          pip install -e ".[dev]"
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+      - name: Strict type checking
+        if: matrix.check == 'typing'
+        run: uv run --locked mypy app/ worker/
+      - name: Build source distribution and wheel
+        if: matrix.check == 'packaging'
+        run: uv build --no-sources
 
-      - name: Lint with ruff
-        run: ruff check . 2>&1 | tee logs-ruff.txt
-
-      - name: Type check with mypy
-        run: mypy app/ --ignore-missing-imports 2>&1 | tee logs-mypy.txt
-
-      - name: Test with pytest
-        run: pytest -v 2>&1 | tee logs-pytest.txt
-
-      - name: Upload logs as artifacts
-        uses: actions/upload-artifact@v4
+  tests:
+    name: Unit and API tests (Python 3.14)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      REDIS_URL: redis://localhost:6379/15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
         with:
-          name: ci-logs
-          path: |
-            logs-ruff.txt
-            logs-mypy.txt
-            logs-pytest.txt
+          version: '0.12.21'
+          enable-cache: true
+      - run: uv python install 3.14
+      - run: uv sync --locked --all-extras
+      - run: uv run --locked pytest -q --junitxml=reports/pytest.xml
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: unit-tests-${{ github.sha }}
+          path: reports/pytest.xml
           if-no-files-found: warn
+          retention-days: 7
+
+  postgres:
+    name: PostgreSQL 18 migrations and runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: plazia_test
+          POSTGRES_PASSWORD: local-ci-only
+          POSTGRES_DB: plazia_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U plazia_test -d plazia_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://plazia_test:local-ci-only@localhost:5432/plazia_test
+      POSTGRES_TEST_URL: postgresql+asyncpg://plazia_test:local-ci-only@localhost:5432/plazia_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.12.21'
+          enable-cache: true
+      - run: uv python install 3.14
+      - run: uv sync --locked --all-extras
+      - name: Migrate a fresh PostgreSQL 18 database
+        run: |
+          uv run --locked alembic upgrade head
+          uv run --locked alembic current
+          uv run --locked alembic check
+      - name: PostgreSQL application regression tests
+        run: uv run --locked pytest -q tests/test_postgres_runtime.py
+
+  container:
+    name: Python 3.14 runtime image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build locked production image
+        run: docker build -f infrastructure/Dockerfile -t plazia-links:ci .
+      - name: Check interpreter, user and packaged assets
+        run: |
+          docker run --rm plazia-links:ci python -c 'import os, sys; from pathlib import Path; assert sys.version_info[:2] == (3, 14); assert os.getuid() != 0; assert Path("app/templates/base.html").exists(); import app.main; import worker.run'

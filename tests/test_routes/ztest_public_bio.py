@@ -2,16 +2,19 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.bio import BioPageCreate, BioLinkCreate
+from app.schemas.bio import BioLinkCreate, BioPageCreate
 from app.schemas.link import LinkCreate
-from app.services.bio_service import create_bio_page, add_bio_link
+from app.services.bio_service import add_bio_link, create_bio_page
 from app.services.link_service import create_link
 
 
 @pytest.mark.asyncio
-async def test_public_bio_page_renders(client: AsyncClient, db_session: AsyncSession, test_workspace_id: str, test_user_id: str):
+async def test_public_bio_page_renders(
+    client: AsyncClient, db_session: AsyncSession, test_workspace_id: str, test_user_id: str
+):
     bio = await create_bio_page(
-        db_session, test_workspace_id,
+        db_session,
+        test_workspace_id,
         BioPageCreate(slug="test-bio", title="Test Bio Page"),
     )
     link = await create_link(
@@ -20,7 +23,8 @@ async def test_public_bio_page_renders(client: AsyncClient, db_session: AsyncSes
         test_user_id,
     )
     await add_bio_link(
-        db_session, bio.id,
+        db_session,
+        bio.id,
         BioLinkCreate(title="My Link", url="https://example.com", link_id=link.id),
     )
     r = await client.get("/bio/test-bio")
@@ -33,6 +37,3 @@ async def test_public_bio_page_renders(client: AsyncClient, db_session: AsyncSes
 async def test_public_bio_page_not_found(client: AsyncClient):
     r = await client.get("/bio/nonexistent-slug")
     assert r.status_code == 404
-
-
-

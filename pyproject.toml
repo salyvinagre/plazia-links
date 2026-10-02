@@ -1,18 +1,20 @@
 [build-system]
-requires = ["setuptools>=69.0"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.12.21,<0.13"]
+build-backend = "uv_build"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["app*", "worker*"]
+[tool.uv.build-backend]
+module-root = ""
+module-name = ["app", "worker"]
+source-include = ["migrations/**", "alembic.ini", "infrastructure/**", "tests/**", "docs/**", "uv.lock"]
 
 [project]
-name = "zly"
-version = "1.0.0-dev"
-description = "Next-gen open-source URL shortener and marketing platform"
+name = "plazia-links"
+version = "0.1.0.dev0"
+description = "Plazia link management service, derived from Zly"
 readme = "README.md"
-requires-python = ">=3.12"
-license = { text = "MIT" }
+requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "PythonPlumber", email = "pythonplumber@senuka.me" },
 ]
@@ -20,10 +22,8 @@ keywords = ["url-shortener", "fastapi", "analytics", "qr-code", "link-in-bio", "
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Internet :: WWW/HTTP",
 ]
 
@@ -49,33 +49,40 @@ dependencies = [
 ]
 
 [project.scripts]
+plazia-links = "app.cli:main"
 zly-cli = "app.cli:main"
 
 [project.urls]
-Homepage = "https://senuka.me"
-Repository = "https://github.com/pythonplumber/zly"
-Issues = "https://github.com/pythonplumber/zly/issues"
+Homepage = "https://github.com/salyvinagre/plazia-links"
+Repository = "https://github.com/salyvinagre/plazia-links"
+Issues = "https://github.com/salyvinagre/plazia-links/issues"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
     "ruff>=0.7.0",
     "mypy>=1.13.0",
+    "types-qrcode>=8.0.0",
 ]
+
+[project.optional-dependencies]
 geo = [
     "geoip2>=5.0.0",
 ]
 
+[tool.uv]
+required-version = ">=0.12.21"
+
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 strict = true
 disallow_untyped_defs = true
 ignore_missing_imports = true

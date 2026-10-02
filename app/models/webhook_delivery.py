@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func, JSON
+from pydantic import JsonValue
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -11,9 +12,11 @@ class WebhookDelivery(Base):
     __tablename__ = "webhook_deliveries"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    webhook_id: Mapped[str] = mapped_column(String(36), ForeignKey("webhooks.id", ondelete="CASCADE"), nullable=False, index=True)
+    webhook_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("webhooks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     event: Mapped[str] = mapped_column(String(50), nullable=False)
-    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    payload: Mapped[dict[str, JsonValue]] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     response_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     response_body: Mapped[str | None] = mapped_column(Text, nullable=True)

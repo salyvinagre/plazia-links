@@ -1,70 +1,53 @@
 import os
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from app.api.router import api_router, redirect_router
 from app.api.email_tracking import router as email_tracking_router
-from app.routes.auth_routes import router as auth_router
+from app.api.router import api_router, redirect_router
 from app.config import settings
-from app.core.rate_limiter import setup_rate_limiter
 from app.core.csrf import CSRFMiddleware
-from app.core.request_id import RequestIDMiddleware
-from app.core.logging import setup_logging, get_logger
-from app.core.security_headers import SecurityHeadersMiddleware
-from app.core.redis import close_redis, get_redis
-from app.routes.dashboard import router as dashboard_router
 from app.core.exceptions import (
     http_exception_handler,
-    validation_exception_handler,
     unhandled_exception_handler,
+    validation_exception_handler,
 )
+from app.core.logging import get_logger, setup_logging
+from app.core.rate_limiter import setup_rate_limiter
+from app.core.redis import close_redis, get_redis
+from app.core.request_id import RequestIDMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware
+from app.routes.auth_routes import router as auth_router
+from app.routes.dashboard import router as dashboard_router
 
 START_TIME = time.time()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     logger = get_logger(__name__)
 
     try:
         from app.db import get_session_factory
+
         factory = get_session_factory()
         async with factory() as session:
             await session.execute(text("SELECT 1"))
         logger.info("Database connection verified")
-        # Ensure power-feature tables exist (for dev SQLite without alembic)
-        try:
-            from app.db import Base, get_engine
-            import app.models  # noqa: F401 ensure models registered
-            eng = get_engine()
-            async with eng.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all, checkfirst=True)
-            try:
-                async with factory() as session:
-                    for ddl in [
-                        "ALTER TABLE links ADD COLUMN folder_id VARCHAR(36)",
-                        "ALTER TABLE links ADD COLUMN is_archived BOOLEAN DEFAULT 0",
-                        "ALTER TABLE links ADD COLUMN max_clicks INTEGER",
-                        "ALTER TABLE links ADD COLUMN notes TEXT",
-                    ]:
-                        try:
-                            await session.execute(text(ddl))
-                        except Exception:
-                            pass
-                    await session.commit()
-            except Exception:
-                pass
-        except Exception:
-            pass
+        from app.core.schema import verify_schema
+        from app.db import get_engine
+
+        await verify_schema(get_engine())
     except Exception as e:
-        logger.critical("Database unreachable on startup", extra={"error": str(e)})
+        logger.critical("Database startup verification failed", extra={"error": str(e)})
         raise
 
     try:
@@ -81,19 +64,30 @@ async def lifespan(app: FastAPI):
     if settings.jwt_secret == "change-me-in-production":
         default_warnings.append("JWT_SECRET")
     if default_warnings:
-        msg = f"Default secrets in use: {', '.join(default_warnings)}. Set strong values in production."
+        msg = (
+            f"Default secrets in use: {', '.join(default_warnings)}. "
+            "Set strong values in production."
+        )
         if is_prod:
             logger.critical(msg)
             raise RuntimeError(msg)
         logger.warning(msg)
 
     yield
+    from app.core.arq_pool import close_arq_pool
+    from app.db import get_engine
+
+    await close_arq_pool()
     await close_redis()
+    await get_engine().dispose()
 
 
 app = FastAPI(
     title="Zly API",
-    description="Open-source URL shortener and marketing platform. Shorten URLs, track clicks, manage campaigns, and more.",
+    description=(
+        "Open-source URL shortener and marketing platform. "
+        "Shorten URLs, track clicks, manage campaigns, and more."
+    ),
     version="0.1.0",
     docs_url=None if os.getenv("ENVIRONMENT", "").lower() in ("production", "prod") else "/docs",
     redoc_url=None if os.getenv("ENVIRONMENT", "").lower() in ("production", "prod") else "/redoc",
@@ -133,6 +127,7 @@ app = FastAPI(
 sentry_dsn = os.getenv("SENTRY_DSN", "")
 if sentry_dsn:
     import sentry_sdk
+
     sentry_sdk.init(dsn=sentry_dsn, traces_sample_rate=0.1)
 
 app.add_exception_handler(HTTPException, http_exception_handler)
@@ -152,9 +147,8 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CSRFMiddleware)
 
 # Static files — serves app/static/* at /static/*
-import os as _os
-_static_dir = _os.path.join(_os.path.dirname(__file__), "static")
-if _os.path.isdir(_static_dir):
+_static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(_static_dir):
     app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 if settings.rate_limit_enabled:
@@ -177,12 +171,13 @@ app.include_router(email_tracking_router)
 
 
 @app.get("/health")
-async def health():
+async def health() -> JSONResponse:
     db_ok = "unknown"
     redis_ok = "unknown"
 
     try:
         from app.db import get_session_factory
+
         factory = get_session_factory()
         async with factory() as session:
             await session.execute(text("SELECT 1"))
@@ -197,13 +192,21 @@ async def health():
     except Exception:
         redis_ok = "error"
 
-    return {
-        "status": "ok",
-        "database": db_ok,
-        "redis": redis_ok,
-        "version": "0.1.0",
-        "uptime_seconds": int(time.time() - START_TIME),
-    }
+    return JSONResponse(
+        status_code=200 if db_ok == "ok" else 503,
+        content={
+            "status": "ok" if db_ok == "ok" else "error",
+            "database": db_ok,
+            "redis": redis_ok,
+            "version": "0.1.0",
+            "uptime_seconds": int(time.time() - START_TIME),
+        },
+    )
+
+
+@app.get("/health/live", include_in_schema=False)
+async def liveness() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 app.include_router(redirect_router)
