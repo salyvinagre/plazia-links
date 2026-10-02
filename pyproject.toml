@@ -3,78 +3,32 @@ requires = ["uv_build>=0.12.21,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-root = ""
 module-name = ["app", "worker"]
-source-include = ["migrations/**", "alembic.ini", "infrastructure/**", "tests/**", "docs/**", "uv.lock"]
+module-root = ""
+source-include = ["app/templates/**", "app/static/**", "app/platform/persistence/sql/**"]
 
 [project]
 name = "plazia-links"
-version = "0.1.0.dev0"
-description = "Plazia link management service, derived from Zly"
-readme = "README.md"
+version = "0.2.0"
+description = "Organization-owned short link pools and activation notifications."
 requires-python = ">=3.14,<3.16"
-license = "MIT"
-license-files = ["LICENSE"]
-authors = [
-    { name = "PythonPlumber", email = "pythonplumber@senuka.me" },
-]
-keywords = ["url-shortener", "fastapi", "analytics", "qr-code", "link-in-bio", "marketing", "self-hosted"]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.14",
-    "Topic :: Internet :: WWW/HTTP",
-]
-
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
-    "sqlalchemy[asyncio]>=2.0.36",
-    "aiosqlite>=0.20.0",
-    "asyncpg>=0.30.0",
-    "alembic>=1.14.0",
-    "redis>=5.2.0",
-    "arq>=0.26.0",
-    "pydantic-settings>=2.6.0",
-    "jinja2>=3.1.4",
-    "python-multipart>=0.0.18",
-    "httpx>=0.28.0",
-    "bcrypt>=4.2.0",
-    "pyjwt[crypto]>=2.15.1,<3",
-    "oauthlib>=3.3.1,<4",
-    "qrcode[pil]>=8.0",
-    "email-validator>=2.0.0",
-    "sentry-sdk>=2.0.0",
-    "aiosmtplib>=3.1.0",
+ "fastapi>=0.115,<1", "uvicorn[standard]>=0.32", "redis>=5.2,<6",
+ "pydantic-settings>=2.6,<3", "jinja2>=3.1,<4", "python-multipart>=0.0.18",
+ "httpx>=0.28,<1", "pyjwt[crypto]>=2.15.1,<3", "oauthlib>=3.3.1,<4",
+ "dependency-injector>=4.49,<5", "psycopg[binary]>=3.2,<4", "openfga-sdk>=0.10.4,<0.11", "plazia-authz", "plazia-http[fastapi]", "plazia-observability[otel]",
+  "plazia-kernel[contacts]", "plazia-contracts",
+ "plazia-persistence", "plazia-messaging", "plazia-notifications", "plazia-settings",
 ]
 
 [project.scripts]
 plazia-links = "app.cli:main"
-zly-cli = "app.cli:main"
-
-[project.urls]
-Homepage = "https://github.com/salyvinagre/plazia-links"
-Repository = "https://github.com/salyvinagre/plazia-links"
-Issues = "https://github.com/salyvinagre/plazia-links/issues"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.0",
-    "pytest-asyncio>=0.24.0",
-    "ruff>=0.7.0",
-    "mypy>=1.13.0",
-    "types-qrcode>=8.0.0",
-    "playwright>=1.55,<2",
+ "pytest>=9,<10", "pytest-asyncio>=1,<2", "pytest-cov>=7,<8", "pytest-bdd>=8,<9",
+ "ruff>=0.15,<1", "mypy>=1.13,<3", "playwright>=1.55,<2", "plazia-tooling",
 ]
-
-[project.optional-dependencies]
-geo = [
-    "geoip2>=5.0.0",
-]
-
-[tool.uv]
-required-version = ">=0.10.11"
 
 [tool.ruff]
 target-version = "py314"
@@ -86,15 +40,36 @@ select = ["E", "F", "I", "N", "W", "UP"]
 [tool.mypy]
 python_version = "3.14"
 strict = true
-disallow_untyped_defs = true
 ignore_missing_imports = true
+follow_imports = "silent"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["slow: requires real infrastructure or a browser"]
+
+[tool.coverage.run]
+branch = true
+source = ["app", "worker"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
 
 [tool.vercel]
 entrypoint = "app.index:app"
 
-[tool.vercel.scripts]
-build = "python -m app.platform.serverless"
+[tool.uv.sources]
+plazia-authlib = { path = "../plazia/packages/plazia-authlib", editable = true }
+plazia-authz = { path = "../plazia/packages/plazia-authz", editable = true }
+plazia-cli = { path = "../plazia/packages/plazia-cli", editable = true }
+plazia-contracts = { path = "../plazia/packages/plazia-contracts", editable = true }
+plazia-feature = { path = "../plazia/packages/plazia-feature", editable = true }
+plazia-http = { path = "../plazia/packages/plazia-http", editable = true }
+plazia-kernel = { path = "../plazia/packages/plazia-kernel", editable = true }
+plazia-messaging = { path = "../plazia/packages/plazia-messaging", editable = true }
+plazia-notifications = { path = "../plazia/packages/plazia-notifications", editable = true }
+plazia-observability = { path = "../plazia/packages/plazia-observability", editable = true }
+plazia-persistence = { path = "../plazia/packages/plazia-persistence", editable = true }
+plazia-settings = { path = "../plazia/packages/plazia-settings", editable = true }
+plazia-tooling = { path = "../plazia/packages/plazia-tooling", editable = true }

@@ -1,0 +1,23 @@
+NORMALIZERS
+
+PURPOSE
+Check domain field normalizers with shared tooling.
+
+USAGE
+  [verify] make normalizers help
+
+VARIABLES
+CHECK_FLAGS forwards options to the shared normalizers check.
+
+WHEN
+Run after changing domain fields or their normalization.
+
+BOUNDARIES
+Scans app/contexts and app/kernel; findings fail the check.
+
+EVIDENCE
+No field-local normalization migration candidates are reported.
+
+EXAMPLES
+  [verify] make normalizers help
+  [static] make normalizers

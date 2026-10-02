@@ -14,13 +14,6 @@ Upstream main and master have unrelated Git roots. The integration commit
 retains both parents and adopts the master application tree; no local Plazia
 code changes existed on main. This is not a squash or a history replacement.
 
-## Stabilization scope
+## Product cutover
 
-Stabilization is kept separate from the upstream merge. CI must report lint,
-typing, unit tests and a real PostgreSQL migration check independently.
-An existing test file or a generated OpenAPI document is not evidence of a
-passing test or a complete contract.
-
-Pools, reserved links, subscriber confirmation, activation outbox delivery,
-and Plazia Identity integration are subsequent product work. They are not
-implemented by the upstream import or by baseline maintenance.
+The organization pool implementation replaces the inherited ORM, legacy auth, workspace and marketing runtime. Upstream history and the MIT notice remain in Git and LICENSE. See ARCHITECTURE.md for the current runtime.

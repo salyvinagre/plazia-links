@@ -1,0 +1,21 @@
+SCHEMA-CHECK
+
+PURPOSE
+Verify Flyway history, owned roles, tenant policies and critical grants.
+
+USAGE
+  [verify] make schema-check help
+
+WHEN
+Run after migration or when diagnosing schema authority drift.
+
+BOUNDARIES
+Reads the selected database catalog; requires a configured native PostgreSQL
+DSN and performs no schema repair.
+
+EVIDENCE
+The CLI reports that schema authority is verified.
+
+EXAMPLES
+  [verify] make schema-check help
+  [static] make schema-check

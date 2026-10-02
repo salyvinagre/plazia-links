@@ -1,142 +1,74 @@
-import os
-
-# The inherited suite explicitly exercises the non-production compatibility profile.
-os.environ.setdefault("AUTH_MODE", "legacy")
-
-import asyncio
-from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock
-
+import httpx
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app import models  # noqa: F401
-from app.core.dependencies import get_db, get_redis_client
-from app.db import Base
-from app.main import app
-
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test_zly.db"
+from app.main import create_app
+from app.platform.access import AccessRuntime
+from app.platform.settings import Settings
+from tests.identity_support import LocalIssuer, MemoryState
+from tests.support import FixtureAuthority, MemoryDatabase, MemoryRepository, MemoryUowFactory
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+@pytest.fixture
+def issuer():
+    value = LocalIssuer()
+    yield value
+    value.close()
 
 
-@pytest_asyncio.fixture(scope="session")
-async def test_engine():
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield engine
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await engine.dispose()
+@pytest.fixture
+def ephemeral():
+    return MemoryState()
 
 
-@pytest_asyncio.fixture
-async def db_session(test_engine) -> AsyncGenerator[AsyncSession]:
-    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
-    async with session_factory() as session:
-        yield session
+@pytest.fixture
+def identity_db(issuer):
+    return MemoryRepository(issuer.url)
 
 
-@pytest_asyncio.fixture
-async def mock_redis():
-    mock = AsyncMock()
-    mock.get.return_value = None
-
-    class FakePipeline:
-        def __init__(self):
-            self._commands = []
-
-        def zremrangebyscore(self, *a, **kw):
-            return self
-
-        def zcard(self, *a, **kw):
-            return self
-
-        def zadd(self, *a, **kw):
-            return self
-
-        def expire(self, *a, **kw):
-            return self
-
-        async def execute(self):
-            return [0, 0, 1, True]
-
-    mock.pipeline.return_value = FakePipeline()
-    return mock
+@pytest.fixture
+def authority():
+    return FixtureAuthority()
 
 
-@pytest_asyncio.fixture
-async def client(db_session: AsyncSession, mock_redis, monkeypatch) -> AsyncGenerator[AsyncClient]:
-    from app.config import settings
-    from app.core.rate_limiter import ZONES
-
-    monkeypatch.setattr(settings, "default_domain", "test")
-    ZONES.clear()
-
-    async def override_get_db():
-        yield db_session
-
-    async def override_redis():
-        yield mock_redis
-
-    app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_redis_client] = override_redis
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
-    app.dependency_overrides.clear()
+@pytest.fixture
+def database(identity_db):
+    return MemoryDatabase(identity_db)
 
 
-@pytest_asyncio.fixture
-async def test_user_id(db_session: AsyncSession) -> str:
-    from uuid import uuid4
-
-    from app.core.security import hash_password
-    from app.models.user import User
-
-    user = User(
-        email=f"testuser-{uuid4().hex[:8]}@test.com",
-        password_hash=hash_password("testpass"),
-        display_name="Test User",
+@pytest.fixture
+def application(issuer, ephemeral, database, authority):
+    return create_app(
+        access=AccessRuntime.build(issuer.config(), ephemeral),
+        database=database,
+        uow_factory=MemoryUowFactory(database),
+        authority=authority,
+        config=Settings(rate_limit_enabled=False),
     )
-    db_session.add(user)
-    await db_session.flush()
-    await db_session.refresh(user)
-    return user.id
 
 
-@pytest_asyncio.fixture
-async def test_workspace_id(db_session: AsyncSession, test_user_id: str) -> str:
-    from app.schemas.workspace import WorkspaceCreate
-    from app.services.workspace_service import create_workspace
+@pytest.fixture
+async def identity_client(application):
+    async def creation_key(request):
+        from uuid import uuid4
 
-    ws = await create_workspace(
-        db_session, WorkspaceCreate(name="Global Test WS", slug="global-test-ws"), test_user_id
-    )
-    return ws.id
+        if request.method in {"POST", "PATCH", "DELETE"} and request.url.path.startswith(
+            "/api/v1/"
+        ):
+            request.headers.setdefault("Idempotency-Key", uuid4().hex)
+        elif request.method == "POST" and request.url.path.startswith("/dashboard/"):
+            # Most fast tests construct browser posts; real browser proof uses the hidden form key.
+            request.headers.setdefault("Idempotency-Key", uuid4().hex)
+
+    async with httpx.AsyncClient(
+        event_hooks={"request": [creation_key]},
+        transport=httpx.ASGITransport(app=application, raise_app_exceptions=False),
+        base_url="http://127.0.0.1:8000",
+        follow_redirects=False,
+    ) as client:
+        yield client
 
 
-@pytest_asyncio.fixture
-async def auth_client(client: AsyncClient, db_session: AsyncSession) -> AsyncClient:
-    import uuid
-
-    from app.schemas.auth import RegisterRequest
-    from app.services.auth_service import register_user
-
-    user = await register_user(
-        db_session,
-        RegisterRequest(email=f"authuser-{uuid.uuid4().hex[:8]}@test.com", password="testpass123"),
-    )
-    from app.core.security import create_access_token
-
-    token = create_access_token({"sub": user.id})
-    client.headers["Authorization"] = f"Bearer {token}"
-    return client
+def pytest_bdd_apply_tag(tag, function):
+    if tag.startswith("story:"):
+        return True
+    return None

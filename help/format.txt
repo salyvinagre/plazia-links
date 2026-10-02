@@ -1,0 +1,20 @@
+FORMAT
+
+PURPOSE
+Format and apply Ruff fixes to app, worker, tests and tools.
+
+USAGE
+  [verify] make format help
+
+WHEN
+Run after changing Python source, before reviewing the diff.
+
+BOUNDARIES
+Rewrites source files; review the resulting diff.
+
+EVIDENCE
+Ruff completes and the resulting source diff is reviewable.
+
+EXAMPLES
+  [verify] make format help
+  [static] make format

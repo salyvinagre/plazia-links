@@ -1,1 +1,9 @@
-{% extends "identity/base.html" %}{% block content %}<section class="empty"><h1>Sign-in unavailable</h1><p role="alert">{{ message }}</p><a class="button" href="/login">Restart sign-in</a></section>{% endblock %}
+{% extends "identity/base.html" %}
+{% block title %}Sign-in unavailable · Plazia Links{% endblock %}
+{% block content %}
+<section class="card mx-auto my-6 max-w-[560px] border border-base-300 bg-base-100 p-7 text-center sm:my-10 sm:px-6 sm:py-12">
+  <h1 class="text-[28px]">Sign-in unavailable</h1>
+  <p class="text-muted" role="alert">{{ message }}</p>
+  <a class="btn btn-primary mt-3" href="/login" hx-boost="false">Restart sign-in</a>
+</section>
+{% endblock %}

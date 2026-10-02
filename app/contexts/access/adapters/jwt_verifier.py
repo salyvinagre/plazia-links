@@ -9,8 +9,8 @@ from collections.abc import Mapping
 from typing import Any
 
 import jwt
+from shared_identity.canonical_ids import OrganizationId
 
-from app.contexts.access.domain.organization import OrganizationId
 from app.contexts.access.domain.principal import (
     AccessUnavailableError,
     InvalidCredentialsError,
@@ -75,7 +75,7 @@ class JwtVerifier:
     async def access_token(self, token: str) -> Principal:
         claims = await asyncio.to_thread(self._decode, token, self.audience, True)
         try:
-            organization = OrganizationId(self._text(claims, "org")).value
+            organization = OrganizationId(self._text(claims, "org"))
             scopes = claims.get("scope", "")
             if not isinstance(scopes, str):
                 raise InvalidCredentialsError

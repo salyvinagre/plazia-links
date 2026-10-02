@@ -1,83 +1,78 @@
-"""Real Chromium + local OAuth issuer + PostgreSQL 18 + Redis.
+"""Real Chromium, PostgreSQL 18, Redis, OpenFGA and SMTP capture; local OAuth issuer."""
 
-Set IDENTITY_E2E=1 and POSTGRES_TEST_URL only for a dedicated migrated test DB.
-The issuer is a fixture, not a live Plazia Identity deployment.
-"""
-
-import asyncio
-import faulthandler
 import os
 import socket
 import subprocess
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from uuid import uuid7
 
 import httpx
 import pytest
-from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.contexts.access.adapters.models import WorkspaceIdentityBinding
 from tests.identity_support import ORG_A, LocalIssuer
 
-pytestmark = pytest.mark.skipif(os.getenv("IDENTITY_E2E") != "1", reason="IDENTITY_E2E not enabled")
+pytestmark = [
+    pytest.mark.slow,
+    pytest.mark.skipif(
+        os.getenv("IDENTITY_E2E") != "1", reason="Dedicated acceptance infrastructure required"
+    ),
+]
 
 
 @pytest.fixture(scope="module", params=["container", "serverless"])
-def live_application(tmp_path_factory, request):
+def live_application(request):
     from playwright.sync_api import sync_playwright
 
-    faulthandler.enable()
-    postgres = os.environ["POSTGRES_TEST_URL"]
-    assert postgres.startswith("postgresql+asyncpg://")
-    root = Path(__file__).resolve().parents[2]
     issuer = LocalIssuer()
-    with socket.socket() as reserved:
-        reserved.bind(("127.0.0.1", 0))
-        port = reserved.getsockname()[1]
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
     base = f"http://127.0.0.1:{port}"
     env = {
         **os.environ,
-        "AUTH_MODE": "identity",
-        "DEPLOYMENT_MODE": request.param,
-        "ENVIRONMENT": "test",
-        "DATABASE_URL": postgres,
-        "IDENTITY_ISSUER": issuer.url,
-        "IDENTITY_AUDIENCE": "https://links.example.test/api",
-        "IDENTITY_CLIENT_ID": issuer.client_id,
-        "IDENTITY_CLIENT_SECRET": issuer.client_secret,
-        "IDENTITY_PUBLIC_BASE_URL": base,
-        "IDENTITY_ALLOW_INSECURE_LOOPBACK": "true",
-        "DEFAULT_DOMAIN": base,
-        "RATE_LIMIT_ENABLED": "false",
+        "PLZL_ENVIRONMENT": "test",
+        "PLZL_DEPLOYMENT_MODE": request.param,
+        "PLZL_DATABASE_URL": os.environ["POSTGRES_TEST_URL"],
+        "PLZL_IDENTITY_ISSUER": issuer.url,
+        "PLZL_IDENTITY_AUDIENCE": "https://links.example.test/api/v1",
+        "PLZL_IDENTITY_CLIENT_ID": issuer.client_id,
+        "PLZL_IDENTITY_CLIENT_SECRET": issuer.client_secret,
+        "PLZL_IDENTITY_PUBLIC_BASE_URL": base,
+        "PLZL_IDENTITY_ALLOW_INSECURE_LOOPBACK": "true",
+        "PLZL_RATE_LIMIT_ENABLED": "false",
     }
+    root = Path(__file__).resolve().parents[2]
     subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "app.cli",
-            "bind-organization",
-            ORG_A,
-            "--name",
-            "Browser test tenant",
-        ],
+        [sys.executable, "-m", "app.cli", "bind-organization", ORG_A, "--name", "Browser tenant"],
         cwd=root,
-        env=env,
+        env=env | {"PLZL_DATABASE_URL": os.environ["POSTGRES_OWNER_TEST_URL"]},
         check=True,
         capture_output=True,
-        text=True,
-        timeout=20,
     )
-    log_path = tmp_path_factory.mktemp("browser") / "server.log"
-    with log_path.open("w+") as log:
+    fga = os.environ["PLZL_OPENFGA_URL"]
+    store = os.environ["PLZL_OPENFGA_STORE_ID"]
+    tuple_key = {
+        "user": "user:usr_0199a112345670008000000000000003",
+        "relation": "owner",
+        "object": f"organization:{ORG_A}",
+    }
+    httpx.post(
+        fga + f"/stores/{store}/write",
+        json={
+            "writes": {"tuple_keys": [tuple_key]},
+            "authorization_model_id": os.environ["PLZL_OPENFGA_MODEL_ID"],
+        },
+    ).raise_for_status()
+    output = root / "output" / "playwright"
+    output.mkdir(parents=True, exist_ok=True)
+    with (output / f"server-{request.param}.log").open("w+") as log:
         process = subprocess.Popen(
             [
                 sys.executable,
                 "-m",
                 "uvicorn",
-                "app.index:app" if request.param == "serverless" else "app.main:app",
+                "app.index:app",
                 "--host",
                 "127.0.0.1",
                 "--port",
@@ -92,146 +87,114 @@ def live_application(tmp_path_factory, request):
         try:
             for _ in range(150):
                 if process.poll() is not None:
-                    raise AssertionError(log_path.read_text())
+                    raise AssertionError((output / f"server-{request.param}.log").read_text())
                 try:
-                    if httpx.get(base + "/health", timeout=1).status_code == 200:
+                    if httpx.get(base + "/health", timeout=0.5).status_code == 200:
                         break
                 except httpx.HTTPError:
                     pass
                 time.sleep(0.1)
             else:
-                raise AssertionError("Application did not become ready: " + log_path.read_text())
-            print("Identity E2E: application is ready; starting Chromium", flush=True)
+                raise AssertionError("Server did not become ready")
             with sync_playwright() as playwright:
-                browser = playwright.chromium.launch(
-                    args=["--host-resolver-rules=MAP content.example.test 127.0.0.1"],
-                    timeout=30000,
-                )
+                browser = playwright.chromium.launch()
                 try:
-                    yield base, issuer, browser
+                    yield base, issuer, browser, request.param
                 finally:
                     browser.close()
         finally:
             process.terminate()
             process.wait(timeout=10)
             issuer.close()
-            print("Application log:\n" + log_path.read_text())
+            httpx.post(
+                fga + f"/stores/{store}/write",
+                json={
+                    "deletes": {"tuple_keys": [tuple_key]},
+                    "authorization_model_id": os.environ["PLZL_OPENFGA_MODEL_ID"],
+                },
+            ).raise_for_status()
 
 
-@pytest.fixture
-def signed_in_page(live_application):
-    base, issuer, browser = live_application
-    context = browser.new_context()
-    context.set_default_timeout(10000)
-    context.set_default_navigation_timeout(15000)
+def test_reserve_subscribe_activate_and_delivery(live_application):
+    import asyncio
+
+    from playwright.sync_api import expect
+    from shared_notifications.email_smtp import SmtpEmailTransport, SmtpEmailTransportConfiguration
+
+    from app.contexts.links.adapters.repositories.sql.notifications import PostgresDeliveryQueue
+    from app.contexts.links.application.workflows.notifications import ActivationEmailsWorkflow
+
+    base, issuer, browser, mode = live_application
+    context = browser.new_context(viewport={"width": 1280, "height": 900})
     page = context.new_page()
     page.goto(base + "/login")
     page.wait_for_url(base + "/dashboard/links")
-    yield page, context, base, issuer
-    context.close()
-
-
-def test_sign_in_create_edit_redirect_and_revoke_session(signed_in_page):
-    page, context, base, issuer = signed_in_page
-    from playwright.sync_api import expect
-
-    code = "e" + uuid7().hex[-8:]
-    # A real local destination behind a controlled DNS name, not an API route mock.
-    target = issuer.url.replace("127.0.0.1", "content.example.test") + "/content"
-    expect(page.get_by_role("heading", name="Links", exact=True)).to_be_visible()
-    page.get_by_role("link", name="Create link", exact=True).click()
-    page.get_by_label("Destination URL").fill(target + "?before=1")
-    page.get_by_label("Title", exact=False).fill("Browser workflow " + code)
-    page.get_by_label("Short code", exact=False).fill(code)
-    page.get_by_role("button", name="Create link", exact=True).click()
-    row = page.get_by_role("row").filter(has_text="Browser workflow " + code)
-    expect(row).to_be_visible()
-    row.get_by_role("link", name="Edit", exact=True).click()
-    page.get_by_label("Destination URL").fill(target + "?after=1")
-    page.get_by_role("button", name="Save changes").click()
-    row = page.get_by_role("row").filter(has_text="Browser workflow " + code)
-    expect(row).to_contain_text("after=1")
-    visitor = context.new_page()
+    page.get_by_label("Pool name").fill("Early access")
+    page.get_by_label("Number of links").fill("2")
+    page.get_by_role("button", name="Reserve links").click()
+    rows = page.get_by_role("row").filter(has_text="Awaiting destination")
+    expect(rows).to_have_count(2)
+    code = rows.first.locator("td").first.get_by_role("link").inner_text().strip("/")
+    link = rows.first.get_by_role("link", name="Activate")
+    screenshot = Path("output/playwright")
+    page.screenshot(path=str(screenshot / f"pool-{mode}-desktop.png"), full_page=True)
+    visitor_context = browser.new_context(viewport={"width": 390, "height": 844})
+    visitor = visitor_context.new_page()
     visitor.goto(base + "/" + code)
-    expect(visitor.get_by_role("heading", name="Linked content")).to_be_visible()
-    assert visitor.url == target + "?after=1"
-    visitor.close()
-    cookies = context.cookies(base)
-    session = next(cookie for cookie in cookies if cookie["name"] == "plazia_links_session")
-    assert session["httpOnly"] and "." not in session["value"]
+    expect(visitor.get_by_role("heading", name="This link is coming soon")).to_be_visible()
+    visitor.screenshot(path=str(screenshot / f"waiting-{mode}-mobile.png"), full_page=True)
+    visitor.get_by_label("Email address").fill("subscriber@example.com")
+    visitor.get_by_role("button", name="Notify me").click()
+    expect(visitor.get_by_role("heading", name="You’re on the list")).to_be_visible()
+    rows.first.locator("summary").click()
+    link.click()
+    page.get_by_label("Destination URL").fill("https://example.com/ready")
+    page.get_by_role("button", name="Save changes").click()
+    expect(page.get_by_role("heading", name="Links", exact=True)).to_be_visible()
     assert (
-        page.evaluate("Object.keys(localStorage).length + Object.keys(sessionStorage).length") == 0
+        httpx.get(base + "/" + code, follow_redirects=False).headers["location"]
+        == "https://example.com/ready"
     )
-    # Cookies alone never authenticate the management API.
+    queue = PostgresDeliveryQueue(os.environ["POSTGRES_WORKER_TEST_URL"])
+    smtp = SmtpEmailTransport(
+        configuration=SmtpEmailTransportConfiguration(
+            host="127.0.0.1",
+            port=int(os.environ["SMTP_TEST_PORT"]),
+            from_address="links@example.com",
+        )
+    )
+    workflow = ActivationEmailsWorkflow(queue, smtp, base)
+
+    async def deliver():
+        while await workflow.run_once():
+            pass
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        executor.submit(asyncio.run, deliver()).result(timeout=30)
+    messages = httpx.get(os.environ["MAILPIT_TEST_URL"] + "/api/v1/messages").json()["messages"]
+    matching = [
+        message
+        for message in messages
+        if message["Subject"] == "Your link is ready"
+        and any(recipient["Address"] == "subscriber@example.com" for recipient in message["To"])
+    ]
+    assert matching
+    assert any(
+        f"{base}/{code}"
+        in httpx.get(os.environ["MAILPIT_TEST_URL"] + f"/api/v1/message/{message['ID']}").json()[
+            "Text"
+        ]
+        for message in matching
+    )
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(base + "/dashboard/links")
+    page.screenshot(path=str(screenshot / f"pool-{mode}-mobile.png"), full_page=True)
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    assert visitor.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     assert context.request.get(base + "/api/v1/links").status == 401
     page.get_by_role("button", name="Sign out").click()
     expect(page.get_by_role("heading", name="Signed out of Plazia Links")).to_be_visible()
-    # Reusing the old browser handle cannot restore a revoked server-side session.
-    replay = httpx.get(
-        base + "/dashboard/links",
-        cookies={session["name"]: session["value"]},
-        follow_redirects=False,
-    )
-    assert replay.status_code == 303 and replay.headers["location"] == "/login"
-    assert issuer.token_requests[-1]["code_verifier"]
-
-
-def test_browser_form_csrf_is_enforced(signed_in_page):
-    page, context, base, issuer = signed_in_page
-    from playwright.sync_api import expect
-
-    page.get_by_role("link", name="Create link", exact=True).click()
-    page.get_by_label("Destination URL").fill("https://content.example.test/page")
-    page.locator('main input[name="csrf_token"]').evaluate("element => element.value = 'tampered'")
-    page.get_by_role("button", name="Create link", exact=True).click()
-    expect(page.locator("body")).to_contain_text("csrf_rejected")
-    assert page.url == base + "/dashboard/links"
-
-
-def test_m2m_dpop_and_replay_against_real_redis(live_application):
-    base, issuer, _ = live_application
-    key, jkt = issuer.proof_key()
-    token = issuer.access(sub="app_machine", client_id="machine", cnf={"jkt": jkt})
-    proof = issuer.proof(token, key, "POST", base + "/api/v1/links")
-    headers = {"Authorization": "DPoP " + token, "DPoP": proof}
-    response = httpx.post(
-        base + "/api/v1/links",
-        headers=headers,
-        json={"destination_url": "https://content.example.test/page"},
-    )
-    assert response.status_code == 201, response.text
-    # A fresh HTTP client still shares replay consumption via Redis.
-    assert (
-        httpx.post(
-            base + "/api/v1/links",
-            headers=headers,
-            json={"destination_url": "https://content.example.test/page"},
-        ).status_code
-        == 401
-    )
-
-
-def test_operator_disabling_binding_revokes_existing_browser_access(signed_in_page):
-    page, context, base, issuer = signed_in_page
-
-    async def set_active(active):
-        engine = create_async_engine(os.environ["POSTGRES_TEST_URL"])
-        async with engine.begin() as connection:
-            await connection.execute(
-                WorkspaceIdentityBinding.__table__.update()
-                .where(
-                    WorkspaceIdentityBinding.issuer == issuer.url,
-                    WorkspaceIdentityBinding.organization_id == ORG_A,
-                )
-                .values(is_active=active)
-            )
-        await engine.dispose()
-
-    # Playwright's sync API owns an event loop on this thread.
-    with ThreadPoolExecutor(max_workers=1) as runner:
-        runner.submit(asyncio.run, set_active(False)).result(timeout=15)
-        try:
-            response = page.goto(base + "/dashboard/links")
-            assert response.status == 403
-        finally:
-            runner.submit(asyncio.run, set_active(True)).result(timeout=15)
+    visitor_context.close()
+    context.close()

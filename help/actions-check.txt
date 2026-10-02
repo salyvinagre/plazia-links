@@ -1,0 +1,23 @@
+ACTIONS-CHECK
+
+PURPOSE
+Validate GitHub Actions policy.
+
+USAGE
+  [verify] make actions-check help
+
+VARIABLES
+CHECK_FLAGS forwards options to the shared Actions check.
+
+WHEN
+Run after changing GitHub Actions workflows.
+
+BOUNDARIES
+Inspects the workflow contract; does not execute GitHub Actions.
+
+EVIDENCE
+The GitHub Actions policy checker reports success.
+
+EXAMPLES
+  [verify] make actions-check help
+  [static] make actions-check

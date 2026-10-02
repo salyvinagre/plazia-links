@@ -1,0 +1,26 @@
+ACCEPTANCE
+
+PURPOSE
+Provision disposable services and prove the organization pool flow.
+
+USAGE
+  [verify] make acceptance help
+
+VARIABLES
+CONTAINER selects the engine (default podman). CONTAINER_CONNECTION selects a
+configured Podman connection.
+
+WHEN
+Run when validating database, authorization, mail and browser behavior
+together.
+
+BOUNDARIES
+Requires a container engine and installed Chromium. Creates uniquely labelled
+services, migrates their database and removes only its own resources.
+
+EVIDENCE
+Real-service tests pass and the harness reports empty owned-resource residue.
+
+EXAMPLES
+  [verify] make acceptance help
+  [static] make acceptance

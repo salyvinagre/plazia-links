@@ -1,0 +1,20 @@
+HELP
+
+PURPOSE
+Show the grouped command index and target guidance.
+
+USAGE
+  [verify] make help help
+
+WHEN
+Use to discover commands or inspect a target before running it.
+
+BOUNDARIES
+No Python, uv, network or runtime configuration is needed.
+
+EVIDENCE
+The requested index or target page is rendered without running operational
+commands.
+
+EXAMPLES
+  [verify] make help help

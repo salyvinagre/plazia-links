@@ -11,18 +11,18 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlencode, urlsplit
-from uuid import uuid7
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from uuid6 import uuid7
 
-from app.config import IdentitySettings
 from app.contexts.access.adapters.dpop import DPoPVerifier
 from app.contexts.access.domain.principal import AccessUnavailableError
+from app.platform.settings import IdentitySettings
 
-ORG_A = "org_0199a112-3456-7000-8000-000000000001"
-ORG_B = "org_0199a112-3456-7000-8000-000000000002"
-RESOURCE = "https://links.example.test/api"
+ORG_A = "org_0199a112345670008000000000000001"
+ORG_B = "org_0199a112345670008000000000000002"
+RESOURCE = "https://links.example.test/api/v1"
 
 
 class MemoryState:
@@ -99,13 +99,13 @@ class LocalIssuer:
         )
 
     def access(
-        self, org=ORG_A, scopes="read:links create:links update:links delete:links", **overrides
+        self, org=ORG_A, scopes="links:read links:create links:update links:delete", **overrides
     ):
         now = int(time.time())
         claims = {
             "iss": self.url,
             "aud": RESOURCE,
-            "sub": "usr_fixture-alice",
+            "sub": "usr_0199a112345670008000000000000003",
             "client_id": self.client_id,
             "org": org,
             "scope": scopes,
@@ -217,7 +217,7 @@ class LocalIssuer:
                 identity = jwt.encode(
                     {
                         "iss": issuer.url,
-                        "sub": "usr_fixture-alice",
+                        "sub": "usr_0199a112345670008000000000000003",
                         "aud": issuer.client_id,
                         "iat": now,
                         "exp": now + 300,

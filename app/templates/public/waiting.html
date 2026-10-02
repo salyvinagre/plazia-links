@@ -1,0 +1,41 @@
+{% extends "identity/base.html" %}
+{% block title %}{{ 'Link ready' if result == 'active' else 'You’re on the list' if result == 'waiting' else 'Link coming soon' }} · Plazia Links{% endblock %}
+{% block main_class %}flex items-start sm:items-center{% endblock %}
+{% block push_url %}false{% endblock %}
+{% block brand %}
+<div class="brand"><img src="/static/brand/links-color.svg" alt="Plazia Links" width="179" height="98"></div>
+{% endblock %}
+{% block content %}
+<section class="mx-auto my-3 w-full max-w-[520px] sm:my-6">
+  <span class="mb-6 inline-block rounded-md border border-base-300 bg-base-100 px-2.5 py-1 text-[13px] break-words text-muted">/{{ short_code }}</span>
+  {% if result == 'active' %}
+  <div class="card border border-base-300 bg-base-100 p-7 sm:p-8">
+    <p class="eyebrow">Ready to open</p>
+    <h1 class="text-[28px]">This link is ready</h1>
+    <p class="text-muted">The owner has added a destination. You can open it now.</p>
+    <a class="btn btn-primary" href="/{{ short_code }}" hx-boost="false">Open link</a>
+  </div>
+  {% elif result == 'waiting' %}
+  <div class="card border border-base-300 bg-base-100 p-7 sm:p-8">
+    <p class="eyebrow">Email notification saved</p>
+    <h1 class="text-[28px]">You’re on the list</h1>
+    <p class="text-muted">We’ll email you when this link becomes active.</p>
+    <p class="hint">You’ll receive one activation email for this link.</p>
+  </div>
+  {% else %}
+  <h1>This link is coming soon</h1>
+  <p class="mb-7 text-muted">The owner hasn’t added a destination yet. Leave your email and we’ll let you know when it’s ready.</p>
+  {% if error %}
+  <p class="alert mb-4 border border-base-300 bg-base-100 text-sm" role="alert">{{ error }}</p>
+  {% endif %}
+  <form class="card border border-base-300 bg-base-100 p-5 sm:p-7" hx-disabled-elt="find button"
+        method="post" action="/{{ short_code }}/subscriptions">
+    <label for="email">Email address</label>
+    <input class="input w-full placeholder:text-muted placeholder:opacity-100" id="email" name="email" type="email" autocomplete="email"
+           maxlength="320" required placeholder="you@example.com" aria-describedby="email-hint">
+    <p class="hint" id="email-hint">One activation email. We won’t add you to a marketing list.</p>
+    <button class="btn btn-primary mt-7 w-full" type="submit">Notify me</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,32 @@
+TEST
+
+PURPOSE
+Run a selected repository test suite.
+
+USAGE
+  [verify] make test help
+
+VARIABLES
+TEST_SUITE selects the suite. TEST_FLAGS forwards pytest arguments, for example
+'-k pagination'.
+
+VALUES
+fast (default), unit, architecture, integration, acceptance, all. all runs the
+fast suite and disposable acceptance.
+
+WHEN
+Use fast during development; select a named suite for a focused proof.
+
+BOUNDARIES
+fast excludes slow tests. integration requires configured services; acceptance
+provisions disposable services. TEST_FLAGS apply to direct pytest steps; the
+acceptance harness has a fixed suite.
+
+EVIDENCE
+The selected pytest steps or acceptance harness pass.
+
+EXAMPLES
+  [verify] make test help
+  [static] make test
+  [verify] make test help TEST_SUITE=acceptance
+  [static] make test TEST_SUITE=unit TEST_FLAGS='-k pagination'

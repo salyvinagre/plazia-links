@@ -1,0 +1,21 @@
+FRONTEND
+
+PURPOSE
+Compile the Tailwind/daisyUI interface and install pinned HTMX assets.
+
+USAGE
+  [verify] make frontend help
+
+WHEN
+Run after editing templates or the CSS entry point and its imports.
+
+BOUNDARIES
+Downloads checksum-verified assets into .cache/ui and writes shipped static
+files.
+
+EVIDENCE
+The checksum-verified assets and compiled CSS are present under app/static.
+
+EXAMPLES
+  [verify] make frontend help
+  [static] make frontend

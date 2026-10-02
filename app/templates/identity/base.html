@@ -1,9 +1,51 @@
 <!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{% block title %}Plazia Links{% endblock %}</title>
-<link rel="stylesheet" href="/static/css/identity.css"></head>
-<body><header><a class="brand" href="/dashboard/links">Plazia <strong>Links</strong></a>
-{% if session %}<form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ session.csrf_token }}"><button class="secondary" type="submit">Sign out</button></form>{% endif %}</header>
-<main>{% block content %}{% endblock %}</main>
-<footer>Plazia Links · Organization-scoped link management</footer></body></html>
+<html lang="en" data-theme="plazia">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"historyCacheSize":0,"refreshOnHistoryMiss":true,"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"409|422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
+  <title>{% block title %}Plazia Links{% endblock %}</title>
+  <link rel="icon" href="/static/brand/p.svg" type="image/svg+xml">
+  <link rel="preload" href="/static/brand/InterVariable.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="/static/css/identity.css">
+  <script src="/static/js/htmx.min.js" defer></script>
+  <script src="/static/js/interface.js" defer></script>
+</head>
+<body class="flex min-h-screen flex-col bg-base-200 text-base-content">
+  <a class="absolute -top-24 left-6 z-10 bg-base-100 p-3 focus:top-3" href="#main">Skip to content</a>
+  <header class="border-b border-base-300 bg-base-100">
+    <div class="shell flex flex-wrap items-center justify-between gap-4 py-3 sm:flex-nowrap sm:gap-8">
+      {% block brand %}
+      <a class="brand" href="/dashboard/links" aria-label="Plazia Links home">
+        <img src="/static/brand/links-color.svg" alt="Plazia Links" width="179" height="98">
+      </a>
+      {% endblock %}
+      {% if session %}
+      <div class="flex min-w-[100px] flex-col items-end gap-2 text-right sm:flex-row sm:items-center sm:gap-6">
+        {% if organization_name %}
+        <span class="text-xs break-words text-muted sm:text-sm">{{ organization_name }}</span>
+        {% endif %}
+        <form hx-disabled-elt="find button" method="post" action="/logout">
+          <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+          <button class="btn btn-ghost border border-base-300 hover:border-primary/20 hover:bg-primary/10 hover:text-primary" type="submit">Sign out</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </header>
+  <main id="main" class="shell flex-1 py-7 sm:py-10 {% block main_class %}{% endblock %}"
+        hx-boost="true" hx-target="#main" hx-select="#main" hx-swap="outerHTML"
+        hx-push-url="{% block push_url %}true{% endblock %}" hx-history="false">
+    <p id="request-error" class="alert mb-6 border border-base-300 bg-base-100 text-sm" role="alert" hidden>
+      We couldn’t complete that request. Reload this page and try again.
+    </p>
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="mt-4 border-t border-base-300">
+    <div class="shell flex flex-col gap-1 py-5 text-xs text-muted sm:flex-row sm:justify-between sm:gap-4 sm:py-6">
+      <p class="mb-0">Plazia Links</p>
+      <p class="mb-0">Share now. Connect when you’re ready.</p>
+    </div>
+  </footer>
+</body>
+</html>

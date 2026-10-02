@@ -1,247 +1,204 @@
-"""Application composition. Identity is the default; legacy mode is local/test-only."""
+"""FastAPI composition: one production profile, one PostgreSQL schema authority."""
 
-import os
-import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
+from shared_http.fastapi import ApiErrorResponse, ApiResponse, install_linked
+from shared_http.fastapi.telemetry import FastApiHttpTelemetry
 
-from app.config import IdentitySettings, settings
-from app.contexts.access.contracts import AccessDeniedError
-from app.contexts.links.contracts import InvalidLinkError, LinkConflictError, LinkNotFoundError
-from app.core.exceptions import (
-    http_exception_handler,
-    unhandled_exception_handler,
-    validation_exception_handler,
-)
-from app.core.logging import get_logger, setup_logging
-from app.core.rate_limiter import setup_rate_limiter
-from app.core.redis import close_redis, get_redis
-from app.core.request_id import RequestIDMiddleware
-from app.core.security_headers import SecurityHeadersMiddleware
+from app.contexts.access.adapters.authorization import OpenFgaOrganizationAuthority
+from app.contexts.access.contracts import AccessDeniedError, AccessUnavailableError
+from app.contexts.links.contracts import LinkConflictError, LinkNotFoundError
+from app.contexts.links.domain.link import IdempotencyConflictError, LinkDisabledError
+from app.interfaces.api.links import router as api_router
+from app.interfaces.browser import router as browser_router
+from app.interfaces.middleware.rate_limiter import setup_rate_limiter
+from app.interfaces.middleware.request_id import RequestIDMiddleware
+from app.interfaces.middleware.security_headers import SecurityHeadersMiddleware
+from app.interfaces.public import router as public_router
 from app.platform.access import AccessRuntime
-
-START_TIME = time.time()
-health_router = APIRouter()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    setup_logging()
-    logger = get_logger(__name__)
-    production = settings.environment.lower() in {"production", "prod"}
-    settings.validate_runtime_profile(app.state.auth_mode)
-    if app.state.auth_mode == "identity":
-        config = app.state.identity_config
-        config.validate_deployment(production=production)
-        if app.state.access is None:
-            app.state.access = AccessRuntime.build(config)
-    elif production:
-        raise RuntimeError("Legacy authentication is forbidden in production")
-
-    from app.core.schema import verify_schema
-    from app.db import get_engine, get_session_factory
-
-    async with get_session_factory()() as session:
-        await session.execute(text("SELECT 1"))
-    await verify_schema(get_engine())
-    try:
-        redis = await get_redis()
-        await redis.ping()
-    except Exception:
-        if app.state.auth_mode == "identity":
-            raise RuntimeError("Identity browser sessions and DPoP require Redis") from None
-        logger.warning("Redis unavailable in local legacy profile")
-    try:
-        yield
-    finally:
-        from app.core.arq_pool import close_arq_pool
-
-        await close_arq_pool()
-        await close_redis()
-        await get_engine().dispose()
+from app.platform.composition import build_buses
+from app.platform.database import PostgresDatabase, PostgresUowFactory
+from app.platform.logging import get_logger, setup_logging
+from app.platform.persistence.schema import SchemaAuthority
+from app.platform.redis import close_redis, get_redis
+from app.platform.settings import IdentitySettings, Settings, settings
+from app.platform.telemetry import build_telemetry
 
 
-async def access_denied(request: Request, exc: Exception) -> JSONResponse:
-    permission = str(exc)
+class HealthResponse(ApiResponse):
+    status: Literal["ok"] = "ok"
+
+
+async def error_response(request: Request, exc: Exception) -> JSONResponse:
     headers = {"Cache-Control": "no-store"}
-    if permission in {"read:links", "create:links", "update:links", "delete:links"}:
-        scheme = (
-            "DPoP"
-            if request.headers.get("authorization", "").lower().startswith("dpop ")
-            else "Bearer"
+    if isinstance(exc, HTTPException):
+        status = exc.status_code
+        code = exc.detail if isinstance(exc.detail, str) else "request_failed"
+        headers |= dict(exc.headers or {})
+        if request.headers.get("HX-Request") == "true" and 300 <= status < 400:
+            return JSONResponse(
+                {}, headers={"Cache-Control": "no-store", "HX-Redirect": headers["Location"]}
+            )
+    elif isinstance(exc, AccessDeniedError):
+        status, code = 403, "access_denied"
+    elif isinstance(exc, AccessUnavailableError):
+        status, code = 503, "authority_unavailable"
+    elif isinstance(exc, LinkNotFoundError):
+        status, code = 404, "link_not_found"
+    elif isinstance(exc, LinkDisabledError):
+        status, code = 410, "link_disabled"
+    elif isinstance(exc, IdempotencyConflictError):
+        status, code = 409, "idempotency_conflict"
+    elif isinstance(exc, LinkConflictError):
+        status, code = 409, "short_code_unavailable"
+    elif isinstance(exc, RequestValidationError) and any(
+        error["loc"][:2] == ("header", "Idempotency-Key") for error in exc.errors()
+    ):
+        status, code = 400, "invalid_idempotency_key"
+    elif isinstance(exc, (ValueError, RequestValidationError)):
+        status, code = 422, "invalid_request"
+    else:
+        status, code = 500, "internal_error"
+        get_logger(__name__).error(
+            "Request failed",
+            extra={
+                "request_id": getattr(request.state, "request_id", ""),
+                "trace_id": getattr(getattr(request.state, "trace", None), "trace_id", None),
+                "error_type": type(exc).__name__,
+            },
         )
-        headers["WWW-Authenticate"] = f'{scheme} error="insufficient_scope", scope="{permission}"'
-    return JSONResponse({"detail": "access_denied"}, status_code=403, headers=headers)
-
-
-async def link_error(request: Request, exc: Exception) -> JSONResponse:
-    if isinstance(exc, InvalidLinkError):
-        return JSONResponse(
-            {"detail": "invalid_link"}, status_code=422, headers={"Cache-Control": "no-store"}
-        )
-    conflict = isinstance(exc, LinkConflictError)
+    messages = {
+        400: "The request context is invalid.",
+        401: "Authentication is required.",
+        403: "This action is not permitted.",
+        404: "The link is unavailable.",
+        409: "The request conflicts with existing state.",
+        410: "The link is disabled.",
+        422: "The request does not meet the contract.",
+        429: "Try again later.",
+        503: "A required service is unavailable.",
+    }
     return JSONResponse(
-        {"detail": "short_code_unavailable" if conflict else "link_not_found"},
-        status_code=409 if conflict else 404,
-        headers={"Cache-Control": "no-store"},
+        ApiErrorResponse(
+            code=code, message=messages.get(status, "The request could not be completed.")
+        ).model_dump(),
+        status_code=status,
+        headers=headers,
     )
 
 
 def create_app(
-    *, auth_mode: Literal["identity", "legacy"] | None = None, access: AccessRuntime | None = None
+    *,
+    access: AccessRuntime | None = None,
+    database: Any = None,
+    uow_factory: Any = None,
+    authority: Any = None,
+    config: Settings | None = None,
 ) -> FastAPI:
-    mode = auth_mode or settings.auth_mode
-    production = settings.environment.lower() in {"production", "prod"}
+    config = config or settings
+    identity = access.config if access else IdentitySettings()
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        setup_logging()
+        config.validate_runtime()
+        identity.validate_deployment(production=config.environment in {"production", "prod"})
+        application.state.telemetry = build_telemetry(config, "api")
+        try:
+            if application.state.database is None:
+                SchemaAuthority(config.database_url.get_secret_value()).check(runtime="app")
+                application.state.database = PostgresDatabase(
+                    config.database_url.get_secret_value(),
+                    pooled=config.deployment_mode == "container",
+                )
+                application.state.authority = OpenFgaOrganizationAuthority(
+                    config.openfga_url, config.openfga_store_id, config.openfga_model_id
+                )
+                application.state.commands, application.state.queries = build_buses(
+                    application.state.database,
+                    PostgresUowFactory(application.state.database),
+                    application.state.authority,
+                    application.state.telemetry,
+                )
+                store = await get_redis()
+                await store.ping()
+                application.state.access = AccessRuntime.build(identity)
+            yield
+        finally:
+            application.state.telemetry.force_flush()
+            application.state.telemetry.shutdown()
+            if database is None:
+                if application.state.database is not None:
+                    await application.state.database.close()
+                if application.state.authority is not None:
+                    await application.state.authority.close()
+                await close_redis()
+
+    production = config.environment in {"production", "prod"}
     application = FastAPI(
         title="Plazia Links API",
-        version="0.1.0",
-        description="Organization-scoped link management. Identity-backed credentials required.",
+        version="0.2.0",
+        description="Organization-owned link pools and activation.",
+        servers=[{"url": "/", "description": "Current deployment"}],
+        openapi_tags=[{"name": "links", "description": "Manage organization links and pools."}],
+        lifespan=lifespan,
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",
         openapi_url=None if production else "/openapi.json",
-        lifespan=lifespan,
-        license_info={"name": "MIT"},
     )
-    application.state.auth_mode = mode
-    application.state.identity_config = access.config if access else IdentitySettings()
+    application.state.database = database
+    application.state.authority = authority
     application.state.access = access
-    application.add_exception_handler(HTTPException, http_exception_handler)
-    application.add_exception_handler(RequestValidationError, validation_exception_handler)
-    application.add_exception_handler(Exception, unhandled_exception_handler)
-    application.add_exception_handler(AccessDeniedError, access_denied)
-    application.add_exception_handler(LinkNotFoundError, link_error)
-    application.add_exception_handler(LinkConflictError, link_error)
-    application.add_exception_handler(InvalidLinkError, link_error)
-    application.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origin_list,
-        allow_credentials=mode == "legacy",
-        allow_methods=["*"],
-        allow_headers=["Authorization", "Content-Type", "DPoP"],
-    )
-    application.add_middleware(RequestIDMiddleware)
+    application.state.identity_config = identity
+    if database is not None:
+        application.state.commands, application.state.queries = build_buses(
+            database, uow_factory, authority
+        )
+    for kind in (
+        HTTPException,
+        RequestValidationError,
+        AccessDeniedError,
+        AccessUnavailableError,
+        LinkNotFoundError,
+        LinkDisabledError,
+        LinkConflictError,
+        IdempotencyConflictError,
+        ValueError,
+        Exception,
+    ):
+        application.add_exception_handler(kind, error_response)
+    if config.rate_limit_enabled:
+        setup_rate_limiter(application, frozenset(map(str, config.trusted_proxy_ips)))
     application.add_middleware(SecurityHeadersMiddleware)
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    application.mount("/static", StaticFiles(directory=static_dir), name="static")
-    if settings.rate_limit_enabled:
-        setup_rate_limiter(
-            application,
-            redirect_requests=settings.rate_limit_redirect,
-            redirect_window=settings.rate_limit_window,
-            api_requests=settings.rate_limit_api,
-            api_window=settings.rate_limit_window,
-            auth_requests=settings.rate_limit_auth,
-            auth_window=settings.rate_limit_window,
-            tracking_requests=settings.rate_limit_tracking,
-            tracking_window=settings.rate_limit_window,
-        )
-    if mode == "identity":
-        from app.api.managed_links import router as links_router
-        from app.routes.identity import router as browser_router
+    application.add_middleware(RequestIDMiddleware)
+    FastApiHttpTelemetry(instrumentation_scope="links.http").install(application)
+    application.mount(
+        "/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static"
+    )
 
-        application.include_router(links_router)
-        application.include_router(browser_router)
-    else:
-        from app.api.email_tracking import router as tracking_router
-        from app.api.router import api_router
-        from app.core.csrf import CSRFMiddleware
-        from app.routes.auth_routes import router as auth_router
-        from app.routes.dashboard import router as dashboard_router
+    @application.get("/health", include_in_schema=False)
+    async def health() -> HealthResponse:
+        """Check that the process is running."""
+        return HealthResponse()
 
-        application.add_middleware(CSRFMiddleware)
-        application.include_router(auth_router)
-        application.include_router(dashboard_router)
-        application.include_router(api_router, prefix="/api/v1")
-        application.include_router(tracking_router)
-    application.include_router(health_router)
-    from app.api.redirect import router as redirect_router
+    @application.get("/", include_in_schema=False)
+    async def home() -> Any:
+        from fastapi.responses import RedirectResponse
 
-    application.include_router(redirect_router)
-    if mode == "identity":
-        from fastapi.openapi.utils import get_openapi
+        return RedirectResponse("/dashboard/links", status_code=303)
 
-        schema = get_openapi(
-            title=application.title,
-            version=application.version,
-            routes=application.routes,
-            description=application.description,
-        )
-        config = application.state.identity_config
-        scopes = {
-            f"{action}:links": f"{action.capitalize()} links in the bound organization"
-            for action in ("read", "create", "update", "delete")
-        }
-        schema.setdefault("components", {}).setdefault("securitySchemes", {})["IdentityAccess"] = {
-            "type": "oauth2",
-            "description": (
-                "Identity RS256 RFC 9068 access tokens. Unbound tokens use Bearer; "
-                "cnf.jkt tokens require Authorization: DPoP and a fresh DPoP proof. "
-                "The API never accepts browser session cookies."
-            ),
-            "flows": {
-                "authorizationCode": {
-                    "authorizationUrl": config.authorization_endpoint,
-                    "tokenUrl": config.token_endpoint,
-                    "scopes": scopes,
-                },
-                "clientCredentials": {"tokenUrl": config.token_endpoint, "scopes": scopes},
-            },
-        }
-        application.openapi_schema = schema
+    application.include_router(api_router)
+    application.include_router(browser_router)
+    application.include_router(public_router)
+    install_linked(application)
     return application
 
 
-@health_router.get("/health")
-async def health(request: Request) -> JSONResponse:
-    db_ok = "unknown"
-    redis_ok = "unknown"
-
-    try:
-        from app.db import get_session_factory
-
-        factory = get_session_factory()
-        async with factory() as session:
-            await session.execute(text("SELECT 1"))
-        db_ok = "ok"
-    except Exception:
-        db_ok = "error"
-
-    try:
-        redis = await get_redis()
-        await redis.ping()
-        redis_ok = "ok"
-    except Exception:
-        redis_ok = "error"
-
-    ready = db_ok == "ok" and (request.app.state.auth_mode != "identity" or redis_ok == "ok")
-    return JSONResponse(
-        status_code=200 if ready else 503,
-        content={
-            "status": "ok" if ready else "error",
-            "database": db_ok,
-            "redis": redis_ok,
-            "version": "0.1.0",
-            "uptime_seconds": int(time.time() - START_TIME),
-        },
-    )
-
-
-@health_router.get("/health/live", include_in_schema=False)
-async def liveness() -> dict[str, str]:
-    return {"status": "ok"}
-
-
 app = create_app()
-
-if settings.sentry_dsn:
-    import sentry_sdk
-
-    sentry_sdk.init(dsn=settings.sentry_dsn, traces_sample_rate=0.1)

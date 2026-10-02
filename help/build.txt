@@ -1,0 +1,20 @@
+BUILD
+
+PURPOSE
+Build the Python wheel and source distribution.
+
+USAGE
+  [verify] make build help
+
+WHEN
+Run before inspecting or publishing the Python distribution.
+
+BOUNDARIES
+Writes artifacts under ignored dist/; does not publish them.
+
+EVIDENCE
+The wheel and source distribution are present under dist/.
+
+EXAMPLES
+  [verify] make build help
+  [static] make build

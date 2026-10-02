@@ -1,0 +1,20 @@
+TYPECHECK
+
+PURPOSE
+Run strict mypy checks for app and worker.
+
+USAGE
+  [verify] make typecheck help
+
+WHEN
+Run after changing Python types or interfaces.
+
+BOUNDARIES
+Checks Python types without starting the application.
+
+EVIDENCE
+Strict mypy reports no type errors in app and worker.
+
+EXAMPLES
+  [verify] make typecheck help
+  [static] make typecheck

@@ -5,8 +5,12 @@ import re
 import secrets
 import string
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Annotated, ClassVar
 from urllib.parse import urlsplit
+
+from shared_kernel.fields import AnnotatedFields, CanonicalIdField, Length, StringValue
+
+from app.kernel.ids import PoolId
 
 
 class InvalidLinkError(ValueError):
@@ -14,18 +18,23 @@ class InvalidLinkError(ValueError):
 
 
 class LinkNotFoundError(Exception):
-    """No link is visible in the caller's workspace."""
+    """No link is visible in the caller's organization."""
 
 
 class LinkConflictError(Exception):
     """The requested public code is already allocated."""
 
 
-@dataclass(frozen=True)
+class LinkDisabledError(Exception):
+    """The public link has been disabled by its owner."""
+
+
+@dataclass(frozen=True, slots=True)
 class Destination:
-    value: str
+    value: Annotated[str, StringValue(), Length(minimum=1, maximum=8192)]
 
     def __post_init__(self) -> None:
+        AnnotatedFields.normalize(self)
         value = self.value
         if (
             not 1 <= len(value) <= 8192
@@ -66,9 +75,9 @@ class Destination:
         # Only lexical checks: registration never fetches the destination or resolves its DNS.
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PublicCode:
-    value: str
+    value: Annotated[str, StringValue(), Length(minimum=3, maximum=10)]
     RESERVED: ClassVar[frozenset[str]] = frozenset(
         {
             "api",
@@ -86,6 +95,7 @@ class PublicCode:
     )
 
     def __post_init__(self) -> None:
+        AnnotatedFields.normalize(self)
         if (
             not re.fullmatch(r"[A-Za-z0-9_-]{3,10}", self.value)
             or self.value.lower() in self.RESERVED
@@ -102,32 +112,34 @@ class PublicCode:
                 return candidate
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LinkDraft:
-    destination_url: str
-    title: str | None = None
+    destination_url: str | None
+    title: Annotated[str | None, StringValue(), Length(maximum=200)] = None
     short_code: str | None = None
-    notes: str | None = None
+    notes: Annotated[str | None, StringValue(), Length(maximum=4000)] = None
+    pool_id: Annotated[PoolId | None, CanonicalIdField(PoolId)] = None
 
     def __post_init__(self) -> None:
-        Destination(self.destination_url)
+        AnnotatedFields.normalize(self)
+        if self.destination_url is not None:
+            Destination(self.destination_url)
+        elif self.pool_id is None:
+            raise InvalidLinkError("Reserved links must belong to a pool")
         if self.short_code is not None:
             PublicCode(self.short_code)
-        if self.title is not None and len(self.title) > 200:
-            raise InvalidLinkError("Title must contain at most 200 characters")
-        if self.notes is not None and len(self.notes) > 4000:
-            raise InvalidLinkError("Notes must contain at most 4000 characters")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LinkPatch:
     fields: frozenset[str]
     destination_url: str | None = None
-    title: str | None = None
-    notes: str | None = None
+    title: Annotated[str | None, StringValue(), Length(maximum=200)] = None
+    notes: Annotated[str | None, StringValue(), Length(maximum=4000)] = None
     is_active: bool | None = None
 
     def __post_init__(self) -> None:
+        AnnotatedFields.normalize(self)
         if not self.fields or not self.fields <= {"destination_url", "title", "notes", "is_active"}:
             raise InvalidLinkError("Only explicit, editable link fields may be patched")
         if "destination_url" in self.fields:
@@ -136,7 +148,7 @@ class LinkPatch:
             Destination(self.destination_url)
         if "is_active" in self.fields and type(self.is_active) is not bool:
             raise InvalidLinkError("Active state must be a boolean")
-        if "title" in self.fields and self.title is not None and len(self.title) > 200:
-            raise InvalidLinkError("Title must contain at most 200 characters")
-        if "notes" in self.fields and self.notes is not None and len(self.notes) > 4000:
-            raise InvalidLinkError("Notes must contain at most 4000 characters")
+
+
+class IdempotencyConflictError(Exception):
+    """A creation key was already used for different input."""

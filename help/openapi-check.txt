@@ -1,0 +1,25 @@
+OPENAPI-CHECK
+
+PURPOSE
+Generate and validate the current OpenAPI contract.
+
+USAGE
+  [verify] make openapi-check help
+
+VARIABLES
+CHECK_FLAGS forwards paths or options. CONTAINER selects the engine when
+supplied on the Make command line.
+
+WHEN
+Run after changing routes, schemas, errors or security declarations.
+
+BOUNDARIES
+Uses the shared container validator. Hard errors fail; style warnings remain
+visible. An explicit document path skips runtime generation.
+
+EVIDENCE
+The validator reports zero hard errors; style warnings are visible.
+
+EXAMPLES
+  [verify] make openapi-check help
+  [static] make openapi-check

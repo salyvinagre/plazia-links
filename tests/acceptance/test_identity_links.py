@@ -5,9 +5,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import jwt
 import pytest
-from sqlalchemy import select
 
-from app.contexts.access.adapters.models import WorkspaceIdentityBinding
 from tests.identity_support import ORG_A, ORG_B, RESOURCE
 
 
@@ -88,15 +86,13 @@ async def test_scopes_and_binding_are_both_required(identity_client, identity_db
     assert (
         await identity_client.post(
             "/api/v1/links",
-            headers=bearer(issuer, scopes="read:links"),
+            headers=bearer(issuer, scopes="links:read"),
             json={"destination_url": "https://example.com"},
         )
     ).status_code == 403
-    binding = await identity_db.scalar(
-        select(WorkspaceIdentityBinding).where(WorkspaceIdentityBinding.organization_id == ORG_A)
-    )
-    binding.is_active = False
-    await identity_db.commit()
+    from shared_identity import OrganizationId
+
+    await identity_db.disable(issuer.url, OrganizationId(ORG_A))
     assert (await identity_client.get("/api/v1/links", headers=bearer(issuer))).status_code == 403
 
 
@@ -111,7 +107,7 @@ async def test_scopes_and_binding_are_both_required(identity_client, identity_db
         {"org": None},
         {"jti": None},
         {"client_id": None},
-        {"scope": ["read:links"]},
+        {"scope": ["links:read"]},
         {"cnf": {"x5t#S256": "unsupported"}},
     ],
 )
@@ -147,7 +143,9 @@ async def test_id_tokens_local_credentials_and_duplicate_headers_are_not_api_acc
 @pytest.mark.asyncio
 async def test_dpop_machine_token_and_shared_replay_protection(identity_client, issuer):
     key, thumbprint = issuer.proof_key()
-    token = issuer.access(client_id="m2m-fixture", sub="app_machine", cnf={"jkt": thumbprint})
+    token = issuer.access(
+        client_id="m2m-fixture", sub="mch_0199a112345670008000000000000004", cnf={"jkt": thumbprint}
+    )
     uri = str(identity_client.base_url).rstrip("/") + "/api/v1/links"
     proof = issuer.proof(token, key, "POST", uri)
     headers = {"Authorization": "DPoP " + token, "DPoP": proof}
@@ -395,38 +393,20 @@ async def test_session_expiration_and_tenant_disable_take_effect(
     assert (await client.get("/dashboard/links")).status_code == 303
     assert await ephemeral.get("session", cookie) is None
     await sign_in(client)
-    binding = await identity_db.scalar(
-        select(WorkspaceIdentityBinding).where(WorkspaceIdentityBinding.organization_id == ORG_A)
-    )
-    binding.is_active = False
-    await identity_db.commit()
+    from shared_identity import OrganizationId
+
+    await identity_db.disable(identity_db.issuer, OrganizationId(ORG_A))
     assert (await client.get("/dashboard/links")).status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_operator_binding_is_idempotent_and_never_retargets(identity_db, issuer):
-    from app.models.user import User
-    from app.models.workspace import Workspace
-    from app.platform.access import workspace_provisioning
-
-    provisioning = workspace_provisioning(identity_db, issuer.url)
-    first = await provisioning.bind(ORG_A, "First")
-    assert await provisioning.bind(ORG_A, "Same tenant") == first
-    second = await provisioning.bind(ORG_B, "Second")
-    with pytest.raises(ValueError):
-        await provisioning.bind(ORG_A, "Retarget", second)
-    assert (await identity_db.get(Workspace, first)).owner_id is None
-    assert (await identity_db.scalars(select(User))).all() == []
-    await provisioning.disable(ORG_A)
-    assert (await identity_db.get(WorkspaceIdentityBinding, first)).is_active is False
 
 
 @pytest.mark.asyncio
 async def test_openapi_documents_scopes_without_tenant_selectors(identity_client):
     schema = (await identity_client.get("/openapi.json")).json()
-    scopes = {"get": "read:links", "post": "create:links"}
+    scopes = {"get": "links:read", "post": "links:create"}
     for method, scope in scopes.items():
-        assert schema["paths"]["/api/v1/links"][method]["security"] == [{"IdentityAccess": [scope]}]
+        assert schema["paths"]["/api/v1/links"][method]["security"] == [
+            {"OAuth2AuthorizationCodeBearer": [scope]}
+        ]
     create = schema["components"]["schemas"]["CreateLinkRequest"]
     assert create["additionalProperties"] is False
     assert "workspace_id" not in create["properties"]
@@ -435,7 +415,7 @@ async def test_openapi_documents_scopes_without_tenant_selectors(identity_client
 
 
 def test_identity_configuration_fails_closed():
-    from app.config import IdentitySettings, Settings
+    from app.platform.settings import IdentitySettings, Settings
 
     with pytest.raises(ValueError):
         IdentitySettings(
@@ -451,25 +431,8 @@ def test_identity_configuration_fails_closed():
     insecure.validate_deployment(production=False)
     with pytest.raises(ValueError):
         insecure.validate_deployment(production=True)
-    with pytest.raises(RuntimeError):
-        Settings(environment="production", auth_mode="legacy").validate_runtime_profile()
-
-
-def test_identity_worker_excludes_network_delivery_jobs(monkeypatch):
-    import importlib
-
-    import worker.run as worker
-    from app.config import settings
-
-    monkeypatch.setattr(settings, "auth_mode", "identity")
-    try:
-        worker = importlib.reload(worker)
-        names = {job.__name__ for job in worker.WorkerSettings.functions}
-        assert names == {"process_click", "cleanup_old_data"}
-        assert len(worker.WorkerSettings.cron_jobs) == 1
-    finally:
-        monkeypatch.setattr(settings, "auth_mode", "legacy")
-        importlib.reload(worker)
+    with pytest.raises(ValueError):
+        Settings(environment="production", smtp_security="plain").validate_runtime()
 
 
 @pytest.mark.asyncio

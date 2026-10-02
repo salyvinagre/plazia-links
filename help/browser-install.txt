@@ -1,0 +1,20 @@
+BROWSER-INSTALL
+
+PURPOSE
+Install the Chromium browser used by Playwright acceptance tests.
+
+USAGE
+  [verify] make browser-install help
+
+WHEN
+Run before browser acceptance if Chromium is unavailable.
+
+BOUNDARIES
+Downloads a browser into the local Playwright cache; does not run tests.
+
+EVIDENCE
+Chromium is installed in the local Playwright cache.
+
+EXAMPLES
+  [verify] make browser-install help
+  [static] make browser-install

@@ -1,0 +1,20 @@
+PREFLIGHT
+
+PURPOSE
+Run the fast checks and one fast test pass within 285 seconds.
+
+USAGE
+  [verify] make preflight help
+
+WHEN
+Run before handing off a code change for review.
+
+BOUNDARIES
+Uses the bounded shared runner; excludes coverage and real-service acceptance.
+
+EVIDENCE
+The static lane and one fast test pass succeed within the declared time budget.
+
+EXAMPLES
+  [verify] make preflight help
+  [static] make preflight

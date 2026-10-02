@@ -1,0 +1,112 @@
+quality:
+  checks:
+    domain_normalizers:
+      targets: [app/contexts, app/kernel]
+      fail_on_findings: true
+    openapi:
+      paths: [.plazia/local/openapi.json]
+      generators:
+        - name: runtime
+          output: .plazia/local/openapi.json
+          command:
+            - uv
+            - run
+            - --locked
+            - python
+            - -c
+            - 'import json; from app.main import app; print(json.dumps(app.openapi()))'
+    vulture:
+      targets: [app, worker]
+    semantic_dry:
+      targets: [app, worker]
+    wrap:
+      targets: [app, worker]
+    crap:
+      targets: [app, worker]
+      pytest_args: [-q, -m, not slow, tests]
+      threshold: 5
+    markdown_links:
+      paths:
+        - README.md
+        - docs/ARCHITECTURE.md
+        - docs/DEPLOYMENT.md
+        - docs/IDENTITY.md
+        - docs/VERCEL.md
+        - docs/UPSTREAM.md
+        - .codex/specs/link-pools/spec.md
+        - .codex/specs/link-pools/decisions.md
+        - .codex/specs/link-pools/tasks.md
+        - .codex/specs/link-pools/drift.md
+        - .codex/specs/link-pools/validation.md
+        - .codex/specs/link-pools/review.md
+      check_external: false
+  repo:
+    quality:
+      default_target: lint
+      targets:
+        lint:
+          steps:
+            - argv: [uv, run, --locked, ruff, check, app, worker, tests, tools]
+            - argv: [uv, run, --locked, ruff, format, --check, app, worker, tests, tools]
+        typecheck:
+          steps:
+            - argv: [uv, run, --locked, mypy, app, worker]
+        format:
+          steps:
+            - argv: [uv, run, --locked, ruff, format, app, worker, tests, tools]
+            - argv: [uv, run, --locked, ruff, check, --fix, app, worker, tests, tools]
+            - argv: [uv, run, --locked, ruff, format, app, worker, tests, tools]
+    check:
+      default_target: fast
+      targets:
+        fast:
+          steps:
+            - argv: [uv, run, --locked, plazia-tools, quality, lint]
+            - argv: [uv, run, --locked, plazia-tools, quality, typecheck]
+            - argv: [uv, run, --locked, plazia-tools, check, normalizers]
+            - argv: [uv, run, --locked, plazia-tools, check, actions]
+            - argv: [uv, run, --locked, plazia-tools, check, make-help]
+            - argv: [uv, run, --locked, plazia-tools, check, links]
+        all:
+          steps:
+            - argv: [uv, run, --locked, plazia-tools, check, fast]
+            - argv: [uv, run, --locked, plazia-tools, check, openapi]
+            - argv: [uv, run, --locked, plazia-tools, check, vulture]
+            - argv: [uv, run, --locked, plazia-tools, check, semantic-dry, --no-fail-on-findings]
+            - argv: [uv, run, --locked, plazia-tools, check, wrap, --no-fail-on-findings]
+    test:
+      default_target: fast
+      targets:
+        fast:
+          steps:
+            - argv: [uv, run, --locked, pytest, -q, -m, not slow]
+        unit:
+          steps:
+            - argv: [uv, run, --locked, pytest, -q, -m, not slow, tests/unit]
+        architecture:
+          steps:
+            - argv: [uv, run, --locked, pytest, -q, tests/architecture]
+        integration:
+          steps:
+            - argv: [uv, run, --locked, pytest, -q, -m, slow]
+        acceptance:
+          steps:
+            - argv: [uv, run, --locked, python, tools/acceptance.py]
+        all:
+          steps:
+            - argv: [uv, run, --locked, pytest, -q, -m, not slow]
+            - argv: [uv, run, --locked, python, tools/acceptance.py]
+    coverage:
+      default_target: fast
+      targets:
+        fast:
+          steps:
+            - argv: [uv, run, --locked, pytest, -q, -m, not slow, --cov, --cov-report=term-missing, '--cov-report=json:coverage.crap.json']
+    preflight:
+      default_target: fast
+      targets:
+        fast:
+          timeout_seconds: 285
+          steps:
+            - argv: [uv, run, --locked, plazia-tools, check, fast]
+            - argv: [uv, run, --locked, plazia-tools, test, fast]

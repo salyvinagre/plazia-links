@@ -1,0 +1,25 @@
+[flyway]
+locations = ["filesystem:migrations"]
+callbackLocations = ["filesystem:callbacks"]
+defaultSchema = "links_migrations"
+createSchemas = true
+table = "flyway_schema_history"
+group = true
+lockRetryCount = 50
+executeInTransaction = true
+mixed = false
+baselineOnMigrate = false
+outOfOrder = false
+ignoreMigrationPatterns = []
+validateMigrationNaming = true
+validateOnMigrate = true
+cleanDisabled = true
+target = "1"
+
+[environments.default]
+schemas = ["links_migrations"]
+
+[flyway.placeholders]
+# Owner tooling may override only with role names matching links_[a-z][a-z0-9_]{0,24}.
+appRole = "links_app"
+workerRole = "links_worker"

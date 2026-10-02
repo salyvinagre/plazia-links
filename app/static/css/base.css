@@ -1,0 +1,112 @@
+/* Typography and helpers shared by management and public pages. */
+@font-face {
+  font-family: Inter;
+  src: url("/static/brand/InterVariable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@layer base {
+  body {
+    font-synthesis: none;
+    line-height: 1.6;
+  }
+
+  a {
+    color: var(--color-primary);
+    text-underline-offset: .25rem;
+  }
+
+  p {
+    margin-bottom: 1rem;
+  }
+
+  h1 {
+    margin-bottom: .75rem;
+    font-size: 1.875rem;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -.035em;
+  }
+
+  h2 {
+    margin-bottom: .5rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.375;
+    letter-spacing: -.025em;
+  }
+
+  strong {
+    font-weight: 600;
+  }
+
+  label {
+    display: block;
+    margin-bottom: .5rem;
+    font-size: .875rem;
+    font-weight: 600;
+  }
+
+  label span {
+    color: var(--color-muted);
+    font-size: .75rem;
+    font-weight: 400;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 3px;
+  }
+
+  @media (width >= 40rem) {
+    h1 {
+      font-size: 2.25rem;
+    }
+  }
+}
+
+/* daisyUI uses sublayers of utilities; shared helpers belong alongside utilities. */
+@layer utilities {
+  .shell {
+    width: 100%;
+    max-width: 1184px;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+
+  .brand {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+
+  .brand img {
+    width: 179px;
+    height: auto;
+  }
+
+  .eyebrow {
+    margin-bottom: .75rem;
+    color: var(--color-muted);
+    font-size: .75rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .hint {
+    margin: .5rem 0 0;
+    color: var(--color-muted);
+    font-size: .8125rem;
+  }
+
+  .htmx-request {
+    cursor: progress;
+  }
+
+  @media (width >= 40rem) {
+    .shell {
+      padding-inline: 2rem;
+    }
+  }
+}

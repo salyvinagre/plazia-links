@@ -1,0 +1,20 @@
+LINT
+
+PURPOSE
+Check Ruff rules and formatting for app, worker, tests and tools.
+
+USAGE
+  [verify] make lint help
+
+WHEN
+Run after changing source or formatting configuration.
+
+BOUNDARIES
+Inspects source without applying fixes.
+
+EVIDENCE
+Ruff reports no lint or formatting failures.
+
+EXAMPLES
+  [verify] make lint help
+  [static] make lint

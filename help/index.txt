@@ -1,0 +1,49 @@
+PLAZIA LINKS MAKE HELP
+
+USAGE
+  make help
+  make <target> help
+  make check help CHECK_TOOL=normalizers
+  make test help TEST_SUITE=acceptance
+
+Help is offline. Contextual help renders guidance without running the target.
+
+HELP
+  make help                Show the grouped command index and target guidance.
+
+SETUP AND BUILD
+  make bootstrap           Install the locked Python development dependencies.
+  make frontend            Compile the Tailwind/daisyUI interface and install pinned HTMX assets.
+  make browser-install     Install the Chromium browser used by Playwright acceptance tests.
+  make build               Build the Python wheel and source distribution.
+  make image               Build the production API and worker image from an allowed source context.
+
+SOURCE AND CONTRACTS
+  make format              Format and apply Ruff fixes to app, worker, tests and tools.
+  make lint                Check Ruff rules and formatting for app, worker, tests and tools.
+  make typecheck           Run strict mypy checks for app and worker.
+  make check               Run a selected shared check or repository aggregate.
+  make normalizers         Check domain field normalizers with shared tooling.
+  make docs-check          Validate local Markdown links and anchors.
+  make actions-check       Validate GitHub Actions policy.
+  make openapi             Generate the current runtime OpenAPI contract.
+  make openapi-check       Generate and validate the current OpenAPI contract.
+
+TESTS AND GATES
+  make test                Run a selected repository test suite.
+  make integration         Run the slow pytest suite against configured test services.
+  make acceptance          Provision disposable services and prove the organization pool flow.
+  make coverage            Collect branch coverage for the fast suite.
+  make preflight           Run the fast checks and one fast test pass within 285 seconds.
+  make hardening-checks    Collect coverage once and run the broader checks.
+
+DATABASE
+  make migrate             Prepare owner authority, apply Flyway, validate and finish schema authority.
+  make schema-check        Verify Flyway history, owned roles, tenant policies and critical grants.
+
+SELECTORS
+  CHECK_TOOL defaults to fast; CHECK_FLAGS forwards check options.
+  TEST_SUITE defaults to fast; TEST_FLAGS forwards pytest arguments.
+  CONTAINER defaults to podman.
+
+Run make check help or make test help for the available values.

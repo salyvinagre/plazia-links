@@ -1,0 +1,21 @@
+OPENAPI
+
+PURPOSE
+Generate the current runtime OpenAPI contract.
+
+USAGE
+  [verify] make openapi help
+
+WHEN
+Run when inspecting or exporting the current HTTP contract.
+
+BOUNDARIES
+Imports the API without starting services and writes
+.plazia/local/openapi.json.
+
+EVIDENCE
+The generated JSON is present under .plazia/local/openapi.json.
+
+EXAMPLES
+  [verify] make openapi help
+  [static] make openapi

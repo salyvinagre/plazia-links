@@ -1,0 +1,12 @@
+/* Build entry point. Layout stays in templates; these files own shared exceptions. */
+@import "tailwindcss" source(none);
+@import "./theme.css";
+@import "./base.css";
+@import "./links.css";
+
+@source "../../templates";
+
+@plugin "../../../.cache/ui/daisyui.mjs" {
+  themes: false;
+  include: button, input, textarea, checkbox, badge, table, card, alert, dropdown, menu, tab;
+}

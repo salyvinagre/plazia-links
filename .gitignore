@@ -59,3 +59,13 @@ docs/superpowers/
 reports/
 test-results/
 .coverage*
+coverage.crap.json
+
+# Flyway is source, including under a machine-wide SQL ignore.
+!app/platform/persistence/sql/**/*.sql
+output/
+
+# Frontend compiler cache; compiled assets are shipped with the Python app.
+.cache/ui/
+
+.plazia/local/

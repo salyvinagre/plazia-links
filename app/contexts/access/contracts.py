@@ -1,8 +1,17 @@
-"""Published access boundary. No consumer depends on a context's internal layout."""
+"""Published Identity facts and local tenant access contract."""
 
 from typing import Protocol
 
-from app.contexts.access.application.models import WorkspaceView as WorkspaceView
+from app.contexts.access.application.commands.bind_organization.command import (
+    BindOrganizationCommand as BindOrganizationCommand,
+)
+from app.contexts.access.application.commands.disable_organization.command import (
+    DisableOrganizationCommand as DisableOrganizationCommand,
+)
+from app.contexts.access.application.dto.organization import OrganizationDto as OrganizationDto
+from app.contexts.access.application.queries.resolve_organization.query import (
+    ResolveOrganizationQuery as ResolveOrganizationQuery,
+)
 from app.contexts.access.domain.principal import (
     AccessDeniedError as AccessDeniedError,
 )
@@ -23,5 +32,6 @@ from app.contexts.access.domain.principal import (
 )
 
 
-class WorkspaceResolver(Protocol):
-    async def resolve(self, principal: Principal) -> WorkspaceView: ...
+class OrganizationAccessPort(Protocol):
+    async def require(self, principal: Principal, permission: Permission) -> OrganizationDto: ...
+    async def resolve(self, principal: Principal) -> OrganizationDto: ...

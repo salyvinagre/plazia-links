@@ -1,0 +1,27 @@
+COVERAGE
+
+PURPOSE
+Collect branch coverage for the fast suite.
+
+USAGE
+  [verify] make coverage help
+
+VARIABLES
+TEST_SUITE selects the coverage suite.
+
+VALUES
+fast (default).
+
+WHEN
+Run before evaluating CRAP or closing a change that affects behavior.
+
+BOUNDARIES
+Runs tests once, enforces the 85 percent gate and writes ignored
+coverage.crap.json for CRAP analysis.
+
+EVIDENCE
+Branch coverage reaches 85 percent and coverage.crap.json is written.
+
+EXAMPLES
+  [verify] make coverage help
+  [static] make coverage

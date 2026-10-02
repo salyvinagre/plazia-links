@@ -10,7 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import jwt
 
-from app.contexts.access.application.ports import EphemeralStore
+from app.contexts.access.application.ports.session import EphemeralStore
 from app.contexts.access.domain.principal import InvalidCredentialsError
 
 

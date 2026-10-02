@@ -1,0 +1,24 @@
+INTEGRATION
+
+PURPOSE
+Run the slow pytest suite against configured test services.
+
+USAGE
+  [verify] make integration help
+
+VARIABLES
+TEST_FLAGS forwards pytest arguments, for example '-k tenant'.
+
+WHEN
+Use when the test service bindings already point to an isolated environment.
+
+BOUNDARIES
+Requires PostgreSQL, Redis, OpenFGA, Mailpit, Chromium and their test
+environment bindings; does not provision them.
+
+EVIDENCE
+The slow pytest suite passes against the selected test services.
+
+EXAMPLES
+  [verify] make integration help
+  [static] make integration

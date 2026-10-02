@@ -1,0 +1,21 @@
+HARDENING-CHECKS
+
+PURPOSE
+Collect coverage once and run the broader checks.
+
+USAGE
+  [verify] make hardening-checks help
+
+WHEN
+Run when assessing coverage and broader static diagnostics.
+
+BOUNDARIES
+Requires a container engine for OpenAPI. Stops at the first failed gate.
+CRAP is currently deferred and remains available as an explicit check.
+
+EVIDENCE
+Coverage and the broader checks pass.
+
+EXAMPLES
+  [verify] make hardening-checks help
+  [static] make hardening-checks

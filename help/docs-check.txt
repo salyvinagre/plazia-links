@@ -1,0 +1,23 @@
+DOCS-CHECK
+
+PURPOSE
+Validate local Markdown links and anchors.
+
+USAGE
+  [verify] make docs-check help
+
+VARIABLES
+CHECK_FLAGS forwards paths or options, for example 'README.md'.
+
+WHEN
+Run after changing repository Markdown or linked files.
+
+BOUNDARIES
+Uses configured Markdown paths; external link checks are disabled.
+
+EVIDENCE
+The Markdown link checker reports zero local errors.
+
+EXAMPLES
+  [verify] make docs-check help
+  [static] make docs-check

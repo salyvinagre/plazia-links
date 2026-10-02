@@ -1,0 +1,32 @@
+CHECK
+
+PURPOSE
+Run a selected shared check or repository aggregate.
+
+USAGE
+  [verify] make check help
+
+VARIABLES
+CHECK_TOOL selects the diagnostic. CHECK_FLAGS are passed to that tool.
+
+VALUES
+fast (default), all, normalizers, actions, links, openapi, vulture, semantic-
+dry, wrap, crap, make-help.
+
+WHEN
+Use fast for routine static checks, a named tool for focused evidence, or all
+for the broader diagnostics.
+
+BOUNDARIES
+fast is offline and runs no tests. all also generates and validates OpenAPI
+with a container, runs Vulture and reports semantic/wrapper diagnostics. crap
+reads coverage.crap.json and does not collect coverage by default.
+
+EVIDENCE
+The selected tool exits successfully; advisory findings remain visible.
+
+EXAMPLES
+  [verify] make check help
+  [static] make check
+  [verify] make check help CHECK_TOOL=normalizers
+  [static] make check CHECK_TOOL=links CHECK_FLAGS='README.md'

@@ -1,12 +1,168 @@
 {% extends "identity/base.html" %}
-{% block title %}Links · Plazia{% endblock %}
+{% block title %}Links · Plazia Links{% endblock %}
 {% block content %}
-<div class="heading"><div><p class="eyebrow">{{ workspace_name }}</p><h1>Links</h1><p>Manage the destinations you share.</p></div>
-{% if 'create:links' in session.principal.scopes %}<a class="button" href="/dashboard/links/new">Create link</a>{% endif %}</div>
-{% if links.items %}<div class="table-wrap"><table><thead><tr><th>Link</th><th>Destination</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-{% for link in links.items %}<tr><td><strong>{{ link.title or link.short_code }}</strong><br><a href="{{ public_base }}/{{ link.short_code }}" target="_blank" rel="noopener noreferrer">/{{ link.short_code }}</a></td><td class="url">{{ link.destination_url }}</td><td>{{ 'Active' if link.is_active else 'Inactive' }}</td><td class="actions">
-{% if 'update:links' in session.principal.scopes %}<a href="/dashboard/links/{{ link.id }}/edit">Edit</a>{% endif %}
-{% if 'delete:links' in session.principal.scopes %}<form method="post" action="/dashboard/links/{{ link.id }}/delete"><input type="hidden" name="csrf_token" value="{{ session.csrf_token }}"><button class="danger" type="submit">Delete</button></form>{% endif %}</td></tr>{% endfor %}
-</tbody></table></div>{% else %}<section class="empty"><h2>No links yet</h2><p>Create a short link to get started.</p></section>{% endif %}
-<nav class="pagination" aria-label="Pagination">{% if links.page > 1 %}<a href="?page={{ links.page - 1 }}">Previous</a>{% endif %}<span>Page {{ links.page }} · {{ links.total }} links</span>{% if links.has_next %}<a href="?page={{ links.page + 1 }}">Next</a>{% endif %}</nav>
+<div class="mb-6 flex flex-col items-start justify-between gap-5 sm:mb-8 sm:flex-row sm:items-center sm:gap-6">
+  <div>
+    <p class="eyebrow">Link management</p>
+    <h1>Links</h1>
+    <p class="mb-0 text-muted">Reserve links now. Give them a destination when you’re ready.</p>
+  </div>
+  {% if 'links:create' in session.principal.scopes %}
+  <a class="btn btn-ghost border border-base-300 bg-base-100 hover:border-primary/20 hover:bg-primary/10 hover:text-primary" href="/dashboard/links/new">
+    <span class="text-xl font-normal leading-none" aria-hidden="true">+</span> Create link
+  </a>
+  {% endif %}
+</div>
+{% if 'links:create' in session.principal.scopes %}
+<section class="card mb-8 grid grid-cols-1 gap-6 border border-base-300 bg-base-100 p-5 sm:mb-10 sm:p-7 lg:grid-cols-[1fr_1.6fr] lg:gap-10"
+         aria-labelledby="reserve-heading">
+  <div>
+    <h2 id="reserve-heading">Reserve a pool</h2>
+    <p class="mb-0 text-sm text-muted">Share your links ahead of time. Add destinations when they’re ready.</p>
+  </div>
+  <form class="grid grid-cols-[minmax(0,1fr)_100px] items-end gap-x-3 gap-y-4 sm:grid-cols-[minmax(0,1fr)_120px_auto] sm:gap-3"
+        hx-disabled-elt="find button" method="post" action="/dashboard/pools">
+    <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
+    <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+    <div class="min-w-0">
+      <label for="pool-name">Pool name <span>(optional)</span></label>
+      <input class="input w-full placeholder:text-muted placeholder:opacity-100" id="pool-name" name="name" maxlength="200" placeholder="Upcoming launch">
+    </div>
+    <div class="min-w-0">
+      <label for="pool-size">Number of links</label>
+      <input class="input w-full placeholder:text-muted placeholder:opacity-100" id="pool-size" name="size" type="number" min="1" max="100"
+             value="10" required aria-describedby="pool-hint">
+    </div>
+    <button class="btn btn-primary col-span-2 sm:col-span-1" type="submit">Reserve links</button>
+    <p class="hint col-span-full mt-0 text-xs" id="pool-hint">
+      1–100 links per pool. Visitors can subscribe to one activation email.
+    </p>
+  </form>
+</section>
+{% endif %}
+<section aria-labelledby="library-heading">
+  <div class="mb-4 flex items-center gap-3">
+    <h2 class="mb-0" id="library-heading">Your links</h2>
+    <span class="badge badge-ghost badge-sm text-muted">{{ links.total }}</span>
+  </div>
+  <nav class="tabs tabs-box pool-nav mb-5 gap-1 bg-transparent p-0 sm:gap-2" aria-label="Pools">
+    <a class="tab min-h-11{% if not pool_id %} tab-active{% endif %}"
+       href="/dashboard/links" {% if not pool_id %}aria-current="page"{% endif %}>All links</a>
+    {% for pool in pools.items %}
+    <a class="tab h-auto min-h-11 max-w-full gap-2 whitespace-normal{% if pool_id == pool.id|string %} tab-active{% endif %}"
+       href="?pool_id={{ pool.id }}" {% if pool_id == pool.id|string %}aria-current="page"{% endif %}>
+      <span class="min-w-0 [overflow-wrap:anywhere]">{{ pool.name or 'Untitled pool' }}</span><span class="text-xs">{{ pool.size }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+  {% if links.items %}
+  <div class="card border border-base-300 bg-base-100 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent">
+    <table class="table links-table w-full table-fixed text-sm" role="table" aria-label="Your links">
+      <thead role="rowgroup">
+        <tr role="row">
+          <th scope="col" role="columnheader">Link</th>
+          <th scope="col" role="columnheader">Destination</th>
+          <th scope="col" role="columnheader">Status</th>
+          <th class="text-right" scope="col" role="columnheader">Actions</th>
+        </tr>
+      </thead>
+      <tbody role="rowgroup">
+        {% for link in links.items %}
+        <tr role="row">
+          <td role="cell" data-label="Link">
+            <strong class="mb-1 block">{{ link.title or link.short_code }}</strong>
+            <a class="text-[13px] underline" href="{{ public_base }}/{{ link.short_code }}"
+               target="_blank" rel="noopener noreferrer">/{{ link.short_code }}</a>
+          </td>
+          <td class="text-muted" role="cell" data-label="Destination">
+            {{ link.destination_url or 'Awaiting destination' }}
+          </td>
+          <td role="cell" data-label="Status">
+            <span class="badge badge-ghost h-7 gap-1.5 rounded-full border border-base-300 bg-base-200 px-2.5 text-xs"
+                  data-status="{{ link.status }}">
+              <svg class="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                {% if link.status == 'active' %}
+                <path d="m5 12 4 4L19 6"/>
+                {% elif link.status == 'reserved' %}
+                <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+                {% else %}
+                <path d="M9 6v12M15 6v12"/>
+                {% endif %}
+              </svg>
+              {{ link.status|capitalize }}
+            </span>
+          </td>
+          <td role="cell" data-label="Actions">
+            {% if 'links:update' in session.principal.scopes or 'links:delete' in session.principal.scopes %}
+            <div class="flex justify-end">
+              <details class="dropdown dropdown-end{% if loop.last and not loop.first %} dropdown-top{% endif %}" name="link-actions">
+                <summary class="btn btn-ghost btn-square btn-sm text-muted hover:bg-primary/10 hover:text-primary"
+                         aria-label="Actions for {{ link.title or link.short_code }}">
+                  <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/>
+                  </svg>
+                </summary>
+                {% if 'links:delete' in session.principal.scopes %}
+                <form id="delete-form-{{ link.id }}" hidden hx-disabled-elt="#delete-action-{{ link.id }}"
+                      method="post" action="/dashboard/links/{{ link.id }}/delete{% if pool_id %}?pool_id={{ pool_id|urlencode }}{% endif %}">
+                  <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
+                  <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+                </form>
+                {% endif %}
+                <ul class="dropdown-content menu menu-md z-20 w-44 rounded-box border border-base-300 bg-base-100 shadow-lg">
+                  {% if 'links:update' in session.principal.scopes %}
+                  <li>
+                    <a class="min-h-11 content-center justify-between hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary"
+                       href="/dashboard/links/{{ link.id }}/edit">
+                      <span>{{ 'Activate' if link.status == 'reserved' else 'Edit' }}</span>
+                      <svg class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                           stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        {% if link.status == 'reserved' %}
+                        <path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/>
+                        {% else %}
+                        <path d="m16 3 5 5M4 20l4-1 12-12a3 3 0 0 0-4-4L4 15l-1 6 6-1"/>
+                        {% endif %}
+                      </svg>
+                    </a>
+                  </li>
+                  {% endif %}
+                  {% if 'links:delete' in session.principal.scopes %}
+                  <li class="{% if 'links:update' in session.principal.scopes %}mt-1 border-t border-base-300 pt-1{% endif %}">
+                    <button class="min-h-11 content-center justify-between text-danger hover:bg-danger/10 hover:text-danger focus:bg-danger/10 focus:text-danger"
+                            id="delete-action-{{ link.id }}" form="delete-form-{{ link.id }}" type="submit">
+                      <span>Delete</span>
+                      <svg class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                           stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 6h18M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14M10 10v7M14 10v7"/>
+                      </svg>
+                    </button>
+                  </li>
+                  {% endif %}
+                </ul>
+              </details>
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card border border-base-300 bg-base-100 px-7 py-7 text-center sm:px-6 sm:py-12">
+    <h2>{{ 'No links in this pool' if pool_id else 'No links yet' }}</h2>
+    <p class="text-muted">Reserve a pool or create a link to get started.</p>
+  </div>
+  {% endif %}
+  <nav class="flex items-center justify-center gap-6 pt-6 text-[13px] text-muted" aria-label="Pagination">
+    {% if links.page > 1 %}
+    <a class="inline-flex min-h-11 items-center" href="?page={{ links.page - 1 }}{% if pool_id %}&amp;pool_id={{ pool_id }}{% endif %}">Previous</a>
+    {% endif %}
+    <span>Page {{ links.page }} · {{ links.total }} links</span>
+    {% if links.has_next %}
+    <a class="inline-flex min-h-11 items-center" href="?page={{ links.page + 1 }}{% if pool_id %}&amp;pool_id={{ pool_id }}{% endif %}">Next</a>
+    {% endif %}
+  </nav>
+</section>
 {% endblock %}

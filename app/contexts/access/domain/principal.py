@@ -1,9 +1,12 @@
 """Verified identity facts and the deliberately small Links authorization policy."""
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Annotated, Literal
 
-Permission = Literal["read:links", "create:links", "update:links", "delete:links"]
+from shared_identity.canonical_ids import OrganizationId
+from shared_kernel.fields import AnnotatedFields, CanonicalIdField, Text
+
+Permission = Literal["links:read", "links:create", "links:update", "links:delete"]
 
 
 class InvalidCredentialsError(Exception):
@@ -18,16 +21,19 @@ class AccessDeniedError(Exception):
     """Valid identity without the required local authority."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Principal:
-    issuer: str
-    subject: str
-    client_id: str
-    organization_id: str
+    issuer: Annotated[str, Text()]
+    subject: Annotated[str, Text()]
+    client_id: Annotated[str, Text()]
+    organization_id: Annotated[OrganizationId, CanonicalIdField(OrganizationId)]
     scopes: frozenset[str]
     expires_at: int
     token_id: str
     confirmation_jkt: str | None = None
+
+    def __post_init__(self) -> None:
+        AnnotatedFields.normalize(self)
 
     def require(self, permission: Permission) -> None:
         if permission not in self.scopes:
@@ -38,11 +44,11 @@ class Principal:
             "issuer": self.issuer,
             "subject": self.subject,
             "client_id": self.client_id,
-            "organization_id": self.organization_id,
+            "organization_id": str(self.organization_id),
         }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BrowserSession:
     principal: Principal
     csrf_token: str

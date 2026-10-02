@@ -1,0 +1,24 @@
+BOOTSTRAP
+
+PURPOSE
+Install the locked Python development dependencies.
+
+USAGE
+  [verify] make bootstrap help
+
+VARIABLES
+UV selects the uv command; its default pins uv 0.12.21.
+
+WHEN
+Run after cloning or changing the lockfile.
+
+BOUNDARIES
+Requires uv and the sibling plazia/packages checkout; may download
+dependencies.
+
+EVIDENCE
+The locked environment contains the required development dependencies.
+
+EXAMPLES
+  [verify] make bootstrap help
+  [static] make bootstrap

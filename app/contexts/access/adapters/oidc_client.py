@@ -6,7 +6,7 @@ import httpx
 from oauthlib.oauth2 import WebApplicationClient
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 
-from app.contexts.access.application.models import TokenPair
+from app.contexts.access.application.dto.session import TokenPairDto
 from app.contexts.access.domain.principal import AccessUnavailableError, InvalidCredentialsError
 
 
@@ -48,7 +48,7 @@ class OidcCodeClient:
             )
         )
 
-    async def redeem(self, code: str, verifier: str) -> TokenPair:
+    async def redeem(self, code: str, verifier: str) -> TokenPairDto:
         client = WebApplicationClient(self._client_id)
         body = client.prepare_request_body(
             code=code,
@@ -91,4 +91,4 @@ class OidcCodeClient:
             or str(token.get("token_type", "")).lower() != "bearer"
         ):
             raise InvalidCredentialsError
-        return TokenPair(access_token, id_token)
+        return TokenPairDto(access_token, id_token)
