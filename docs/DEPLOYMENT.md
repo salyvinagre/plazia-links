@@ -1,3 +1,7 @@
+> For a provider-hosted test instance, use [the Vercel guide](VERCEL.md).
+> The container and serverless profiles share the application but bind database
+> connection lifetimes and click delivery differently.
+
 # Deployment: Python 3.14 and PostgreSQL 18
 
 The maintained entry point is the [repository README](../README.md). Commands
@@ -63,3 +67,34 @@ Test redirect and management requests separately. A healthy HTTP process does
 not prove that SMTP, custom-domain ownership or webhook retries work. Exercise
 the configured delivery path explicitly; activation subscriptions are not yet
 implemented.
+
+## Identity profile cutover
+
+`AUTH_MODE=identity` is now the default. Configure the five `IDENTITY_*` trust/client
+settings in the container environment and register the exact callback before
+launching the service. Follow [IDENTITY.md](IDENTITY.md) for the issuer contract,
+scopes, DPoP requirements and revocation limits. The previous Zly JWT/API-key login
+is not an alternative credential path; production API and worker startup reject
+`AUTH_MODE=legacy`.
+
+After migration and startup, provision the local product binding explicitly:
+
+```sh
+docker compose --env-file .env -f infrastructure/docker-compose.yml exec fastapi \
+  plazia-links bind-organization org_0199a112-3456-7000-8000-000000000001 \
+  --name 'Example tenant'
+```
+
+Use the actual existing Identity organization. Add `--workspace-id` only when an
+operator has reviewed and approved ownership of a pre-existing workspace. The
+command does not create Identity customers, users or OAuth clients.
+
+Redis is mandatory for opaque browser sessions and atomic DPoP replay protection.
+Readiness fails if Redis is unavailable in this profile. Review/drain previous
+marketing/webhook jobs before starting the restricted worker. Only click recording
+and retention cleanup are registered in the Identity runtime.
+
+Set `IDENTITY_PUBLIC_BASE_URL` to the exact external HTTPS origin. The reverse proxy
+must preserve the API path; its forwarded Host headers are not authority inputs for
+proof verification. Redact auth query strings, cookies and Authorization/DPoP
+headers from proxy logs. The shipped Uvicorn command uses `--no-access-log`.

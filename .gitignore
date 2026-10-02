@@ -15,12 +15,15 @@ build/
 
 # Environment
 .env
-.env.local
+.env.*
+.vercel/
 .venv/
 venv/
 
 # Keep the example
+!.env.example
 !infrastructure/.env.example
+!infrastructure/.env.vercel.example
 
 # Testing
 .pytest_cache/
@@ -47,3 +50,12 @@ check_db.py
 
 # Planning docs
 docs/superpowers/
+
+# SQLite sidecars and local validation artifacts
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite*
+reports/
+test-results/
+.coverage*

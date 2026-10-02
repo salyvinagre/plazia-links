@@ -1,0 +1,25 @@
+.git/
+.github/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+**/__pycache__/
+tests/
+docs/
+reports/
+dist/
+*.db
+.env
+.env.*
+infrastructure/.env
+infrastructure/.env.*
+
+# SQLite sidecars and local validation artifacts
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite*
+reports/
+test-results/
+.coverage*

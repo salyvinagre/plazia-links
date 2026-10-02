@@ -12,15 +12,21 @@ templates = Jinja2Templates(directory="app/templates")
 async def http_exception_handler(request: Request, exc: Exception) -> HTMLResponse | JSONResponse:
     if not isinstance(exc, HTTPException):
         return await unhandled_exception_handler(request, exc)
+    if getattr(request.app.state, "auth_mode", "legacy") == "identity":
+        return JSONResponse(
+            status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers
+        )
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
         template = (
             ("errors/404.html") if exc.status_code == HTTP_404_NOT_FOUND else ("errors/500.html")
         )
         return templates.TemplateResponse(
-            request, template, {"user": None}, status_code=exc.status_code
+            request, template, {"user": None}, status_code=exc.status_code, headers=exc.headers
         )
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers
+    )
 
 
 async def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:

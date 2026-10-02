@@ -16,6 +16,7 @@ class WorkerContext(TypedDict):
 
 
 async def startup(ctx: WorkerContext) -> None:
+    settings.validate_runtime_profile()
     ctx["redis"] = await create_pool(RedisSettings.from_dsn(settings.redis_url))
     ctx["session_factory"] = get_session_factory()
 
@@ -246,6 +247,9 @@ class WorkerSettings:
         cron("worker.run.cleanup_old_data", hour=3, minute=0),
         cron("worker.run.sweep_expiring_links", minute=0),
     ]
+    if settings.auth_mode == "identity":
+        functions = [process_click, cleanup_old_data]
+        cron_jobs = [cron("worker.run.cleanup_old_data", hour=3, minute=0)]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(settings.redis_url)

@@ -1,5 +1,10 @@
 {
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index.py" }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "fastapi",
+  "functions": {
+    "app/index.py": {
+      "maxDuration": 30,
+      "excludeFiles": "{tests/**,docs/**,.github/**,reports/**,.venv/**,.pytest_cache/**,.mypy_cache/**,.ruff_cache/**}"
+    }
+  }
 }

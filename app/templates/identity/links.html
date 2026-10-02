@@ -1,0 +1,12 @@
+{% extends "identity/base.html" %}
+{% block title %}Links · Plazia{% endblock %}
+{% block content %}
+<div class="heading"><div><p class="eyebrow">{{ workspace_name }}</p><h1>Links</h1><p>Manage the destinations you share.</p></div>
+{% if 'create:links' in session.principal.scopes %}<a class="button" href="/dashboard/links/new">Create link</a>{% endif %}</div>
+{% if links.items %}<div class="table-wrap"><table><thead><tr><th>Link</th><th>Destination</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+{% for link in links.items %}<tr><td><strong>{{ link.title or link.short_code }}</strong><br><a href="{{ public_base }}/{{ link.short_code }}" target="_blank" rel="noopener noreferrer">/{{ link.short_code }}</a></td><td class="url">{{ link.destination_url }}</td><td>{{ 'Active' if link.is_active else 'Inactive' }}</td><td class="actions">
+{% if 'update:links' in session.principal.scopes %}<a href="/dashboard/links/{{ link.id }}/edit">Edit</a>{% endif %}
+{% if 'delete:links' in session.principal.scopes %}<form method="post" action="/dashboard/links/{{ link.id }}/delete"><input type="hidden" name="csrf_token" value="{{ session.csrf_token }}"><button class="danger" type="submit">Delete</button></form>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<section class="empty"><h2>No links yet</h2><p>Create a short link to get started.</p></section>{% endif %}
+<nav class="pagination" aria-label="Pagination">{% if links.page > 1 %}<a href="?page={{ links.page - 1 }}">Previous</a>{% endif %}<span>Page {{ links.page }} · {{ links.total }} links</span>{% if links.has_next %}<a href="?page={{ links.page + 1 }}">Next</a>{% endif %}</nav>
+{% endblock %}

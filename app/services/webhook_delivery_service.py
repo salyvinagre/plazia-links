@@ -9,6 +9,7 @@ from pydantic import JsonValue
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.webhook import Webhook
 from app.models.webhook_delivery import WebhookDelivery
 
@@ -78,6 +79,8 @@ async def deliver_webhook(
     db: AsyncSession,
     delivery_id: str,
 ) -> bool:
+    if settings.auth_mode == "identity":
+        return False
     result = await db.execute(select(WebhookDelivery).where(WebhookDelivery.id == delivery_id))
     delivery = result.scalar_one_or_none()
     if not delivery:

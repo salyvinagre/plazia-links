@@ -7,12 +7,14 @@ from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.contexts.links.contracts import ClickDraft
 from app.core.dependencies import get_db
 from app.core.logging import get_logger
 from app.core.security import validate_private_url
 from app.core.user_agent import extract_domain, parse_user_agent
 from app.db import get_session_factory
 from app.models.ab import ABVariant
+from app.platform.links import click_recorder
 from app.services.ab_service import list_variants, select_variant
 from app.services.link_service import get_link_by_code
 
@@ -38,14 +40,18 @@ router = APIRouter()
 async def redirect(
     short_code: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> Response:
     from urllib.parse import urlparse
 
     from app.services.domain_service import get_workspace_by_domain
 
     host = (request.url.hostname or "").lower().rstrip(".")
-    primary_host = (urlparse(settings.base_url).hostname or "").lower().rstrip(".")
+    identity_profile = getattr(request.app.state, "auth_mode", "legacy") == "identity"
+    public_base = (
+        request.app.state.identity_config.public_base_url if identity_profile else settings.base_url
+    )
+    primary_host = (urlparse(public_base).hostname or "").lower().rstrip(".")
     workspace_id = None
     if host != primary_host:
         workspace_id = await get_workspace_by_domain(db, host)
@@ -169,51 +175,29 @@ async def redirect(
     referer = request.headers.get("referer")
     parsed = parse_user_agent(ua)
 
-    try:
-        from app.core.arq_pool import get_arq_pool
-
-        pool = await get_arq_pool()
-        await pool.enqueue_job(
-            "process_click",
-            link_id=link.id,
-            ip=ip,
-            user_agent=ua,
-            referrer=referer,
-            variant_id=selected_variant.id if selected_variant else None,
-        )
-    except Exception as exc:
-        logger.warning(
-            "Failed to enqueue click job, recording synchronously", extra={"error": str(exc)}
-        )
-        from app.services.click_service import record_click
-
-        await record_click(
-            db,
-            link.id,
-            ip,
-            ua,
-            referer,
-            variant_id=selected_variant.id if selected_variant else None,
-        )
-
-    asyncio.create_task(
-        _fire_webhooks(
-            link.workspace_id,
-            "click.created",
-            {
-                "event": "click.created",
-                "link_id": link.id,
-                "short_code": link.short_code,
-                "destination_url": target_url,
-                "variant_id": selected_variant.id if selected_variant else None,
-                "browser": parsed["browser"],
-                "os": parsed["os"],
-                "device_type": parsed["device_type"],
-                "referrer_domain": extract_domain(referer),
-                "timestamp": datetime.now(UTC).isoformat(),
-            },
-        )
+    await click_recorder(db).record(
+        ClickDraft(link.id, ip, ua, referer, selected_variant.id if selected_variant else None)
     )
+
+    if not identity_profile:
+        asyncio.create_task(
+            _fire_webhooks(
+                link.workspace_id,
+                "click.created",
+                {
+                    "event": "click.created",
+                    "link_id": link.id,
+                    "short_code": link.short_code,
+                    "destination_url": target_url,
+                    "variant_id": selected_variant.id if selected_variant else None,
+                    "browser": parsed["browser"],
+                    "os": parsed["os"],
+                    "device_type": parsed["device_type"],
+                    "referrer_domain": extract_domain(referer),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+        )
 
     return Response(
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,

@@ -47,3 +47,5 @@ __all__ = [
     "EmailCampaignOpen",
     "EmailCampaignClick",
 ]
+
+from app.contexts.access.adapters.models import WorkspaceIdentityBinding as WorkspaceIdentityBinding

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, 'chore/**']
+    branches: [main, 'chore/**', 'feat/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -125,3 +125,93 @@ jobs:
       - name: Check interpreter, user and packaged assets
         run: |
           docker run --rm plazia-links:ci python -c 'import os, sys; from pathlib import Path; assert sys.version_info[:2] == (3, 14); assert os.getuid() != 0; assert Path("app/templates/base.html").exists(); import app.main; import worker.run'
+
+  identity-browser:
+    name: Identity browser and M2M (PostgreSQL 18, Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: plazia_test
+          POSTGRES_PASSWORD: local-ci-only
+          POSTGRES_DB: plazia_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U plazia_test -d plazia_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://plazia_test:local-ci-only@localhost:5432/plazia_test
+      POSTGRES_TEST_URL: postgresql+asyncpg://plazia_test:local-ci-only@localhost:5432/plazia_test
+      REDIS_URL: redis://localhost:6379/14
+      IDENTITY_E2E: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.12.21'
+          enable-cache: true
+      - run: uv python install 3.14
+      - run: uv sync --locked --all-extras
+      - run: uv run --locked playwright install --with-deps chromium
+      - run: uv run --locked alembic upgrade head
+      - name: Browser acceptance (bounded, with diagnostics)
+        shell: bash
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          timeout --signal=INT --kill-after=15s 240s uv run --locked pytest -vv -s tests/e2e \
+            -o faulthandler_timeout=30 --junitxml=reports/identity-browser.xml \
+            2>&1 | tee reports/identity-browser.log
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: identity-browser-${{ github.sha }}
+          path: reports/identity-browser.*
+          retention-days: 7
+
+  serverless-inputs:
+    name: Serverless build inputs (Python 3.14, native uv floor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ENVIRONMENT: production
+      AUTH_MODE: identity
+      DEPLOYMENT_MODE: serverless
+      DATABASE_URL: postgresql+asyncpg://ci:ci@database.example.invalid/preview?ssl=verify-full
+      REDIS_URL: rediss://redis.example.invalid:6379/0
+      IDENTITY_ISSUER: https://issuer.example.invalid
+      IDENTITY_AUDIENCE: https://links-api.example.invalid
+      IDENTITY_CLIENT_ID: ci-browser-client
+      IDENTITY_CLIENT_SECRET: ci-only-not-an-actual-client-secret
+      IDENTITY_PUBLIC_BASE_URL: https://preview.example.invalid
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          # Also check the manager version used by the native Python builder.
+          version: '0.10.11'
+      - run: uv python install 3.14
+      - name: Check native-builder lock compatibility
+        run: |
+          uv lock --check
+          uv sync --locked --no-dev
+      - name: Read-only build preflight and ASGI exports
+        run: |
+          uv run --locked --no-dev python -m app.platform.serverless
+          uv run --locked --no-dev python - <<'PY'
+          import importlib.util
+          from app.index import app
+          from app.main import app as container_app
+          from api.index import app as legacy_export
+          assert app is container_app is legacy_export
+          assert importlib.util.find_spec("playwright") is None
+          assert importlib.util.find_spec("pytest") is None
+          PY

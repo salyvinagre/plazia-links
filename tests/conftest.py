@@ -1,3 +1,8 @@
+import os
+
+# The inherited suite explicitly exercises the non-production compatibility profile.
+os.environ.setdefault("AUTH_MODE", "legacy")
+
 import asyncio
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock
