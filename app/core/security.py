@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
 import bcrypt
@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.dependencies import get_db
 from app.models.user import User
-
 
 _PRIVATE_HOST_PATTERNS = [
     re.compile(r"^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$"),
@@ -30,6 +29,7 @@ _PRIVATE_HOST_PATTERNS = [
 
 def _is_private_ip(ip_str: str) -> bool:
     import ipaddress
+
     try:
         ip = ipaddress.ip_address(ip_str)
     except ValueError:
@@ -63,6 +63,7 @@ def validate_private_url(url: str) -> str:
     # forms like 127.1, 2130706433, 0x7f000001, ::ffff:127.0.0.1 are caught.
     try:
         import ipaddress
+
         normalized = host.rstrip(".")
         candidate = normalized
         if ":" in normalized and "%" in normalized:
@@ -84,11 +85,11 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None, jti: str | None = None) -> str:
+def create_access_token(
+    data: dict, expires_delta: timedelta | None = None, jti: str | None = None
+) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(minutes=settings.jwt_expire_minutes)
-    )
+    expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=settings.jwt_expire_minutes))
     to_encode.update({"exp": expire, "type": "access"})
     if jti:
         to_encode["jti"] = jti
@@ -97,7 +98,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None, jti:
 
 def create_refresh_token(data: dict, token_version: int = 0) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_expire_days)
+    expire = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_expire_days)
     to_encode.update({"exp": expire, "type": "refresh", "ver": token_version})
     return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
@@ -127,11 +128,14 @@ security_scheme = HTTPBearer(auto_error=False)
 
 async def _authenticate_via_api_key(db: AsyncSession, raw: str) -> User | None:
     from app.services.api_key_service import authenticate_api_key
+
     key = await authenticate_api_key(db, raw)
     if not key:
         return None
     result = await db.execute(select(User).where(User.id == key.user_id))
     user = result.scalar_one_or_none()
+    if user:
+        user._key_workspace_id = key.workspace_id
     if user and key.permissions:
         user._key_permissions = {p.strip() for p in key.permissions.split(",") if p.strip()}
     elif user:
@@ -166,6 +170,7 @@ async def get_current_user(
     jti = payload.get("jti")
     if jti:
         from app.services.session_service import is_jti_blacklisted
+
         if await is_jti_blacklisted(jti):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked")
 
@@ -207,6 +212,7 @@ async def get_current_user_from_cookie(
     jti = payload.get("jti")
     if jti:
         from app.services.session_service import is_jti_blacklisted
+
         if await is_jti_blacklisted(jti):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked")
 
@@ -228,4 +234,5 @@ def require_key_permission(permission: str):
                 detail=f"API key does not have permission '{permission}'",
             )
         return current_user
+
     return _check

@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.core.security import validate_private_url
 
-
 ALLOWED_URL_SCHEMES = {"http", "https"}
 DANGEROUS_SCHEMES = {"javascript", "data", "file", "vbscript"}
 
@@ -30,6 +29,7 @@ class LinkBase(BaseModel):
 
 class LinkCreate(LinkBase):
     workspace_id: str
+    notes: str | None = None
     password: str | None = Field(None, min_length=1)
     expires_at: datetime | None = None
     activate_at: datetime | None = None
@@ -48,7 +48,7 @@ class LinkUpdate(BaseModel):
     is_active: bool | None = None
     is_archived: bool | None = None
     folder_id: str | None = None
-    max_clicks: int | None = None
+    max_clicks: int | None = Field(None, ge=1)
     notes: str | None = None
     password: str | None = None
     expires_at: datetime | None = None

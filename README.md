@@ -1,248 +1,76 @@
-# Zly
+# Plazia Links
 
-**Next-gen open-source URL shortener and marketing platform.**
+A Plazia fork of [PythonPlumber/zly](https://github.com/PythonPlumber/zly),
+using FastAPI, PostgreSQL, Jinja2/HTMX and ARQ. The upstream MIT license is
+retained.
 
-Zly is a full-featured URL shortening platform with analytics, custom domains, QR codes, link in bio pages, A/B testing, team collaboration, email campaigns, an admin panel, and a developer API, all self hosted.
+**Status: baseline stabilization, not a production-approved release.**
+The active upstream `master` snapshot has been merged into `main` with both
+Git histories preserved. See [upstream provenance](docs/UPSTREAM.md) and the
+[stabilization report](docs/STABILIZATION.md) before deploying.
 
-## Features
+Pools of reserved links, visitor subscriptions, activation notifications and
+Plazia Identity integration are planned product work, not shipped features.
+The existing upstream dashboard still requires end-to-end integration fixes.
 
-| Category | Capabilities |
-|---|---|
-| **Short Links** | Custom slugs, password protection, scheduling (activate/expire), bulk import/export |
-| **Analytics** | Per-link and workspace dashboards; clicks over time, browser/OS/device, top referrers; Chart.js visualizations |
-| **QR Codes** | Auto-generated QR codes per link; PNG and SVG download; customizable colors |
-| **Link in Bio** | Profile pages with curated link collections; midnight/dark/light themes |
-| **A/B Testing** | Weighted destination variants with randomized traffic splitting; variant-level analytics |
-| **Custom Domains** | DNS TXT verification; workspace-scoped custom domains; CNAME-ready |
-| **Email Campaigns** | Contact management, email templates, campaign sending with open/click tracking |
-| **Teams** | Multi-user workspaces; owner/member roles; invite flow with accept/decline |
-| **Admin Panel** | User management, system stats, audit log with color-coded events |
-| **API** | Full REST API with auto-generated OpenAPI docs; scoped API keys per workspace |
-| **Security** | bcrypt password hashing; JWT auth with refresh tokens; rate limiting; CSRF protection; security headers (CSP, HSTS) |
+## Development and verification
 
-## Tech Stack
+Python 3.12+ is required. For an isolated environment:
 
-| Component | Technology |
-|---|---|
-| Framework | FastAPI (Python 3.12+) |
-| Database | PostgreSQL via SQLAlchemy 2.0 (async) |
-| Cache | Redis 7 (optional, graceful fallback) |
-| Auth | bcrypt + PyJWT |
-| Frontend | Jinja2 + HTMX + Tailwind CSS (CDN) + Chart.js |
-| Queue | arq (background jobs) |
-| Email | aiosmtplib (async SMTP) |
-| Migrations | Alembic |
-| Containers | Docker, Docker Compose |
-| Reverse Proxy | Caddy (auto HTTPS) |
-
-## Quick Start
-
-### Zero config Local Dev (no Docker, no PostgreSQL, no Redis)
-
-```bash
-# Clone
-git clone https://github.com/pythonplumber/zly.git
-cd zly
-
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Start the dev server (auto-creates tables)
-uvicorn app.main:app --reload
-
-# Open http://localhost:8000/dashboard
+```sh
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[dev]'
+pytest -q
+ruff check .
+mypy app/ --ignore-missing-imports
 ```
 
-That's it. The app defaults to SQLite and gracefully handles Redis being unavailable.
+The inherited unit suite uses SQLite and does not validate PostgreSQL migrations.
+CI also runs `alembic upgrade head` and `alembic check` against fresh PostgreSQL.
+Full-project lint/type debt is not hidden or disabled to make the checks green.
 
-## Deployment
+## Fresh PostgreSQL deployment for review
 
-Zly is built for self hosting. A $5 to $10/month VPS with Docker Compose gives you full control, persistent storage, Redis caching, and auto-HTTPS via Caddy with no platform lock-in.
+Copy `infrastructure/.env.example` to `.env` in the repository root and configure
+all relevant values, including the following (replace every placeholder):
 
-### Recommended: VPS with Docker Compose
-
-```bash
-# SSH into your VPS (Ubuntu 24+)
-ssh root@your-server
-
-# Clone and deploy
-git clone https://github.com/pythonplumber/zly.git
-cd zly
-cp infrastructure/.env.example .env
-# Edit .env with secure secrets
-
-# Start everything
-docker compose -f infrastructure/docker-compose.yml up -d
-
-# Run migrations
-docker compose exec fastapi alembic upgrade head
+```dotenv
+POSTGRES_USER=zly
+POSTGRES_DB=zly
+POSTGRES_PASSWORD=REPLACE_WITH_RANDOM_PASSWORD
+DATABASE_URL=postgresql+asyncpg://zly:REPLACE_WITH_RANDOM_PASSWORD@postgres:5432/zly
+REDIS_URL=redis://redis:6379/0
+SECRET_KEY=REPLACE_WITH_RANDOM_SECRET_AT_LEAST_32_BYTES
+JWT_SECRET=REPLACE_WITH_DIFFERENT_RANDOM_SECRET_AT_LEAST_32_BYTES
+DEFAULT_DOMAIN=links.example.com
+BASE_URL=https://links.example.com
+CORS_ORIGINS=https://links.example.com
+ENVIRONMENT=production
 ```
 
-Full guide in **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+Use a URL-safe database password, or percent-encode it in `DATABASE_URL`.
+Configure `infrastructure/Caddyfile` for your domain, or use your existing proxy.
+From the repository root:
 
-## Configuration
-
-All configuration lives in `app/config.py` and is driven by environment variables:
-
-| Variable | Default | Description |
-|---|---|---|
-| `DATABASE_URL` | `sqlite+aiosqlite:///./zly.db` | Database connection string |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection string (optional, graceful fallback) |
-| `SECRET_KEY` | `change-me-in-production` | General purpose secret |
-| `JWT_SECRET` | `change-me-in-production` | JWT signing key (min 32 bytes) |
-| `JWT_ALGORITHM` | `HS256` | JWT signing algorithm |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | JWT token lifetime (minutes) |
-| `CORS_ORIGINS` | `http://localhost:8000` | Comma-separated allowed origins |
-| `DEFAULT_DOMAIN` | `localhost:8000` | Base domain for short URLs |
-
-## API Overview
-
-Interactive OpenAPI docs at `/docs` (auto-generated by FastAPI). All routes prefixed `/api/v1`.
-
-### Auth
-- `POST /api/v1/auth/register`: Register a new user
-- `POST /api/v1/auth/login`: Login, receive JWT access + refresh tokens
-- `POST /api/v1/auth/refresh`: Refresh JWT token
-- `POST /api/v1/auth/forgot-password`: Request password reset email
-- `POST /api/v1/auth/reset-password`: Reset password with token
-- `GET /api/v1/auth/oauth/{provider}`: OAuth login (Google, GitHub)
-
-### Users
-- `GET /api/v1/users/me`: Get current user
-- `PATCH /api/v1/users/me`: Update profile
-- `POST /api/v1/users/me/change-password`: Change password
-- `POST /api/v1/users/me/set-password`: Set password (OAuth users)
-
-### Links
-- `POST /api/v1/links`: Create a short link
-- `GET /api/v1/links?workspace_id=`: List links for a workspace
-- `GET /api/v1/links/{id}`: Get link details
-- `PATCH /api/v1/links/{id}`: Update a link
-- `DELETE /api/v1/links/{id}`: Delete a link
-- `POST /api/v1/links/{id}/qrcode`: Generate QR code (PNG or SVG)
-- `POST /api/v1/links/{id}/verify-password`: Verify link password
-
-### Analytics
-- `GET /api/v1/links/{id}/analytics`: Per-link analytics
-- `GET /api/v1/workspaces/{id}/analytics/summary`: Workspace-level summary
-
-### A/B Testing
-- `POST /api/v1/links/{id}/variants`: Add an A/B variant
-- `GET /api/v1/links/{id}/variants`: List variants
-- `PATCH /api/v1/variants/{id}`: Update a variant
-- `DELETE /api/v1/variants/{id}`: Delete a variant
-
-### Workspaces and Teams
-- `GET/POST /api/v1/workspaces`: List/create workspaces
-- `GET/PUT/DELETE /api/v1/workspaces/{id}`: Workspace detail/update/delete
-- `POST /api/v1/workspaces/{id}/invites`: Invite a member
-- `GET /api/v1/workspaces/{id}/invites`: List invites
-- `GET /api/v1/workspaces/{id}/members`: List members
-
-### Email Campaigns
-- `GET/POST /api/v1/workspaces/{id}/email/contacts`: Manage contacts
-- `GET/POST /api/v1/workspaces/{id}/email/templates`: Manage templates
-- `GET/POST /api/v1/workspaces/{id}/email/campaigns`: Manage campaigns
-- `POST /api/v1/workspaces/{id}/email/campaigns/{id}/send`: Send campaign
-- `GET /api/v1/workspaces/{id}/email/campaigns/{id}/stats`: Campaign stats
-
-### Bio Pages
-- `POST /api/v1/workspaces/{id}/bio`: Create bio page
-- `GET /api/v1/workspaces/{id}/bio`: Get bio page
-- `PUT /api/v1/workspaces/{id}/bio`: Update bio page
-
-### Custom Domains
-- `POST /api/v1/workspaces/{id}/domains`: Add a custom domain
-- `GET /api/v1/workspaces/{id}/domains`: List domains
-- `POST /api/v1/workspaces/{id}/domains/{did}/verify`: Verify domain (TXT record)
-- `DELETE /api/v1/workspaces/{id}/domains/{did}`: Remove a domain
-
-### API Keys
-- `POST /api/v1/workspaces/{id}/api-keys`: Create API key
-- `GET /api/v1/workspaces/{id}/api-keys`: List API keys
-- `DELETE /api/v1/api-keys/{id}`: Delete API key
-
-### Admin
-- `GET /api/v1/admin/users`: List users (paginated)
-- `GET /api/v1/admin/users/{id}`: Get user details
-- `PATCH /api/v1/admin/users/{id}`: Update user (superuser, active)
-- `GET /api/v1/admin/stats`: System statistics
-- `GET /api/v1/admin/audit-logs`: Audit log (paginated, filterable)
-
-### Sessions
-- `GET /api/v1/sessions`: List active sessions
-- `DELETE /api/v1/sessions/{jti}`: Revoke a session
-- `POST /api/v1/sessions/revoke-all`: Revoke all sessions
-
-### Redirect
-- `GET /{short_code}`: Redirect to destination URL
-
-## Project Structure
-
-```
-zly/
-  app/               FastAPI application
-    api/             Route handlers
-    core/            Config, security, dependencies, rate limiter
-    models/          SQLAlchemy ORM models
-    schemas/         Pydantic schemas
-    services/        Business logic
-    templates/       Jinja2 HTML templates (auth, dashboard, bio, errors, partials)
-    routes/          Dashboard and auth HTML page routes
-    db.py            Database engine
-    config.py        Settings
-    cli.py           CLI management commands
-    main.py          App factory
-  api/index.py       Vercel serverless entrypoint
-  infrastructure/    Docker, Caddy, env config
-  migrations/        Alembic migrations
-  tests/             Pytest suite (210+)
-  worker/            arq background worker
-  docs/              Deployment and architecture guides
-  .github/           CI workflow
-  pyproject.toml     Project config
+```sh
+docker compose --env-file .env -f infrastructure/docker-compose.yml up --build -d
+docker compose --env-file .env -f infrastructure/docker-compose.yml logs migrate worker fastapi
 ```
 
-## Architecture
+The one-shot `migrate` service runs before the API and ARQ worker start. The API
+checks migration state without running DDL. `/health` returns 503 when the
+database is unavailable; `/health/live` only checks that the process responds.
 
-See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for detailed architecture documentation covering:
+For a non-container PostgreSQL instance, set `DATABASE_URL` to that instance,
+then run `alembic upgrade head` before `uvicorn app.main:app --reload`.
+Automatic SQLite `create_all` at application startup has been removed.
+Existing databases created outside Alembic need an explicit schema audit and
+baseline procedure; do not blindly stamp them or apply fresh-install steps.
 
-- Data model relationships and migration strategy
-- Routing flow (redirect engine, caching, analytics recording)
-- Authentication and authorization model
-- Async job patterns and Redis integration
-- Multi-tenancy via workspaces and teams
-- Rate limiting and security middleware
+## Upstream reference
 
-## Development
-
-### Running Tests
-
-```bash
-pytest -v          # 210+ tests covering all features
-pytest --cov=app   # With coverage
-```
-
-### Code Quality
-
-```bash
-ruff check .       # Linting (E, F, I, N, W, UP)
-mypy app/          # Strict type checking
-```
-
-### Database Migrations
-
-```bash
-# Create a new migration
-alembic revision --autogenerate -m "description"
-
-# Apply migrations
-alembic upgrade head
-
-# Rollback
-alembic downgrade -1
-```
-
-## License
-
-MIT, see [LICENSE](LICENSE).
+The [original README](docs/UPSTREAM_README.md) and existing upstream deployment
+notes describe upstream functionality. They are retained for reference, not as
+claims that every feature has been validated in this fork. Follow this README
+and the stabilization report where they differ.

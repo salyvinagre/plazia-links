@@ -27,7 +27,9 @@ async def add_domain(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await verify_workspace_access(db, workspace_id, user, require_owner=True, required_permission="domains:manage")
+    await verify_workspace_access(
+        db, workspace_id, user, require_owner=True, required_permission="domains:manage"
+    )
     domain = await create_domain(db, workspace_id, data)
     if not domain:
         raise HTTPException(status_code=409, detail="Domain already registered")
@@ -52,7 +54,9 @@ async def list_domains(
     user: User = Depends(get_current_user),
 ):
     await verify_workspace_access(db, workspace_id, user, required_permission="domains:manage")
-    domains, total, has_next = await list_workspace_domains(db, workspace_id, page=page, page_size=page_size)
+    domains, total, has_next = await list_workspace_domains(
+        db, workspace_id, page=page, page_size=page_size
+    )
     return PaginatedResponse(
         total=total,
         page=page,
@@ -70,7 +74,12 @@ async def verify_domain_endpoint(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await verify_workspace_access(db, workspace_id, user, require_owner=True, required_permission="domains:manage")
+    await verify_workspace_access(
+        db, workspace_id, user, require_owner=True, required_permission="domains:manage"
+    )
+    target = await get_domain(db, domain_id)
+    if target is None or target.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Domain not found")
     domain = await verify_domain(db, domain_id, data.verification_code)
     if not domain:
         raise HTTPException(status_code=400, detail="Invalid verification code")
@@ -85,7 +94,12 @@ async def remove_domain(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await verify_workspace_access(db, workspace_id, user, require_owner=True, required_permission="domains:manage")
+    await verify_workspace_access(
+        db, workspace_id, user, require_owner=True, required_permission="domains:manage"
+    )
+    target = await get_domain(db, domain_id)
+    if target is None or target.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Domain not found")
     deleted = await delete_domain(db, domain_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Domain not found")
