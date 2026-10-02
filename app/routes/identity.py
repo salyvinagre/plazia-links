@@ -24,7 +24,8 @@ from app.schemas.managed_link import CreateLinkRequest, UpdateLinkRequest
 
 router = APIRouter(include_in_schema=False)
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
-Db = Annotated[AsyncSession, Depends(get_db)]
+# Commit/rollback must finish before acknowledging a write or sending a redirect.
+Db = Annotated[AsyncSession, Depends(get_db, scope="function")]
 Session = Annotated[BrowserSession, Depends(browser_session)]
 
 

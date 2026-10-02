@@ -69,6 +69,13 @@ savepoint keeps the outer request transaction usable after an expected collision
 `SqlLinkAudit` shares that transaction. A failed audit aborts the outer command;
 it is not an independent commit or a notification outbox.
 
+Management routes and public redirects use function-scoped database dependencies.
+Commit/rollback therefore finishes before any HTTP success or redirect is sent.
+A failed commit returns an error rather than a false success; a browser following
+a write redirect cannot race an uncommitted update on a different connection.
+Transport-level regression tests observe ASGI response start and deliberately
+delay/fail the commit to verify this ordering for both JSON and HTML mutations.
+
 Commands, read models and ports are separate modules. JSON and HTML adapters
 shape their own transport responses from the same application results. SQL
 rows, HTTP response models and externally mutable dictionaries are not domain

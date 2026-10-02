@@ -40,7 +40,7 @@ router = APIRouter()
 async def redirect(
     short_code: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> Response:
     from urllib.parse import urlparse
 

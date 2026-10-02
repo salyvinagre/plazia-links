@@ -19,7 +19,8 @@ from app.schemas.managed_link import (
 )
 
 router = APIRouter(prefix="/api/v1/links", tags=["links"])
-Db = Annotated[AsyncSession, Depends(get_db)]
+# Commit/rollback must finish before acknowledging a write or sending a redirect.
+Db = Annotated[AsyncSession, Depends(get_db, scope="function")]
 Actor = Annotated[Principal, Depends(api_principal)]
 
 
