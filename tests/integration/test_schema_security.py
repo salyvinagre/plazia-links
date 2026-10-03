@@ -24,10 +24,52 @@ from tests.integration.test_postgres_links import postgres_urls as postgres_urls
             "role separation",
         ),
         (
-            "GRANT DELETE ON links.pools TO links_app",
-            "REVOKE DELETE ON links.pools FROM links_app",
-            "app",
+            "GRANT DELETE ON links.pools TO links_worker",
+            "REVOKE DELETE ON links.pools FROM links_worker",
+            "worker",
             "role separation",
+        ),
+        (
+            "REVOKE UPDATE ON links.pools FROM links_app",
+            "GRANT UPDATE ON links.pools TO links_app",
+            "app",
+            "pool management",
+        ),
+        (
+            "ALTER TABLE links.links DROP CONSTRAINT fk_links_pool_organization",
+            "ALTER TABLE links.links ADD CONSTRAINT fk_links_pool_organization "
+            "FOREIGN KEY (organization_id,pool_id) REFERENCES links.pools(organization_id,id) "
+            "ON DELETE CASCADE",
+            "app",
+            "deletion constraints",
+        ),
+        (
+            "ALTER TABLE links.subscriptions DROP CONSTRAINT fk_subscriptions_link_organization",
+            "ALTER TABLE links.subscriptions ADD CONSTRAINT fk_subscriptions_link_organization "
+            "FOREIGN KEY (organization_id,link_id) REFERENCES links.links(organization_id,id) "
+            "ON DELETE CASCADE",
+            "app",
+            "deletion constraints",
+        ),
+        (
+            "ALTER TABLE platform.activation_emails "
+            "DROP CONSTRAINT fk_activation_emails_link_organization",
+            "ALTER TABLE platform.activation_emails "
+            "ADD CONSTRAINT fk_activation_emails_link_organization "
+            "FOREIGN KEY (organization_id,link_id) REFERENCES links.links(organization_id,id) "
+            "ON DELETE CASCADE",
+            "worker",
+            "deletion constraints",
+        ),
+        (
+            "ALTER TABLE platform.activation_emails "
+            "DROP CONSTRAINT fk_activation_emails_subscription",
+            "ALTER TABLE platform.activation_emails "
+            "ADD CONSTRAINT fk_activation_emails_subscription "
+            "FOREIGN KEY (organization_id,link_id,subscription_id) "
+            "REFERENCES links.subscriptions(organization_id,link_id,id) ON DELETE CASCADE",
+            "worker",
+            "deletion constraints",
         ),
         (
             "GRANT TRUNCATE ON links.links TO links_app",
@@ -98,7 +140,7 @@ from tests.integration.test_postgres_links import postgres_urls as postgres_urls
 def test_runtime_rejects_security_drift(postgres_urls, change, restore, runtime, reason):
     url = postgres_urls.app if runtime == "app" else postgres_urls.worker
     authority = SchemaAuthority(url)
-    assert authority.check(runtime=runtime).revision == "1"
+    assert authority.check(runtime=runtime).revision == "2"
     with Connection.connect(postgres_urls.owner, autocommit=True) as owner:
         name = owner.execute(
             "SELECT pg_catalog.pg_get_userbyid(nspowner) FROM pg_catalog.pg_namespace "
@@ -110,4 +152,4 @@ def test_runtime_rejects_security_drift(postgres_urls, change, restore, runtime,
                 authority.check(runtime=runtime)
         finally:
             owner.execute(sql.SQL(restore).format(sql.Identifier(name)))
-    assert authority.check(runtime=runtime).revision == "1"
+    assert authority.check(runtime=runtime).revision == "2"

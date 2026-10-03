@@ -55,3 +55,43 @@ belongs to the original implementation closure.
 Final requested test-only verification: `CONTAINER_CONNECTION=plazia-root make
 test TEST_SUITE=all` passes 131 fast tests and 20 real-service tests, with empty
 owned-resource residue. Evidence is in `output/makefile-tests.log`.
+
+## Pool-management follow-up
+
+Current local verification for pool rename/delete and explicit bulk link
+deletion, 2026-10-03:
+
+| Lane | Command | Result |
+| --- | --- | --- |
+| Fast regression | `make test` | 151 passed; `output/pool-fast.log` |
+| Combined Plazia checks | `make check CHECK_TOOL=all` | PASS: Ruff/format 122 files, strict mypy 95 files, shared normalizers 71 files with zero findings, Actions/help/Markdown, generated OpenAPI with zero hard errors and 184 style warnings, Vulture, advisory semantic/wrapper diagnostics; `output/pool-checks.log` |
+| Final Make/harness checks | `make check` | PASS, including the unchanged 23 public targets and 24 help pages; `output/pool-final-check.log` |
+| Native database/browser | `CONTAINER_CONNECTION=plazia-root make acceptance` | Populated V1 to V2 upgrade verified, 30 passed, empty owned-resource residue; `output/pool-acceptance.log` |
+| Current UI assets | `make frontend` | PASS; `output/pool-frontend.log` |
+| Independent review | Read-only Luna review | Cycle 2 PASS, no critical or warning findings; [review](review.md) |
+
+The 181 tests include original-result pool rename replay, pool cascade deletion,
+explicit all-or-nothing selection, wrong-pool/foreign/stale IDs, CSRF, keys and
+generated typed API schema checks. Native PostgreSQL verifies command rollback,
+replay and subscription/job cleanup. Eighteen security injections include all
+four deletion-chain foreign keys and pool-management grant separation.
+
+Native acceptance creates a V1 database with the configured pinned Flyway,
+seeds a pool/link/subscription/job, then runs the normal guarded `make migrate`
+procedure to V2. The pool name and short code survive the upgrade; deleting the
+pool removes its link, subscription and queued job. V1 is unchanged. The private
+`flyway-migrate` recipe shares the configured invocation between the guarded
+public migration and this harness. Runtime requires V2. This proof uses a
+disposable database, with no customer data or deployed migration involved.
+
+Real Chromium covers rename, select-page and individual selection, a cancelled
+deletion that sends no POST, bulk deletion with preserved pool filter, and whole
+pool deletion without affecting another pool. Both runtime modes run at 1280px
+and 390px. Current desktop/mobile captures were visually inspected; selected
+checkboxes use the standard primary variant and screenshot animation is
+disabled for stable state evidence. Captures are
+`output/playwright/pool-management-{container,serverless}-{1280,390}.png`.
+
+All evidence above belongs to the final source. Earlier image/package and
+coverage results remain historical; those lanes were not rerun for this slice.
+External gates remain unchanged. CRAP was not run.

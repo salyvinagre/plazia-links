@@ -55,7 +55,58 @@
     </a>
     {% endfor %}
   </nav>
+  {% if pool %}
+  <section class="card mb-5 gap-4 border border-base-300 bg-base-100 p-5 sm:p-6" aria-labelledby="pool-heading">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="min-w-0">
+        <h3 id="pool-heading" class="break-words">{{ pool.name or 'Untitled pool' }}</h3>
+        <p class="mb-0 text-sm text-muted">{{ pool.size }} link{{ '' if pool.size == 1 else 's' }} in this pool</p>
+      </div>
+      {% if 'links:delete' in session.principal.scopes %}
+      <form method="post" action="/dashboard/pools/{{ pool.id }}/delete" hx-disabled-elt="find button"
+            data-confirm="Delete this pool and all {{ pool.size }} of its links? Subscriptions and queued notifications will also be removed.">
+        <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
+        <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+        <button class="btn btn-ghost text-danger hover:bg-danger/10" type="submit">Delete pool</button>
+      </form>
+      {% endif %}
+    </div>
+    {% if 'links:update' in session.principal.scopes %}
+    <form class="flex flex-col gap-3 sm:flex-row sm:items-end" method="post"
+          action="/dashboard/pools/{{ pool.id }}" hx-disabled-elt="find button">
+      <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
+      <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+      <div class="min-w-0 flex-1">
+        <label for="rename-pool">Rename pool</label>
+        <input class="input w-full" id="rename-pool" name="name" maxlength="200"
+               value="{{ pool_name if pool_error else pool.name or '' }}" {% if pool_error %}aria-invalid="true" aria-describedby="pool-error"{% endif %}>
+      </div>
+      <a class="btn btn-ghost hover:bg-primary/10 hover:text-primary" href="?pool_id={{ pool.id }}{% if links.page > 1 %}&amp;page={{ links.page }}{% endif %}">Cancel</a>
+      <button class="btn btn-primary" type="submit">Save</button>
+    </form>
+    {% if pool_error %}<p id="pool-error" class="mb-0 text-sm text-danger" role="alert">{{ pool_error }}</p>{% endif %}
+    {% endif %}
+  </section>
+  {% endif %}
   {% if links.items %}
+  {% if 'links:delete' in session.principal.scopes %}
+  <form id="delete-selection" class="mb-4 flex flex-wrap items-center justify-between gap-3"
+        method="post" action="/dashboard/links/delete{% if pool_id %}?pool_id={{ pool_id|urlencode }}{% endif %}"
+        hx-disabled-elt="find button"
+        data-confirm="Delete the selected links? Their subscriptions and queued notifications will also be removed.">
+    <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
+    <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+    <label class="mb-0 flex min-h-11 items-center gap-3 text-sm">
+      <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" data-select-all aria-label="Select all links on this page">
+      Select this page
+    </label>
+    <div class="flex items-center gap-3">
+      <span id="selection-count" class="text-xs text-muted" aria-live="polite">0 selected</span>
+      <button class="btn btn-ghost border border-base-300 text-danger hover:bg-danger/10"
+              type="submit" data-delete-selection>Delete selected</button>
+    </div>
+  </form>
+  {% endif %}
   <div class="card border border-base-300 bg-base-100 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent">
     <table class="table links-table w-full table-fixed text-sm" role="table" aria-label="Your links">
       <thead role="rowgroup">
@@ -70,9 +121,18 @@
         {% for link in links.items %}
         <tr role="row">
           <td role="cell" data-label="Link">
-            <strong class="mb-1 block">{{ link.title or link.short_code }}</strong>
-            <a class="text-[13px] underline" href="{{ public_base }}/{{ link.short_code }}"
-               target="_blank" rel="noopener noreferrer">/{{ link.short_code }}</a>
+            <div class="flex items-start gap-3">
+              {% if 'links:delete' in session.principal.scopes %}
+              <input type="checkbox" class="checkbox checkbox-primary checkbox-sm mt-1 shrink-0" name="ids"
+                     value="{{ link.id }}" form="delete-selection" data-select-link
+                     aria-label="Select {{ link.short_code }}">
+              {% endif %}
+              <div class="min-w-0">
+                <strong class="mb-1 block">{{ link.title or link.short_code }}</strong>
+                <a class="text-[13px] underline" href="{{ public_base }}/{{ link.short_code }}"
+                   target="_blank" rel="noopener noreferrer">/{{ link.short_code }}</a>
+              </div>
+            </div>
           </td>
           <td class="text-muted" role="cell" data-label="Destination">
             {{ link.destination_url or 'Awaiting destination' }}

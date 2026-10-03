@@ -198,3 +198,74 @@ def test_reserve_subscribe_activate_and_delivery(live_application):
     expect(page.get_by_role("heading", name="Signed out of Plazia Links")).to_be_visible()
     visitor_context.close()
     context.close()
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_manage_pools_and_delete_a_selection(live_application, width):
+    from playwright.sync_api import TimeoutError as BrowserTimeoutError
+    from playwright.sync_api import expect
+
+    base, _, browser, mode = live_application
+    context = browser.new_context(viewport={"width": width, "height": 900})
+    page = context.new_page()
+    page.goto(base + "/login")
+    page.wait_for_url(base + "/dashboard/links")
+    keep = f"Keep-{mode}-{width}"
+    page.get_by_label("Pool name").fill(keep)
+    page.get_by_label("Number of links").fill("1")
+    page.get_by_role("button", name="Reserve links").click()
+    expect(page.get_by_role("heading", name=keep, exact=True)).to_be_visible()
+    name = f"Manage-{mode}-{width}"
+    page.get_by_label("Pool name").fill(name)
+    page.get_by_label("Number of links").fill("4")
+    page.get_by_role("button", name="Reserve links").click()
+    expect(page.get_by_role("heading", name=name, exact=True)).to_be_visible()
+    pool_url = page.url
+    page.get_by_label("Rename pool").fill(name + "-renamed")
+    page.get_by_role("button", name="Save", exact=True).click()
+    expect(page.get_by_role("heading", name=name + "-renamed", exact=True)).to_be_visible()
+    assert page.url == pool_url
+    items = page.locator("[data-select-link]")
+    expect(items).to_have_count(4)
+    deleting = page.get_by_role("button", name="Delete selected")
+    expect(deleting).to_be_disabled()
+    page.get_by_label("Select all links on this page").check()
+    expect(page.get_by_text("4 selected", exact=True)).to_be_visible()
+    page.get_by_label("Select all links on this page").uncheck()
+    items.nth(0).check()
+    items.nth(1).check()
+    expect(page.get_by_text("2 selected", exact=True)).to_be_visible()
+    assert page.get_by_label("Select all links on this page").evaluate(
+        "element => element.indeterminate"
+    )
+    selected = [items.nth(i).input_value() for i in (0, 1)]
+    remaining = [items.nth(i).input_value() for i in (2, 3)]
+    page.screenshot(
+        path=f"output/playwright/pool-management-{mode}-{width}.png",
+        full_page=True,
+        animations="disabled",
+    )
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    page.once("dialog", lambda dialog: dialog.dismiss())
+    with pytest.raises(BrowserTimeoutError):
+        with page.expect_request(
+            lambda request: request.method == "POST" and "/dashboard/links/delete" in request.url,
+            timeout=500,
+        ):
+            deleting.click()
+    expect(items).to_have_count(4)
+    page.once("dialog", lambda dialog: dialog.accept())
+    deleting.click()
+    expect(items).to_have_count(2)
+    assert page.url == pool_url
+    assert [item.input_value() for item in items.all()] == remaining
+    assert not set(selected) & set(remaining)
+    expect(page.get_by_text("2 links in this pool", exact=True)).to_be_visible()
+    expect(deleting).to_be_disabled()
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.get_by_role("button", name="Delete pool", exact=True).click()
+    page.wait_for_url(base + "/dashboard/links")
+    expect(page.get_by_role("link", name=name + "-renamed")).to_have_count(0)
+    page.get_by_role("link", name=keep + " 1", exact=True).click()
+    expect(page.locator("[data-select-link]")).to_have_count(1)
+    context.close()

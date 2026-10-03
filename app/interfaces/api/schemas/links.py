@@ -14,6 +14,7 @@ from app.contexts.links.contracts import (
     PoolDto,
     PublicCode,
 )
+from app.kernel.ids import LinkId
 
 
 class CreateLinkRequest(ApiRequest):
@@ -66,6 +67,18 @@ class UpdateLinkRequest(ApiRequest):
 class ReservePoolRequest(ApiRequest):
     size: int = Field(ge=1, le=100, strict=True)
     name: str | None = Field(None, max_length=200)
+
+
+class RenamePoolRequest(ApiRequest):
+    name: str | None = Field(..., max_length=200, description="New display name; null clears it.")
+
+
+class DeleteLinksParams(ApiRequest):
+    ids: list[str] = Field(min_length=1, max_length=100, description="Explicit links to delete.")
+    pool_id: str | None = Field(None, description="Restrict every selected link to this pool.")
+
+    def identifiers(self) -> tuple[LinkId, ...]:
+        return tuple(LinkId(value) for value in self.ids)
 
 
 class Pagination(ApiRequest):

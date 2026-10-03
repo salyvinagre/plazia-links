@@ -9,7 +9,7 @@ CHECK_FLAGS ?=
 
 PLAZIA_MAKE_HELP_VERSION := 1
 PLAZIA_PUBLIC_TARGETS := help bootstrap format lint typecheck frontend browser-install build image check test integration acceptance coverage preflight hardening-checks normalizers docs-check actions-check openapi openapi-check migrate schema-check
-PLAZIA_PRIVATE_TARGETS :=
+PLAZIA_PRIVATE_TARGETS := flyway-migrate
 PLAZIA_HELP_ROOT := $(CURDIR)/help
 
 PLAZIA_HELP_SELECTOR_check := CHECK_TOOL
@@ -44,6 +44,7 @@ PLAZIA_HELP_EFFECT_actions-check := read-only
 PLAZIA_HELP_EFFECT_openapi := workspace
 PLAZIA_HELP_EFFECT_openapi-check := runtime
 PLAZIA_HELP_EFFECT_migrate := external
+PLAZIA_HELP_EFFECT_flyway-migrate := external
 PLAZIA_HELP_EFFECT_schema-check := read-only
 
 .PHONY: $(PLAZIA_PUBLIC_TARGETS) $(PLAZIA_PRIVATE_TARGETS)
@@ -83,9 +84,11 @@ FLYWAY_NETWORK_ARGS ?=
 FLYWAY = $(CONTAINER) run --rm $(FLYWAY_NETWORK_ARGS) -v $(CURDIR)/app/platform/persistence/sql:/flyway/project:ro -w /flyway/project -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD $(FLYWAY_IMAGE) -configFiles=/flyway/project/flyway.toml
 migrate:
 	$(UV) run --locked python -m app.cli schema-prepare
+	@$(MAKE) flyway-migrate
+	$(UV) run --locked python -m app.cli schema-finish
+flyway-migrate:
 	$(FLYWAY) migrate
 	$(FLYWAY) validate
-	$(UV) run --locked python -m app.cli schema-finish
 schema-check:
 	$(UV) run --locked python -m app.cli schema-check
 acceptance:

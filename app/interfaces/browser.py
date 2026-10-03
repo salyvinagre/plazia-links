@@ -21,15 +21,21 @@ from app.contexts.access.contracts import (
 from app.contexts.links.contracts import (
     CreateLinkCommand,
     DeleteLinkCommand,
+    DeleteLinksCommand,
+    DeletePoolCommand,
     GetLinkQuery,
+    GetPoolQuery,
     LinkConflictError,
     ListLinksQuery,
     ListPoolsQuery,
+    RenamePoolCommand,
     ReservePoolCommand,
     UpdateLinkCommand,
 )
 from app.interfaces.api.schemas.links import (
     CreateLinkRequest,
+    DeleteLinksParams,
+    RenamePoolRequest,
     ReservePoolRequest,
     UpdateLinkRequest,
 )
@@ -159,6 +165,18 @@ async def dashboard() -> Response:
 async def links(
     request: Request, session: Session, page: int = Query(1, ge=1), pool_id: str | None = None
 ) -> Response:
+    return await _links_page(request, session, page, pool_id)
+
+
+async def _links_page(
+    request: Request,
+    session: BrowserSession,
+    page: int,
+    pool_id: str | None,
+    *,
+    pool_error: str | None = None,
+    pool_name: str | None = None,
+) -> Response:
     context = request_context(request, session.principal)
     organization = await queries(request).ask(
         ResolveOrganizationQuery(session.principal), context=context
@@ -168,6 +186,13 @@ async def links(
         context=context,
     )
     pools = await queries(request).ask(ListPoolsQuery(session.principal, 1, 100), context=context)
+    pool = (
+        await queries(request).ask(
+            GetPoolQuery(session.principal, PoolId(pool_id)), context=context
+        )
+        if pool_id
+        else None
+    )
     return templates.TemplateResponse(
         request,
         "identity/links.html",
@@ -177,8 +202,13 @@ async def links(
             "links": result,
             "pools": pools,
             "pool_id": pool_id,
+            "pool": pool,
+            "pool_error": pool_error,
+            "pool_name": pool_name,
             "public_base": runtime(request).config.public_base_url.rstrip("/"),
         },
+        status_code=422 if pool_error else 200,
+        headers={"HX-Push-Url": "false"} if pool_error else {},
     )
 
 
@@ -196,6 +226,62 @@ async def reserve_pool(request: Request, session: Session) -> Response:
         key=str(form.get("idempotency_key", "")),
     )
     return _redirect(f"/dashboard/links?pool_id={pool.id}")
+
+
+@router.post("/dashboard/pools/{pool_id}")
+async def rename_pool(pool_id: str, request: Request, session: Session) -> Response:
+    form = await request.form(max_fields=3, max_files=0)
+    csrf(request, session, str(form.get("csrf_token", "")))
+    name = str(form.get("name", ""))
+    try:
+        data = RenamePoolRequest.model_validate({"name": name or None})
+        await mutate(
+            request,
+            RenamePoolCommand(session.principal, PoolId(pool_id), data.name),
+            session.principal,
+            key=str(form.get("idempotency_key", "")),
+        )
+    except ValidationError:
+        return await _links_page(
+            request,
+            session,
+            1,
+            pool_id,
+            pool_error="Use a pool name of 200 characters or fewer.",
+            pool_name=name,
+        )
+    return _redirect(f"/dashboard/links?{urlencode({'pool_id': pool_id})}")
+
+
+@router.post("/dashboard/pools/{pool_id}/delete")
+async def delete_pool(pool_id: str, request: Request, session: Session) -> Response:
+    form = await request.form(max_fields=2, max_files=0)
+    csrf(request, session, str(form.get("csrf_token", "")))
+    await mutate(
+        request,
+        DeletePoolCommand(session.principal, PoolId(pool_id)),
+        session.principal,
+        key=str(form.get("idempotency_key", "")),
+    )
+    return _redirect("/dashboard/links")
+
+
+@router.post("/dashboard/links/delete")
+async def delete_links(request: Request, session: Session, pool_id: str | None = None) -> Response:
+    form = await request.form(max_fields=102, max_files=0)
+    csrf(request, session, str(form.get("csrf_token", "")))
+    data = DeleteLinksParams.model_validate({"ids": form.getlist("ids"), "pool_id": pool_id})
+    await mutate(
+        request,
+        DeleteLinksCommand(
+            session.principal, data.identifiers(), PoolId(pool_id) if pool_id else None
+        ),
+        session.principal,
+        key=str(form.get("idempotency_key", "")),
+    )
+    return _redirect(
+        f"/dashboard/links?{urlencode({'pool_id': pool_id})}" if pool_id else "/dashboard/links"
+    )
 
 
 @router.get("/dashboard/links/new", response_class=HTMLResponse)

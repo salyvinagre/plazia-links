@@ -84,7 +84,17 @@ async def test_missing_or_invalid_key_is_a_context_error(application, issuer):
             )
 
 
-@pytest.mark.parametrize("action", ["ReservePoolCommand", "CreateLinkCommand", "DeleteLinkCommand"])
+@pytest.mark.parametrize(
+    "action",
+    [
+        "ReservePoolCommand",
+        "RenamePoolCommand",
+        "CreateLinkCommand",
+        "DeleteLinkCommand",
+        "DeletePoolCommand",
+        "DeleteLinksCommand",
+    ],
+)
 async def test_sql_receipt_restores_original_typed_snapshot(action, issuer):
     import json
     from dataclasses import asdict
@@ -101,7 +111,7 @@ async def test_sql_receipt_restores_original_typed_snapshot(action, issuer):
     now = datetime.now(UTC)
     result = (
         PoolDto(PoolId.new(), "Launch", 2, now)
-        if action == "ReservePoolCommand"
+        if action in {"ReservePoolCommand", "RenamePoolCommand"}
         else LinkDto(LinkId.new(), "code123", "https://example.com", None, None, True, now, now)
         if action == "CreateLinkCommand"
         else None

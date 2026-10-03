@@ -129,7 +129,68 @@ def run():
             "FLYWAY_NETWORK_ARGS": "--network " + NAME,
             "CONTAINER": ENGINE,
         }
+        # Exercise admission of a real, populated V1 target through the same
+        # pinned Flyway invocation as the normal guarded migration.
+        subprocess.run(
+            ["make", "flyway-migrate"],
+            cwd=ROOT,
+            env=env | {"FLYWAY_NETWORK_ARGS": "--network " + NAME + " -e FLYWAY_TARGET=1"},
+            check=True,
+        )
+        from shared_identity import OrganizationId
+
+        organization = OrganizationId.new()
+        with psycopg.connect(owner) as connection:
+            assert connection.execute(
+                "SELECT version FROM links_migrations.flyway_schema_history "
+                "WHERE type='SQL' ORDER BY installed_rank"
+            ).fetchall() == [("1",)]
+            connection.execute(
+                "INSERT INTO access.organizations (issuer,organization_id,name) "
+                "VALUES ('https://identity.example.test',%s,'Upgrade fixture')",
+                (organization.uuid,),
+            )
+            pool = connection.execute(
+                "INSERT INTO links.pools (organization_id,name) VALUES (%s,'Preserved pool') "
+                "RETURNING id",
+                (organization.uuid,),
+            ).fetchone()[0]
+            link = connection.execute(
+                "INSERT INTO links.links (organization_id,pool_id,short_code) "
+                "VALUES (%s,%s,'upgrade1') RETURNING id",
+                (organization.uuid, pool),
+            ).fetchone()[0]
+            subscription = connection.execute(
+                "INSERT INTO links.subscriptions (organization_id,link_id,email) "
+                "VALUES (%s,%s,'upgrade@example.com') RETURNING id",
+                (organization.uuid, link),
+            ).fetchone()[0]
+            connection.execute(
+                "INSERT INTO platform.activation_emails (organization_id,link_id,subscription_id) "
+                "VALUES (%s,%s,%s)",
+                (organization.uuid, link, subscription),
+            )
         subprocess.run(["make", "migrate"], cwd=ROOT, env=env, check=True)
+        with psycopg.connect(owner) as connection:
+            assert connection.execute(
+                "SELECT name FROM links.pools WHERE id=%s", (pool,)
+            ).fetchone() == ("Preserved pool",)
+            assert connection.execute(
+                "SELECT short_code FROM links.links WHERE id=%s", (link,)
+            ).fetchone() == ("upgrade1",)
+            connection.execute("DELETE FROM links.pools WHERE id=%s", (pool,))
+            for table in ("links.links", "links.subscriptions", "platform.activation_emails"):
+                assert (
+                    connection.execute(
+                        f"SELECT count(*) FROM {table} WHERE organization_id=%s",
+                        (organization.uuid,),
+                    ).fetchone()[0]
+                    == 0
+                )
+            connection.execute(
+                "DELETE FROM access.organizations WHERE organization_id=%s", (organization.uuid,)
+            )
+        print("Populated V1 -> V2 upgrade and deletion-chain cleanup verified.", flush=True)
         fga = f"http://127.0.0.1:{port(NAME + '-openfga', 8080)}"
         wait_http(fga + "/healthz")
         store = httpx.post(fga + "/stores", json={"name": NAME})

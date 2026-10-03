@@ -244,6 +244,23 @@ class _Catalog:
         _ = params
         if "AS owner_drift" in query or "AS private_access" in query:
             return _CatalogResult([(False,)])
+        if "AS pool_management" in query:
+            return _CatalogResult([(True,)])
+        if "FROM pg_catalog.pg_constraint" in query:
+            revision = next(
+                (record[0] for record in reversed(self.history) if record[3] != "SCHEMA"), "1"
+            )
+            return _CatalogResult(
+                [
+                    (
+                        name,
+                        *value[:-2],
+                        "r" if revision == "1" and name == "fk_links_pool_organization" else "c",
+                        True,
+                    )
+                    for name, value in schema_module._DELETION_FKS.items()
+                ]
+            )
         if "pg_catalog.pg_policy" in query:
             policies = SchemaAuthority("postgresql://db/links")._policies()
             return _CatalogResult(
@@ -270,7 +287,17 @@ class _Catalog:
             if "type IS DISTINCT FROM 'SCHEMA'" in query:
                 return _CatalogResult(
                     [
-                        (*record, schema_module._EXPECTED_HISTORY[0][4])
+                        (
+                            *record,
+                            next(
+                                (
+                                    row[4]
+                                    for row in schema_module._EXPECTED_HISTORY
+                                    if row[0] == record[0]
+                                ),
+                                0,
+                            ),
+                        )
                         for record in self.history
                         if record[3] != "SCHEMA"
                     ]
@@ -331,6 +358,7 @@ class _CatalogResult:
 
 
 _VERSION_ONE = ("1", "V1__link_pools.sql", True, "SQL")
+_CURRENT_HISTORY = tuple(row[:4] for row in schema_module._EXPECTED_HISTORY)
 _FLYWAY_SCHEMA_ROW = (None, "<< Flyway Schema Creation >>", True, "SCHEMA")
 
 
@@ -344,12 +372,20 @@ def test_schema_authority_admits_empty_target_and_current_flyway_schema(monkeypa
     authority = SchemaAuthority("postgresql://db.example/links")
     authority.prepare()
 
-    current = _Catalog(history=(_FLYWAY_SCHEMA_ROW, _VERSION_ONE))
+    current = _Catalog(history=(_FLYWAY_SCHEMA_ROW, *_CURRENT_HISTORY))
     _catalog(monkeypatch, current)
     status = authority.finish()
 
-    assert status.revision == "1"
+    assert status.revision == "2"
     assert "links_migrations.flyway_schema_history" in status.tables
+
+
+def test_schema_authority_admits_v1_for_upgrade_but_not_runtime(monkeypatch):
+    _catalog(monkeypatch, _Catalog(history=(_VERSION_ONE,)))
+    authority = SchemaAuthority("postgresql://db.example/links")
+    authority.prepare()
+    with pytest.raises(SchemaError, match="history"):
+        authority.check()
 
 
 @pytest.mark.parametrize(
@@ -503,10 +539,10 @@ def test_runtime_admission_rejects_owner_credentials_and_inherited_bypass(
                 return _CatalogResult([(role, elevated)])
             return super().execute(query, params)
 
-    _catalog(monkeypatch, Catalog(history=(_VERSION_ONE,)))
+    _catalog(monkeypatch, Catalog(history=_CURRENT_HISTORY))
     authority = SchemaAuthority("postgresql://db/links")
     if allowed:
-        assert authority.check(runtime=runtime).revision == "1"
+        assert authority.check(runtime=runtime).revision == "2"
     else:
         with pytest.raises(SchemaError, match="dedicated role"):
             authority.check(runtime=runtime)

@@ -34,6 +34,11 @@ The acceptance lane creates isolated local PostgreSQL, Redis, OpenFGA and Mailpi
 
 Start the API with uv run uvicorn app.main:app --port 8000 and the persistent worker with uv run python -m worker.run. /login opens the organization management interface. Reserve 1–100 links, share a public URL, then use Activate to assign a valid HTTP(S) destination. Visitors receive one activation email for that link.
 
+Choose a pool to inspect its links, rename it, or delete the pool and all its
+links. Select individual checkboxes or “Select this page”, then use “Delete
+selected” to remove several links together. Deletion also removes their
+subscriptions and queued notifications; other pools and unselected links remain.
+
 The interface uses server-rendered Jinja templates, HTMX, Tailwind CSS and daisyUI.
 Its assets follow the [daisyUI Django installation approach](https://daisyui.com/docs/install/django/):
 the standalone Tailwind executable compiles local daisyUI bundles, without Node.js or npm.
@@ -51,13 +56,24 @@ Company brand book, edition 1.3; see `app/static/brand/README.md` for asset prov
 | --- | --- |
 | POST /api/v1/pools | links:create |
 | GET /api/v1/pools | links:read |
+| GET /api/v1/pools/{pool_id} | links:read |
+| PATCH /api/v1/pools/{pool_id} | links:update |
+| DELETE /api/v1/pools/{pool_id} | links:delete |
 | GET /api/v1/links?pool_id=lpl_… | links:read |
 | POST /api/v1/links | links:create |
-| GET /api/v1/links/{lnk_id} | links:read |
-| PATCH /api/v1/links/{lnk_id} | links:update |
-| DELETE /api/v1/links/{lnk_id} | links:delete |
+| GET /api/v1/links/{link_id} | links:read |
+| PATCH /api/v1/links/{link_id} | links:update |
+| DELETE /api/v1/links/{link_id} | links:delete |
+| DELETE /api/v1/links?ids=lnk_…&ids=lnk_… | links:delete |
 
-Each management request also requires OpenFGA organization authority and an active local binding. Pool ownership comes exclusively from the verified org claim. Pool creation returns its id, name and size; list its links with the returned Location header. PATCH destination_url activates a reserved link. POST /{code}/subscriptions accepts a form email. Disabled links return 410, unknown links 404, reserved links a waiting page, and active links 307.
+Each management request also requires OpenFGA organization authority and an active local binding. Pool ownership comes exclusively from the verified org claim. Pool creation returns its id, name and size; its Location header identifies the canonical pool read. List its links with the pool_id filter. PATCH destination_url activates a reserved link. POST /{code}/subscriptions accepts a form email. Disabled links return 410, unknown links 404, reserved links a waiting page, and active links 307.
+
+Pool PATCH accepts only `{"name": "Upcoming launch"}`; `null` clears the name.
+Bulk DELETE accepts 1–100 distinct `ids` query values and an optional `pool_id`
+restriction. Any missing, foreign or mismatched link produces 404 without
+deleting the other selected links. Successful deletion returns 204. Invalid
+selections return 422; changed idempotency payloads return 409. Generated
+`/openapi.json` is the authoritative typed request/response contract.
 
 Every protected POST, PATCH and DELETE requires an `Idempotency-Key` of 1–128 ASCII letters, digits or `-_.:`. Retry the same operation with the same key and payload to receive its original result, with `Idempotency-Replayed: true`. A changed payload conflicts with 409. Receipts, state, audit and activation jobs commit together; failed commands leave no receipt. Authority and the active organization binding are checked again on replay. Browser forms carry their own hidden keys.
 

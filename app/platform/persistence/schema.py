@@ -16,16 +16,22 @@ from psycopg import Connection
 _MIGRATION_SCHEMA: Final = "links_migrations"
 _OWNED_SCHEMAS: Final = ("access", "links", "platform")
 _ROLE_PATTERN: Final = re.compile(r"links_[a-z][a-z0-9_]{0,24}")
-_SQL: Final = (Path(__file__).parent / "sql/migrations/V1__link_pools.sql").read_text()
+_MIGRATIONS: Final = tuple(sorted((Path(__file__).parent / "sql/migrations").glob("V*.sql")))
+_SQL: Final = "\n".join(path.read_text() for path in _MIGRATIONS)
 # Flyway CRC32 ignores line endings/BOM and is stored as a signed Java int.
-_MIGRATION_CHECKSUM: Final = zlib.crc32("".join(_SQL.lstrip("\ufeff").splitlines()).encode())
 _EXPECTED_HISTORY: Final = (
-    (
-        "1",
-        "V1__link_pools.sql",
-        True,
-        "SQL",
-        _MIGRATION_CHECKSUM if _MIGRATION_CHECKSUM < 2**31 else _MIGRATION_CHECKSUM - 2**32,
+    *(
+        (
+            path.name.split("__")[0][1:],
+            path.name,
+            True,
+            "SQL",
+            checksum if checksum < 2**31 else checksum - 2**32,
+        )
+        for path in _MIGRATIONS
+        for checksum in (
+            zlib.crc32("".join(path.read_text().lstrip("\ufeff").splitlines()).encode()),
+        )
     ),
 )
 _FUNCTION_SECURITY: Final = {
@@ -61,6 +67,40 @@ _RLS_TABLES: Final = frozenset(
         "platform.command_receipts",
     }
 )
+_DELETION_FKS: Final = {
+    "fk_links_pool_organization": (
+        "links.links",
+        "links.pools",
+        ("organization_id", "pool_id"),
+        ("organization_id", "id"),
+        "c",
+        True,
+    ),
+    "fk_subscriptions_link_organization": (
+        "links.subscriptions",
+        "links.links",
+        ("organization_id", "link_id"),
+        ("organization_id", "id"),
+        "c",
+        True,
+    ),
+    "fk_activation_emails_link_organization": (
+        "platform.activation_emails",
+        "links.links",
+        ("organization_id", "link_id"),
+        ("organization_id", "id"),
+        "c",
+        True,
+    ),
+    "fk_activation_emails_subscription": (
+        "platform.activation_emails",
+        "links.subscriptions",
+        ("organization_id", "link_id", "subscription_id"),
+        ("organization_id", "link_id", "id"),
+        "c",
+        True,
+    ),
+}
 
 
 class SchemaError(RuntimeError):
@@ -95,13 +135,13 @@ class SchemaAuthority:
             raise ValueError("application and worker database roles must be distinct")
 
     def prepare(self) -> None:
-        """Admit only an empty target or an exact Flyway V1 database."""
+        """Admit only an empty target or a verified packaged migration prefix."""
 
         with self._connection() as connection:
             self._require_runtime_roles(connection)
             history = self._history(connection)
             if history:
-                self._status(connection)
+                self._status(connection, upgrading=True)
                 return
             existing = self._owned_schemas(connection)
             if existing:
@@ -168,9 +208,14 @@ class SchemaAuthority:
         ):
             raise SchemaError("Links runtime roles must be login roles without elevated bypass")
 
-    def _status(self, connection: Connection[tuple[Any, ...]]) -> SchemaStatus:
-        if self._history(connection) != _EXPECTED_HISTORY:
+    def _status(
+        self, connection: Connection[tuple[Any, ...]], *, upgrading: bool = False
+    ) -> SchemaStatus:
+        history = self._history(connection)
+        expected = _EXPECTED_HISTORY[: len(history)] if upgrading else _EXPECTED_HISTORY
+        if not history or history != expected:
             raise SchemaError("Links Flyway history is missing or incompatible")
+        revision = str(history[-1][0])
         schemas = self._owned_schemas(connection)
         if schemas != frozenset((*_OWNED_SCHEMAS, _MIGRATION_SCHEMA)):
             raise SchemaError("Links PostgreSQL schemas are incomplete")
@@ -188,7 +233,7 @@ class SchemaAuthority:
             ).fetchall()
         )
         if tables != _EXPECTED_TABLES:
-            raise SchemaError("Links table catalog differs from Flyway V1")
+            raise SchemaError("Links table catalog differs from the packaged migrations")
 
         rls = frozenset(
             row[0]
@@ -203,7 +248,7 @@ class SchemaAuthority:
             ).fetchall()
         )
         if rls != _RLS_TABLES:
-            raise SchemaError("Links row-level security differs from Flyway V1")
+            raise SchemaError("Links row-level security differs from the packaged migrations")
 
         functions = {
             (row[0], row[1]): (row[2].strip(), row[3], tuple(row[4] or ()))
@@ -261,7 +306,7 @@ class SchemaAuthority:
                 WHEN n.nspname='links' AND c.relname='links'
                     THEN has_table_privilege(%s,c.oid,'INSERT,UPDATE,DELETE')
                 ELSE false END
-                OR (n.nspname='links' AND c.relname='pools'
+                OR (%s AND n.nspname='links' AND c.relname='pools'
                     AND has_table_privilege(%s,c.oid,'UPDATE,DELETE'))
                 OR (n.nspname||'.'||c.relname = ANY(%s) AND (
                     has_any_column_privilege(%s,c.oid,'SELECT,INSERT,UPDATE')
@@ -275,6 +320,7 @@ class SchemaAuthority:
                 self.app_role,
                 self.app_role,
                 self.worker_role,
+                revision == "1",
                 self.app_role,
                 [
                     "access.organizations",
@@ -291,8 +337,46 @@ class SchemaAuthority:
         ).fetchone()
         if private_access is None or private_access[0]:
             raise SchemaError("Links runtime grants violate role separation")
+        if revision != "1":
+            grants = connection.execute(
+                """SELECT has_table_privilege(%s, 'links.pools', 'UPDATE')
+                    AND has_table_privilege(%s, 'links.pools', 'DELETE') AS pool_management""",
+                (self.app_role, self.app_role),
+            ).fetchone()
+            if grants is None or not grants[0]:
+                raise SchemaError("Links pool management differs from the packaged migrations")
+        deletion = {
+            row[0]: (row[1], row[2], tuple(row[3]), tuple(row[4]), row[5], row[6])
+            for row in connection.execute(
+                """SELECT c.conname, n.nspname||'.'||t.relname,
+                    rn.nspname||'.'||rt.relname,
+                    ARRAY(SELECT a.attname::text FROM unnest(c.conkey) WITH ORDINALITY k(num, ord)
+                        JOIN pg_catalog.pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.num
+                        ORDER BY k.ord),
+                    ARRAY(SELECT a.attname::text FROM unnest(c.confkey) WITH ORDINALITY k(num, ord)
+                        JOIN pg_catalog.pg_attribute a ON a.attrelid=c.confrelid AND a.attnum=k.num
+                        ORDER BY k.ord), c.confdeltype, c.convalidated
+                    FROM pg_catalog.pg_constraint c
+                    JOIN pg_catalog.pg_class t ON t.oid=c.conrelid
+                    JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace
+                    JOIN pg_catalog.pg_class rt ON rt.oid=c.confrelid
+                    JOIN pg_catalog.pg_namespace rn ON rn.oid=rt.relnamespace
+                    WHERE n.nspname=ANY(%s) AND c.contype='f' AND c.conname=ANY(%s)""",
+                (list(_OWNED_SCHEMAS), list(_DELETION_FKS)),
+            ).fetchall()
+        }
+        expected_deletion = {
+            name: (
+                *value[:-2],
+                "r" if revision == "1" and name == "fk_links_pool_organization" else "c",
+                True,
+            )
+            for name, value in _DELETION_FKS.items()
+        }
+        if deletion != expected_deletion:
+            raise SchemaError("Links deletion constraints differ from the packaged migrations")
         return SchemaStatus(
-            revision="1",
+            revision=revision,
             tables=tuple(sorted(tables)),
             functions=tuple(sorted(functions)),
         )

@@ -80,3 +80,62 @@ async def test_deleting_a_link_preserves_the_pool_filter(
     assert f"/{deleted['short_code']}" not in after.text
     assert f"/{remaining['short_code']}" in after.text
     assert ("/outside" in after.text) is (not filtered)
+
+
+async def test_pool_forms_rename_and_delete_the_selected_pool(identity_client, issuer, ephemeral):
+    client = identity_client
+    await sign_in(client)
+    state = json.loads(await ephemeral.get("session", client.cookies.get("plazia_links_session")))
+    headers = bearer(issuer)
+    pool = (
+        await client.post("/api/v1/pools", headers=headers, json={"size": 2, "name": "Launch"})
+    ).json()
+    pool_id = pool["id"]
+    path = f"/dashboard/links?pool_id={pool_id}"
+    page = await client.get(path)
+    assert f'action="/dashboard/pools/{pool_id}"' in page.text
+    assert ">Save</button>" in page.text and "Delete pool" in page.text
+    data = {"csrf_token": state["csrf_token"], "name": "Renamed"}
+    renamed = await client.post(f"/dashboard/pools/{pool_id}", data=data)
+    assert renamed.status_code == 303 and renamed.headers["location"] == path
+    assert "Renamed" in (await client.get(path)).text
+    invalid = await client.post(
+        f"/dashboard/pools/{pool_id}",
+        data={**data, "name": "x" * 201},
+        headers={"HX-Request": "true"},
+    )
+    assert invalid.status_code == 422 and invalid.headers["HX-Push-Url"] == "false"
+    assert 'aria-invalid="true"' in invalid.text and f'value="{"x" * 201}"' in invalid.text
+    deleted = await client.post(
+        f"/dashboard/pools/{pool_id}/delete", data={"csrf_token": state["csrf_token"]}
+    )
+    assert deleted.status_code == 303 and deleted.headers["location"] == "/dashboard/links"
+    assert (await client.get(path)).status_code == 404
+
+
+async def test_selection_form_deletes_only_checked_links_and_keeps_pool(
+    identity_client, issuer, ephemeral
+):
+    client = identity_client
+    await sign_in(client)
+    state = json.loads(await ephemeral.get("session", client.cookies.get("plazia_links_session")))
+    headers = bearer(issuer)
+    pool = (await client.post("/api/v1/pools", headers=headers, json={"size": 3})).json()
+    rows = (
+        await client.get("/api/v1/links", headers=headers, params={"pool_id": pool["id"]})
+    ).json()["items"]
+    path = f"/dashboard/links?pool_id={pool['id']}"
+    action = f"/dashboard/links/delete?pool_id={pool['id']}"
+    page = await client.get(path)
+    assert f'action="{action}"' in page.text
+    assert page.text.count('form="delete-selection"') == 3
+    assert "Select this page" in page.text and "Delete selected" in page.text
+    data = {"csrf_token": state["csrf_token"], "ids": [row["id"] for row in rows[:2]]}
+    denied = await client.post(action, data={**data, "csrf_token": "wrong"})
+    assert denied.status_code == 403
+    deleted = await client.post(action, data=data, headers={"HX-Request": "true"})
+    assert deleted.status_code == 303 and deleted.headers["location"] == path
+    after = await client.get(path)
+    assert "1 link in this pool" in after.text
+    assert all(f"/{row['short_code']}" not in after.text for row in rows[:2])
+    assert f"/{rows[2]['short_code']}" in after.text

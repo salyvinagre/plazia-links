@@ -9,19 +9,25 @@ from app.contexts.access.contracts import Principal
 from app.contexts.links.contracts import (
     CreateLinkCommand,
     DeleteLinkCommand,
+    DeleteLinksCommand,
+    DeletePoolCommand,
     GetLinkQuery,
+    GetPoolQuery,
     ListLinksQuery,
     ListPoolsQuery,
+    RenamePoolCommand,
     ReservePoolCommand,
     UpdateLinkCommand,
 )
 from app.interfaces.api.schemas.links import (
     CreateLinkRequest,
+    DeleteLinksParams,
     LinkFilter,
     LinkResponse,
     PageResponse,
     Pagination,
     PoolResponse,
+    RenamePoolRequest,
     ReservePoolRequest,
     UpdateLinkRequest,
 )
@@ -93,6 +99,23 @@ async def create_link(
     return LinkResponse.from_application(result, runtime(request).config.public_base_url)
 
 
+@router.delete("/links", status_code=204, operation_id="delete_links")
+async def delete_links(
+    request: Request,
+    actor: Deleter,
+    filters: Annotated[DeleteLinksParams, Query()],
+    _key: KeyHeader,
+) -> None:
+    """Atomically delete 1–100 explicit links. Any unavailable selection fails the whole request."""
+    await mutate(
+        request,
+        DeleteLinksCommand(
+            actor, filters.identifiers(), PoolId(filters.pool_id) if filters.pool_id else None
+        ),
+        actor,
+    )
+
+
 @router.get("/links/{link_id}", response_model=LinkResponse, operation_id="get_link")
 async def get_link(link_id: str, request: Request, actor: Reader) -> LinkResponse:
     """Read one link belonging to the current organization."""
@@ -127,7 +150,7 @@ async def reserve_pool(
 ) -> PoolResponse:
     """Reserve 1–100 short links without destinations in one atomic pool."""
     pool = await mutate(request, ReservePoolCommand(actor, data.size, data.name), actor)
-    response.headers["Location"] = f"{ApiContract.resource('links')}?pool_id={pool.id}"
+    response.headers["Location"] = ApiContract.resource("pools", pool.id)
     return PoolResponse.from_application(pool)
 
 
@@ -150,3 +173,27 @@ async def list_pools(
             next_token=pagination.next_token(actor, "pools", result.page, result.has_next)
         ),
     )
+
+
+@router.get("/pools/{pool_id}", response_model=PoolResponse, operation_id="get_pool")
+async def get_pool(pool_id: str, request: Request, actor: Reader) -> PoolResponse:
+    """Read one pool and its current number of links in the verified organization."""
+    pool = await queries(request).ask(
+        GetPoolQuery(actor, PoolId(pool_id)), context=request_context(request, actor)
+    )
+    return PoolResponse.from_application(pool)
+
+
+@router.patch("/pools/{pool_id}", response_model=PoolResponse, operation_id="rename_pool")
+async def rename_pool(
+    pool_id: str, data: RenamePoolRequest, request: Request, actor: Updater, _key: KeyHeader
+) -> PoolResponse:
+    """Rename a pool without changing its links. Repeated keys replay the original name."""
+    pool = await mutate(request, RenamePoolCommand(actor, PoolId(pool_id), data.name), actor)
+    return PoolResponse.from_application(pool)
+
+
+@router.delete("/pools/{pool_id}", status_code=204, operation_id="delete_pool")
+async def delete_pool(pool_id: str, request: Request, actor: Deleter, _key: KeyHeader) -> None:
+    """Delete a pool, all its links, subscriptions and queued activation emails atomically."""
+    await mutate(request, DeletePoolCommand(actor, PoolId(pool_id)), actor)

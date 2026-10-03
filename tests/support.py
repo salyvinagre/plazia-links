@@ -113,6 +113,14 @@ class MemoryRepository:
         self.subscriptions = {pair for pair in self.subscriptions if pair[0] != link_id}
         self.jobs = {pair for pair in self.jobs if pair[0] != link_id}
 
+    async def delete_many(self, organization_id, ids, pool_id=None):
+        for id in ids:
+            row = await self.get(organization_id, id)
+            if pool_id is not None and row.pool_id != pool_id:
+                raise LinkNotFoundError
+        for id in ids:
+            await self.delete(organization_id, id)
+
     async def reserve(self, organization_id, name, codes):
         pool = PoolDto(PoolId.new(), name, len(codes), datetime.now(UTC))
         self.pool_rows[pool.id] = (organization_id, pool)
@@ -124,10 +132,28 @@ class MemoryRepository:
         entry = self.pool_rows.get(pool_id)
         if entry is None or entry[0] != organization_id:
             raise LinkNotFoundError
-        return entry[1]
+        size = sum(row.pool_id == pool_id for row in self.links.values())
+        return replace(entry[1], size=size)
+
+    async def rename_pool(self, organization_id, pool_id, name):
+        pool = await self.get_pool(organization_id, pool_id)
+        pool = replace(pool, name=name)
+        self.pool_rows[pool_id] = (organization_id, pool)
+        return pool
+
+    async def delete_pool(self, organization_id, pool_id):
+        await self.get_pool(organization_id, pool_id)
+        ids = tuple(row.id for row in self.links.values() if row.pool_id == pool_id)
+        for id in ids:
+            await self.delete(organization_id, id)
+        del self.pool_rows[pool_id]
 
     async def pools(self, organization_id, page, page_size):
-        rows = [p for org, p in self.pool_rows.values() if org == organization_id]
+        rows = [
+            await self.get_pool(organization_id, p.id)
+            for org, p in self.pool_rows.values()
+            if org == organization_id
+        ]
         return PageDto(
             tuple(rows[(page - 1) * page_size : page * page_size]), len(rows), page, page_size
         )

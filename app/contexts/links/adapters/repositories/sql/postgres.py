@@ -68,7 +68,7 @@ class PostgresLinkRepository:
             return CommandResultDto(None, True)
         values = dict(row[1]["value"])
         values["created_at"] = datetime.fromisoformat(values["created_at"])
-        if action == "ReservePoolCommand":
+        if action in {"ReservePoolCommand", "RenamePoolCommand"}:
             values["id"] = PoolId(values["id"])
             return CommandResultDto(PoolDto(**values), True)
         values["id"] = LinkId(values["id"])
@@ -216,12 +216,26 @@ class PostgresLinkRepository:
         return self._link(row)
 
     async def delete(self, organization_id: OrganizationId, link_id: LinkId) -> None:
+        await self.delete_many(organization_id, (link_id,))
+
+    async def delete_many(
+        self,
+        organization_id: OrganizationId,
+        ids: tuple[LinkId, ...],
+        pool_id: PoolId | None = None,
+    ) -> None:
+        parameters: tuple[object, ...] = (organization_id.uuid, [id.uuid for id in ids])
+        where = "organization_id = %s AND id = ANY(%s)"
+        if pool_id is not None:
+            where += " AND pool_id = %s"
+            parameters += (pool_id.uuid,)
+        # Lock in a stable order before deleting overlapping selections.
         cursor = await self._connection.execute(
-            "DELETE FROM links.links WHERE organization_id = %s AND id = %s RETURNING id",
-            (organization_id.uuid, link_id.uuid),
+            f"SELECT id FROM links.links WHERE {where} ORDER BY id FOR UPDATE", parameters
         )
-        if await cursor.fetchone() is None:
-            raise LinkNotFoundError(str(link_id))
+        if len(await cursor.fetchall()) != len(ids):
+            raise LinkNotFoundError("selection")
+        await self._connection.execute(f"DELETE FROM links.links WHERE {where}", parameters)
 
     async def reserve(
         self,
@@ -264,6 +278,25 @@ class PostgresLinkRepository:
                     continue
                 raise
         raise LinkConflictError("could not allocate a unique database-generated identifier")
+
+    async def rename_pool(
+        self, organization_id: OrganizationId, pool_id: PoolId, name: str | None
+    ) -> PoolDto:
+        cursor = await self._connection.execute(
+            "UPDATE links.pools SET name = %s WHERE organization_id = %s AND id = %s RETURNING id",
+            (name, organization_id.uuid, pool_id.uuid),
+        )
+        if await cursor.fetchone() is None:
+            raise LinkNotFoundError(str(pool_id))
+        return await self.get_pool(organization_id, pool_id)
+
+    async def delete_pool(self, organization_id: OrganizationId, pool_id: PoolId) -> None:
+        cursor = await self._connection.execute(
+            "DELETE FROM links.pools WHERE organization_id = %s AND id = %s RETURNING id",
+            (organization_id.uuid, pool_id.uuid),
+        )
+        if await cursor.fetchone() is None:
+            raise LinkNotFoundError(str(pool_id))
 
     async def get_pool(self, organization_id: OrganizationId, pool_id: PoolId) -> PoolDto:
         cursor = await self._connection.execute(

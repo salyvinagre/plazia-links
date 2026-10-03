@@ -31,6 +31,12 @@ from app.contexts.links.application.commands.create_link.command import CreateLi
 from app.contexts.links.application.commands.create_link.handler import CreateLinkHandler
 from app.contexts.links.application.commands.delete_link.command import DeleteLinkCommand
 from app.contexts.links.application.commands.delete_link.handler import DeleteLinkHandler
+from app.contexts.links.application.commands.delete_links.command import DeleteLinksCommand
+from app.contexts.links.application.commands.delete_links.handler import DeleteLinksHandler
+from app.contexts.links.application.commands.delete_pool.command import DeletePoolCommand
+from app.contexts.links.application.commands.delete_pool.handler import DeletePoolHandler
+from app.contexts.links.application.commands.rename_pool.command import RenamePoolCommand
+from app.contexts.links.application.commands.rename_pool.handler import RenamePoolHandler
 from app.contexts.links.application.commands.reserve_pool.command import ReservePoolCommand
 from app.contexts.links.application.commands.reserve_pool.handler import ReservePoolHandler
 from app.contexts.links.application.commands.subscribe_link.command import SubscribeLinkCommand
@@ -40,6 +46,8 @@ from app.contexts.links.application.commands.update_link.handler import UpdateLi
 from app.contexts.links.application.dto.links import CommandResultDto
 from app.contexts.links.application.queries.get_link.handler import GetLinkHandler
 from app.contexts.links.application.queries.get_link.query import GetLinkQuery
+from app.contexts.links.application.queries.get_pool.handler import GetPoolHandler
+from app.contexts.links.application.queries.get_pool.query import GetPoolQuery
 from app.contexts.links.application.queries.list_links.handler import ListLinksHandler
 from app.contexts.links.application.queries.list_links.query import ListLinksQuery
 from app.contexts.links.application.queries.list_pools.handler import ListPoolsHandler
@@ -59,11 +67,15 @@ COMMANDS = {
     CreateLinkCommand: CreateLinkHandler,
     UpdateLinkCommand: UpdateLinkHandler,
     DeleteLinkCommand: DeleteLinkHandler,
+    DeleteLinksCommand: DeleteLinksHandler,
+    DeletePoolCommand: DeletePoolHandler,
+    RenamePoolCommand: RenamePoolHandler,
     ReservePoolCommand: ReservePoolHandler,
     SubscribeLinkCommand: SubscribeLinkHandler,
 }
 QUERIES = {
     GetLinkQuery: GetLinkHandler,
+    GetPoolQuery: GetPoolHandler,
     ListLinksQuery: ListLinksHandler,
     ListPoolsQuery: ListPoolsHandler,
     ResolveLinkQuery: ResolveLinkHandler,
@@ -73,8 +85,12 @@ PERMISSIONS = {
     CreateLinkCommand: "links:create",
     UpdateLinkCommand: "links:update",
     DeleteLinkCommand: "links:delete",
+    DeleteLinksCommand: "links:delete",
+    DeletePoolCommand: "links:delete",
+    RenamePoolCommand: "links:update",
     ReservePoolCommand: "links:create",
     GetLinkQuery: "links:read",
+    GetPoolQuery: "links:read",
     ListLinksQuery: "links:read",
     ListPoolsQuery: "links:read",
     ResolveOrganizationQuery: "links:read",
@@ -160,15 +176,15 @@ def build_buses(
             )
         )
 
-    def command_resolver(kind: type[Any]) -> CommandHandlerResolver:
+    def command_resolver(intent: type[Any], kind: type[Any]) -> CommandHandlerResolver:
         return lambda uow: (
             ScopedCommandHandler(kind, cast(Scope, uow.scope), telemetry)
-            if kind in {CreateLinkHandler, ReservePoolHandler, UpdateLinkHandler, DeleteLinkHandler}
+            if intent in PERMISSIONS
             else handler(kind, cast(Scope, uow.scope))
         )
 
     command_bus: InProcessCommandBus[Any] = InProcessCommandBus(
-        handlers={intent: command_resolver(kind) for intent, kind in COMMANDS.items()},
+        handlers={intent: command_resolver(intent, kind) for intent, kind in COMMANDS.items()},
         unit_of_work_factory=container.uow_factory(),
         authorizers={intent: authorize for intent in COMMANDS if intent in PERMISSIONS},
     )

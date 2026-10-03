@@ -18,6 +18,16 @@ make migrate runs read-only admission, literal Flyway migrate (with validation o
 
 Only an owner credential can bind/disable organizations. Supply the configured issuer and owner DSN to the operator command; never run the API with that credential. disable-organization revokes existing management sessions on their next request without affecting public destinations.
 
+Pool management requires Flyway V2. Run the same owner-scoped `make migrate`
+before starting this application revision against a V1 database. Admission
+accepts verified V1 history for upgrade; runtime refuses an unmigrated V1
+database. V2 adds pool UPDATE/DELETE privileges for the API role and cascades
+pool deletion to links. The worker retains no pool-management access. No
+conversion from inherited ORM storage is provided.
+Admission verifies all four deletion-chain foreign keys, including their tables,
+ordered tenant columns, cascade actions and validation state, so dropped or
+altered constraints cannot silently leave subscriptions or queued mail behind.
+
 ## Runtime
 Container entrypoint: app.main:app. Serverless ASGI entrypoint: app.index:app; database scopes open per invocation, while container mode uses a lazy shared PostgreSQL pool. Both require Redis and OpenFGA. /health is startup readiness evidence, not ongoing SMTP or provider health. Vercel requires the same shared dependency artifacts in its build context; the sibling editable-source development checkout alone is not a self-contained cloud upload.
 
