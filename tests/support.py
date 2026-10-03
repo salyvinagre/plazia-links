@@ -113,13 +113,23 @@ class MemoryRepository:
         self.subscriptions = {pair for pair in self.subscriptions if pair[0] != link_id}
         self.jobs = {pair for pair in self.jobs if pair[0] != link_id}
 
-    async def delete_many(self, organization_id, ids, pool_id=None):
+    async def delete_many(self, organization_id, ids, pool_id=None, *, all=False):
+        if all:
+            if pool_id is not None:
+                await self.get_pool(organization_id, pool_id)
+            ids = tuple(
+                id
+                for id, row in self.links.items()
+                if self.owners[id] == organization_id
+                and (pool_id is None or row.pool_id == pool_id)
+            )
         for id in ids:
             row = await self.get(organization_id, id)
             if pool_id is not None and row.pool_id != pool_id:
                 raise LinkNotFoundError
         for id in ids:
             await self.delete(organization_id, id)
+        return ids
 
     async def reserve(self, organization_id, name, codes):
         pool = PoolDto(PoolId.new(), name, len(codes), datetime.now(UTC))
@@ -171,8 +181,8 @@ class MemoryRepository:
     async def ready_subscriptions(self, organization_id, link_id, context=None):
         self.jobs.update(pair for pair in self.subscriptions if pair[0] == link_id)
 
-    async def audit(self, organization_id, action, resource_id, context):
-        self.audits.append((organization_id, action, resource_id, context))
+    async def audit(self, organization_id, action, resource_ids, context):
+        self.audits.extend((organization_id, action, id, context) for id in resource_ids)
 
 
 class MemoryDatabase:

@@ -45,7 +45,9 @@ class LinkRepository(Protocol):
         organization_id: OrganizationId,
         ids: tuple[LinkId, ...],
         pool_id: PoolId | None = None,
-    ) -> None: ...
+        *,
+        all: bool = False,
+    ) -> tuple[LinkId, ...]: ...
     async def reserve(
         self, organization_id: OrganizationId, name: str | None, codes: tuple[str, ...]
     ) -> PoolDto: ...
@@ -66,6 +68,6 @@ class LinkRepository(Protocol):
         self,
         organization_id: OrganizationId,
         action: str,
-        resource_id: LinkId | PoolId,
+        resource_ids: tuple[LinkId | PoolId, ...],
         context: Invocation,
     ) -> None: ...

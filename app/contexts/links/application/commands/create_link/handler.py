@@ -27,6 +27,6 @@ class CreateLinkHandler:
                 if command.draft.short_code:
                     raise
                 continue
-            await self._repository.audit(organization.id, "create", link.id, context)
+            await self._repository.audit(organization.id, "create", (link.id,), context)
             return link
         raise LinkConflictError

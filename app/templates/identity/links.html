@@ -1,5 +1,41 @@
 {% extends "identity/base.html" %}
 {% block title %}Links · Plazia Links{% endblock %}
+{% macro action_trigger(label) %}
+<summary class="btn btn-ghost btn-square btn-sm text-muted hover:bg-primary/10 hover:text-primary"
+         aria-label="{{ label }}">
+  <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/>
+  </svg>
+</summary>
+{% endmacro %}
+{% macro library_actions() %}
+{% if (pool and 'links:update' in session.principal.scopes) or ('links:delete' in session.principal.scopes and (pool or links.items)) %}
+<details class="dropdown dropdown-end shrink-0" name="resource-actions" data-library-actions>
+  {{ action_trigger('Pool actions' if pool else 'Link actions') }}
+  {% if pool and 'links:delete' in session.principal.scopes %}
+  <form id="delete-pool-form" hidden method="post" action="/dashboard/pools/{{ pool.id }}/delete{% if pools.page > 1 %}?pool_page={{ pools.page }}{% endif %}"
+        hx-disabled-elt="#delete-pool-action" data-confirm="Delete this pool and all {{ pool.size }} of its links? Subscriptions and queued notifications will also be removed.">
+    <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
+    <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+  </form>
+  {% endif %}
+  <ul class="dropdown-content menu menu-md z-20 w-48 rounded-box border border-base-300 bg-base-100 shadow-lg">
+    {% if pool and 'links:update' in session.principal.scopes %}
+    <li><button class="min-h-11" type="button" aria-controls="rename-pool-panel" data-rename-pool>Rename pool</button></li>
+    {% endif %}
+    {% if links.items and 'links:delete' in session.principal.scopes %}
+    <li><button class="min-h-11" type="button" aria-controls="delete-selection" data-select-links>Delete links</button></li>
+    {% endif %}
+    {% if pool and 'links:delete' in session.principal.scopes %}
+    <li class="mt-1 border-t border-base-300 pt-1">
+      <button class="min-h-11 text-danger hover:bg-danger/10 focus:bg-danger/10" type="submit"
+              id="delete-pool-action" form="delete-pool-form">Delete pool</button>
+    </li>
+    {% endif %}
+  </ul>
+</details>
+{% endif %}
+{% endmacro %}
 {% block content %}
 <div class="mb-6 flex flex-col items-start justify-between gap-5 sm:mb-8 sm:flex-row sm:items-center sm:gap-6">
   <div>
@@ -44,36 +80,41 @@
   <div class="mb-4 flex items-center gap-3">
     <h2 class="mb-0" id="library-heading">Your links</h2>
     <span class="badge badge-ghost badge-sm text-muted">{{ links.total }}</span>
+    {% if not pool %}<div class="ml-auto">{{ library_actions() }}</div>{% endif %}
   </div>
   <nav class="tabs tabs-box pool-nav mb-5 gap-1 bg-transparent p-0 sm:gap-2" aria-label="Pools">
     <a class="tab min-h-11{% if not pool_id %} tab-active{% endif %}"
-       href="/dashboard/links" {% if not pool_id %}aria-current="page"{% endif %}>All links</a>
+       href="/dashboard/links{% if pools.page > 1 %}?pool_page={{ pools.page }}{% endif %}" {% if not pool_id %}aria-current="page"{% endif %}>All links</a>
     {% for pool in pools.items %}
     <a class="tab h-auto min-h-11 max-w-full gap-2 whitespace-normal{% if pool_id == pool.id|string %} tab-active{% endif %}"
-       href="?pool_id={{ pool.id }}" {% if pool_id == pool.id|string %}aria-current="page"{% endif %}>
+       href="?pool_id={{ pool.id }}{% if pools.page > 1 %}&amp;pool_page={{ pools.page }}{% endif %}" {% if pool_id == pool.id|string %}aria-current="page"{% endif %}>
       <span class="min-w-0 [overflow-wrap:anywhere]">{{ pool.name or 'Untitled pool' }}</span><span class="text-xs">{{ pool.size }}</span>
     </a>
     {% endfor %}
   </nav>
+  {% if pools.page > 1 or pools.has_next %}
+  <nav class="mb-5 flex flex-wrap items-center gap-4 text-sm text-muted" aria-label="Pool pagination">
+    {% if pools.page > 1 %}
+    <a class="inline-flex min-h-11 items-center" href="?pool_page={{ pools.page - 1 }}{% if pool_id %}&amp;pool_id={{ pool_id }}{% endif %}">Previous pools</a>
+    {% endif %}
+    <span>Pool page {{ pools.page }} · {{ pools.total }} pools</span>
+    {% if pools.has_next %}
+    <a class="inline-flex min-h-11 items-center" href="?pool_page={{ pools.page + 1 }}{% if pool_id %}&amp;pool_id={{ pool_id }}{% endif %}">Next pools</a>
+    {% endif %}
+  </nav>
+  {% endif %}
   {% if pool %}
   <section class="card mb-5 gap-4 border border-base-300 bg-base-100 p-5 sm:p-6" aria-labelledby="pool-heading">
-    <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
         <h3 id="pool-heading" class="break-words">{{ pool.name or 'Untitled pool' }}</h3>
         <p class="mb-0 text-sm text-muted">{{ pool.size }} link{{ '' if pool.size == 1 else 's' }} in this pool</p>
       </div>
-      {% if 'links:delete' in session.principal.scopes %}
-      <form method="post" action="/dashboard/pools/{{ pool.id }}/delete" hx-disabled-elt="find button"
-            data-confirm="Delete this pool and all {{ pool.size }} of its links? Subscriptions and queued notifications will also be removed.">
-        <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
-        <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
-        <button class="btn btn-ghost text-danger hover:bg-danger/10" type="submit">Delete pool</button>
-      </form>
-      {% endif %}
+      {{ library_actions() }}
     </div>
     {% if 'links:update' in session.principal.scopes %}
-    <form class="flex flex-col gap-3 sm:flex-row sm:items-end" method="post"
-          action="/dashboard/pools/{{ pool.id }}" hx-disabled-elt="find button">
+    <form id="rename-pool-panel"{% if not pool_error %} hidden{% endif %} class="flex flex-col gap-3 sm:flex-row sm:items-end" method="post"
+          action="/dashboard/pools/{{ pool.id }}{% if pools.page > 1 %}?pool_page={{ pools.page }}{% endif %}" hx-disabled-elt="find button">
       <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
       <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
       <div class="min-w-0 flex-1">
@@ -81,7 +122,7 @@
         <input class="input w-full" id="rename-pool" name="name" maxlength="200"
                value="{{ pool_name if pool_error else pool.name or '' }}" {% if pool_error %}aria-invalid="true" aria-describedby="pool-error"{% endif %}>
       </div>
-      <a class="btn btn-ghost hover:bg-primary/10 hover:text-primary" href="?pool_id={{ pool.id }}{% if links.page > 1 %}&amp;page={{ links.page }}{% endif %}">Cancel</a>
+      <a class="btn btn-ghost hover:bg-primary/10 hover:text-primary" href="?pool_id={{ pool.id }}{% if pools.page > 1 %}&amp;pool_page={{ pools.page }}{% endif %}{% if links.page > 1 %}&amp;page={{ links.page }}{% endif %}">Cancel</a>
       <button class="btn btn-primary" type="submit">Save</button>
     </form>
     {% if pool_error %}<p id="pool-error" class="mb-0 text-sm text-danger" role="alert">{{ pool_error }}</p>{% endif %}
@@ -90,20 +131,23 @@
   {% endif %}
   {% if links.items %}
   {% if 'links:delete' in session.principal.scopes %}
-  <form id="delete-selection" class="mb-4 flex flex-wrap items-center justify-between gap-3"
-        method="post" action="/dashboard/links/delete{% if pool_id %}?pool_id={{ pool_id|urlencode }}{% endif %}"
+  <form id="delete-selection" hidden class="mb-4 flex flex-wrap items-center justify-between gap-3"
+        method="post" action="/dashboard/links/delete{% if pool_id %}?pool_id={{ pool_id|urlencode }}{% if pools.page > 1 %}&amp;pool_page={{ pools.page }}{% endif %}{% elif pools.page > 1 %}?pool_page={{ pools.page }}{% endif %}"
         hx-disabled-elt="find button"
-        data-confirm="Delete the selected links? Their subscriptions and queued notifications will also be removed.">
+        data-confirm="Delete the selected links? Their subscriptions and queued notifications will also be removed."
+        data-confirm-all="Delete all links in {{ 'this pool' if pool else 'your organization' }}, including every page? Their subscriptions and queued notifications will also be removed.">
     <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
     <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
     <label class="mb-0 flex min-h-11 items-center gap-3 text-sm">
-      <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" data-select-all aria-label="Select all links on this page">
-      Select this page
+      <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" name="all" value="true"
+             data-select-all data-total="{{ links.total }}" aria-label="Select all links">
+      Select all links
     </label>
-    <div class="flex items-center gap-3">
-      <span id="selection-count" class="text-xs text-muted" aria-live="polite">0 selected</span>
+    <span id="selection-count" class="ml-auto whitespace-nowrap text-xs text-muted" aria-live="polite">0 selected</span>
+    <div class="flex w-full items-center justify-end gap-3 sm:w-auto">
+      <button class="btn btn-ghost" type="button" data-cancel-selection>Cancel selection</button>
       <button class="btn btn-ghost border border-base-300 text-danger hover:bg-danger/10"
-              type="submit" data-delete-selection>Delete selected</button>
+              type="submit" data-delete-selection disabled>Delete selected</button>
     </div>
   </form>
   {% endif %}
@@ -124,7 +168,7 @@
             <div class="flex items-start gap-3">
               {% if 'links:delete' in session.principal.scopes %}
               <input type="checkbox" class="checkbox checkbox-primary checkbox-sm mt-1 shrink-0" name="ids"
-                     value="{{ link.id }}" form="delete-selection" data-select-link
+                     value="{{ link.id }}" form="delete-selection" data-select-link hidden
                      aria-label="Select {{ link.short_code }}">
               {% endif %}
               <div class="min-w-0">
@@ -156,16 +200,11 @@
           <td role="cell" data-label="Actions">
             {% if 'links:update' in session.principal.scopes or 'links:delete' in session.principal.scopes %}
             <div class="flex justify-end">
-              <details class="dropdown dropdown-end{% if loop.last and not loop.first %} dropdown-top{% endif %}" name="link-actions">
-                <summary class="btn btn-ghost btn-square btn-sm text-muted hover:bg-primary/10 hover:text-primary"
-                         aria-label="Actions for {{ link.title or link.short_code }}">
-                  <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/>
-                  </svg>
-                </summary>
+              <details class="dropdown dropdown-end{% if loop.last and not loop.first %} dropdown-top{% endif %}" name="resource-actions">
+                {{ action_trigger('Actions for ' ~ (link.title or link.short_code)) }}
                 {% if 'links:delete' in session.principal.scopes %}
                 <form id="delete-form-{{ link.id }}" hidden hx-disabled-elt="#delete-action-{{ link.id }}"
-                      method="post" action="/dashboard/links/{{ link.id }}/delete{% if pool_id %}?pool_id={{ pool_id|urlencode }}{% endif %}">
+                      method="post" action="/dashboard/links/{{ link.id }}/delete{% if pool_id %}?pool_id={{ pool_id|urlencode }}{% if pools.page > 1 %}&amp;pool_page={{ pools.page }}{% endif %}{% elif pools.page > 1 %}?pool_page={{ pools.page }}{% endif %}">
                   <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
                   <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
                 </form>
@@ -217,11 +256,11 @@
   {% endif %}
   <nav class="flex items-center justify-center gap-6 pt-6 text-[13px] text-muted" aria-label="Pagination">
     {% if links.page > 1 %}
-    <a class="inline-flex min-h-11 items-center" href="?page={{ links.page - 1 }}{% if pool_id %}&amp;pool_id={{ pool_id }}{% endif %}">Previous</a>
+    <a class="inline-flex min-h-11 items-center" href="?page={{ links.page - 1 }}{% if pool_id %}&amp;pool_id={{ pool_id }}{% endif %}{% if pools.page > 1 %}&amp;pool_page={{ pools.page }}{% endif %}">Previous</a>
     {% endif %}
     <span>Page {{ links.page }} · {{ links.total }} links</span>
     {% if links.has_next %}
-    <a class="inline-flex min-h-11 items-center" href="?page={{ links.page + 1 }}{% if pool_id %}&amp;pool_id={{ pool_id }}{% endif %}">Next</a>
+    <a class="inline-flex min-h-11 items-center" href="?page={{ links.page + 1 }}{% if pool_id %}&amp;pool_id={{ pool_id }}{% endif %}{% if pools.page > 1 %}&amp;pool_page={{ pools.page }}{% endif %}">Next</a>
     {% endif %}
   </nav>
 </section>

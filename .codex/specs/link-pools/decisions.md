@@ -34,3 +34,66 @@ Generated CSS and .env.example are build outputs of the existing tools.
 Access ports now live in application/ports and the telemetry catalog in its own
 application drawer. Imports and contract exports were moved, not duplicated.
 PLZL_ remains the explicit user-selected prefix. CRAP is deferred by instruction.
+
+## Pool actions UX and source-line budget
+
+Pool management is secondary: reuse the existing native details/daisyUI dropdown
+for Rename pool, Delete links and Delete pool. A template-local macro shares the
+pool and All links menu; a shared template trigger gives pool and row actions
+identical button/icon sizes and hover behavior. Existing forms, routes,
+capabilities, keys and CSRF own all writes. No new endpoint, domain type,
+service, dependency or custom menu framework is needed. Empty pools omit
+Delete links.
+
+Delete links enters a cancellable selection mode. The existing updateSelection
+function owns checkbox visibility, clearing and counts; the existing delegated
+click and Escape handlers own opening, dismissal and focus. Rename reveals the
+existing form, and its Cancel link reuses the current GET rather than adding a
+second name buffer. Server validation keeps that form visible and focuses its
+invalid field after an HTMX swap.
+
+Select all links means the entire matching collection across pages: the current
+pool, or all organization links including standalone links. It is explicit;
+checking every visible row never promotes the selection to unseen links. All
+mode disables row inputs so the form submits only the all selector; clearing it
+restores individual selection. The counter and confirmation identify all mode.
+
+Extend the canonical DELETE /api/v1/links with typed `all=true` and optional
+`pool_id`; explicit IDs remain bounded to 1–100 and cannot be combined with all.
+DeleteLinksCommand owns that invariant with shared BoolValue normalization.
+DeleteLinksParams converts both HTTP surfaces into that same command. The
+existing repository locks matching IDs in stable order and deletes exactly that
+set. Its audit method now accepts tuples and inserts all per-resource facts in
+one SQL statement, avoiding one database round trip per deleted link. Receipts,
+deletion, cascades and audits still commit together. Pools remain; foreign pools
+are unavailable. All matches are chosen when the command executes, while replay
+returns the original success without deleting later-created links.
+
+Against the working source immediately before this UX change, nonblank,
+noncomment production source grows by 73 lines: template +29, JavaScript +27
+and backend Python +17. The markup supplies shared action controls; the script
+owns selection transitions, counts and focus. Backend growth is required for
+explicit collection selection, deleting the locked set and batch auditing;
+shared schema conversion removes duplicated command construction. Responsive
+fixes only change existing layout classes. Tests grow by 234 lines, extending
+existing fixtures and flows for keyboard/cancellation/default-hidden state,
+matching trigger sizes, across-page browser deletion, 100/201-link API and
+database deletion, malformed modes, tenant isolation, rollback, cascades, audit
+counts and replay after new links. Counts are separate from the earlier Python
+second-pass budget; generated CSS is excluded.
+
+## Commit-specific source budget
+
+The final split is measured against 3dbaa6a with the same nonblank, noncomment
+line rule above. The runtime commit adds 52 app/worker Python lines, 111 tooling
+Python lines and 56 test lines. The pool/API commit adds 113 app/worker Python
+lines, 39 template lines, 27 interface JavaScript lines and 317 test lines.
+Generated CSS and environment examples remain excluded. These totals include
+the earlier pagination changes; they do not represent another implementation.
+
+Runtime additions replace operator parsing, own database lifetime and environment
+metadata, and enforce application drawers and request lineage. Pool/API additions
+publish canonical typed contracts and strict inputs, preserve pool pagination,
+own explicit selection across pages and batch the existing audit facts. Tests
+extend the existing authority, rollback, replay, browser and architecture proofs.
+No production source was added during this commit-preparation pass.

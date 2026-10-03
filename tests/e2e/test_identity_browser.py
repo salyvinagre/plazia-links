@@ -221,23 +221,76 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
     page.get_by_role("button", name="Reserve links").click()
     expect(page.get_by_role("heading", name=name, exact=True)).to_be_visible()
     pool_url = page.url
+    actions = page.get_by_label("Pool actions", exact=True)
+    assert actions.evaluate(
+        "element => [element.offsetWidth, element.offsetHeight]"
+    ) == page.locator("tbody summary").first.evaluate(
+        "element => [element.offsetWidth, element.offsetHeight]"
+    )
+    items = page.locator("[data-select-link]")
+    expect(items).to_have_count(4)
+    for item in items.all():
+        expect(item).to_be_hidden()
+    expect(page.get_by_label("Rename pool")).to_be_hidden()
+    expect(page.locator("#delete-selection")).to_be_hidden()
+    page.screenshot(
+        path=f"output/playwright/pool-actions-{mode}-{width}.png",
+        full_page=True,
+        animations="disabled",
+    )
+    actions.focus()
+    actions.press("Enter")
+    expect(page.get_by_role("button", name="Delete links", exact=True)).to_be_visible()
+    actions.press("Escape")
+    expect(actions).to_be_focused()
+    expect(page.get_by_role("button", name="Delete links", exact=True)).to_be_hidden()
+    actions.click()
+    page.screenshot(
+        path=f"output/playwright/pool-menu-{mode}-{width}.png",
+        full_page=True,
+        animations="disabled",
+    )
+    actions.press("Tab")
+    expect(page.get_by_role("button", name="Rename pool", exact=True)).to_be_focused()
+    page.keyboard.press("Enter")
+    expect(page.get_by_label("Rename pool")).to_be_focused()
+    page.get_by_label("Rename pool").fill("Cancelled name")
+    page.get_by_role("link", name="Cancel", exact=True).click()
+    expect(page.get_by_label("Rename pool")).to_be_hidden()
+    expect(page.get_by_role("heading", name=name, exact=True)).to_be_visible()
+    actions.click()
+    page.get_by_role("button", name="Rename pool", exact=True).click()
     page.get_by_label("Rename pool").fill(name + "-renamed")
     page.get_by_role("button", name="Save", exact=True).click()
     expect(page.get_by_role("heading", name=name + "-renamed", exact=True)).to_be_visible()
     assert page.url == pool_url
-    items = page.locator("[data-select-link]")
-    expect(items).to_have_count(4)
+    expect(page.get_by_label("Rename pool")).to_be_hidden()
+    actions.click()
+    page.get_by_role("button", name="Delete links", exact=True).click()
+    expect(items.first).to_be_focused()
     deleting = page.get_by_role("button", name="Delete selected")
     expect(deleting).to_be_disabled()
-    page.get_by_label("Select all links on this page").check()
-    expect(page.get_by_text("4 selected", exact=True)).to_be_visible()
-    page.get_by_label("Select all links on this page").uncheck()
+    page.get_by_label("Select all links", exact=True).check()
+    expect(page.get_by_text("All 4 selected", exact=True)).to_be_visible()
+    expect(items.first).to_be_disabled()
+    page.get_by_label("Select all links", exact=True).uncheck()
     items.nth(0).check()
     items.nth(1).check()
     expect(page.get_by_text("2 selected", exact=True)).to_be_visible()
-    assert page.get_by_label("Select all links on this page").evaluate(
+    assert page.get_by_label("Select all links", exact=True).evaluate(
         "element => element.indeterminate"
     )
+    page.get_by_role("button", name="Cancel selection", exact=True).click()
+    expect(actions).to_be_focused()
+    expect(page.locator("#delete-selection")).to_be_hidden()
+    for item in items.all():
+        expect(item).to_be_hidden()
+        expect(item).not_to_be_checked()
+    actions.click()
+    page.get_by_role("button", name="Delete links", exact=True).click()
+    expect(deleting).to_be_disabled()
+    items.nth(0).check()
+    items.nth(1).check()
     selected = [items.nth(i).input_value() for i in (0, 1)]
     remaining = [items.nth(i).input_value() for i in (2, 3)]
     page.screenshot(
@@ -254,6 +307,7 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
         ):
             deleting.click()
     expect(items).to_have_count(4)
+    expect(page.get_by_text("2 selected", exact=True)).to_be_visible()
     page.once("dialog", lambda dialog: dialog.accept())
     deleting.click()
     expect(items).to_have_count(2)
@@ -261,11 +315,101 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
     assert [item.input_value() for item in items.all()] == remaining
     assert not set(selected) & set(remaining)
     expect(page.get_by_text("2 links in this pool", exact=True)).to_be_visible()
-    expect(deleting).to_be_disabled()
+    expect(page.locator("#delete-selection")).to_be_hidden()
+    expect(items.first).to_be_hidden()
+    actions.click()
     page.once("dialog", lambda dialog: dialog.accept())
     page.get_by_role("button", name="Delete pool", exact=True).click()
     page.wait_for_url(base + "/dashboard/links")
     expect(page.get_by_role("link", name=name + "-renamed")).to_have_count(0)
+    page.get_by_label("Link actions", exact=True).click()
+    page.get_by_role("button", name="Delete links", exact=True).click()
+    expect(page.locator("[data-select-link]").first).to_be_visible()
+    page.get_by_role("button", name="Cancel selection", exact=True).click()
+    expect(page.get_by_label("Link actions", exact=True)).to_be_focused()
+    expect(page.locator("[data-select-link]").first).to_be_hidden()
     page.get_by_role("link", name=keep + " 1", exact=True).click()
     expect(page.locator("[data-select-link]")).to_have_count(1)
-    context.close()
+    # Newer pools push the surviving pool beyond the first navigation page.
+    import psycopg
+    from shared_identity import OrganizationId
+
+    from app.kernel.ids import PoolId
+
+    ids = [PoolId.new().uuid for _ in range(100)]
+    with psycopg.connect(os.environ["POSTGRES_OWNER_TEST_URL"]) as connection:
+        connection.cursor().executemany(
+            "INSERT INTO links.pools (id, organization_id, name) VALUES (%s, %s, %s)",
+            [(id, OrganizationId(ORG_A).uuid, f"Navigation {i}") for i, id in enumerate(ids)],
+        )
+    try:
+        page.goto(base + "/dashboard/links")
+        page.get_by_role("link", name="Next pools", exact=True).click()
+        page.get_by_role("link", name=keep + " 1", exact=True).click()
+        expect(page.get_by_role("heading", name=keep, exact=True)).to_be_visible()
+        assert "pool_page=2" in page.url
+        actions.click()
+        page.get_by_role("button", name="Rename pool", exact=True).click()
+        page.get_by_label("Rename pool").fill(keep + "-renamed")
+        page.get_by_role("button", name="Save", exact=True).click()
+        expect(page.get_by_role("heading", name=keep + "-renamed", exact=True)).to_be_visible()
+        assert "pool_page=2" in page.url
+        expect(page.get_by_role("link", name="Previous pools", exact=True)).to_be_visible()
+        expect(page.get_by_label("Rename pool")).to_be_hidden()
+        page.screenshot(
+            path=f"output/playwright/pool-navigation-{mode}-{width}.png",
+            full_page=True,
+            animations="disabled",
+        )
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        actions.click()
+        page.once("dialog", lambda dialog: dialog.accept())
+        page.get_by_role("button", name="Delete pool", exact=True).click()
+        page.wait_for_url(base + "/dashboard/links?pool_page=2")
+        expect(page.get_by_role("heading", name=keep + "-renamed", exact=True)).to_have_count(0)
+        # All means the matching collection, including links beyond the visible page.
+        across = f"Across-{mode}-{width}"
+        page.get_by_label("Pool name").fill(across)
+        page.get_by_label("Number of links").fill("21")
+        page.get_by_role("button", name="Reserve links").click()
+        expect(page.get_by_role("heading", name=across, exact=True)).to_be_visible()
+        expect(items).to_have_count(20)
+        actions.click()
+        page.get_by_role("button", name="Delete links", exact=True).click()
+        for item in items.all():
+            item.check()
+        expect(page.get_by_text("20 selected", exact=True)).to_be_visible()
+        expect(page.get_by_label("Select all links", exact=True)).not_to_be_checked()
+        page.get_by_label("Select all links", exact=True).check()
+        expect(page.get_by_text("All 21 selected", exact=True)).to_be_visible()
+        expect(items.first).to_be_disabled()
+        page.once("dialog", lambda dialog: dialog.accept())
+        deleting.click()
+        expect(
+            page.get_by_role("heading", name="No links in this pool", exact=True)
+        ).to_be_visible()
+        expect(page.get_by_role("heading", name=across, exact=True)).to_be_visible()
+        actions.click()
+        expect(page.get_by_role("button", name="Delete links", exact=True)).to_have_count(0)
+        page.get_by_label("Pool name").fill(f"Global-{mode}-{width}")
+        page.get_by_label("Number of links").fill("21")
+        page.get_by_role("button", name="Reserve links").click()
+        expect(
+            page.get_by_role("heading", name=f"Global-{mode}-{width}", exact=True)
+        ).to_be_visible()
+        page.get_by_role("link", name="All links", exact=True).click()
+        expect(items).to_have_count(20)
+        page.get_by_label("Link actions", exact=True).click()
+        page.get_by_role("button", name="Delete links", exact=True).click()
+        all_links = page.get_by_label("Select all links", exact=True)
+        total = int(all_links.get_attribute("data-total"))
+        assert total > 20
+        all_links.check()
+        expect(page.get_by_text(f"All {total} selected", exact=True)).to_be_visible()
+        page.once("dialog", lambda dialog: dialog.accept())
+        deleting.click()
+        expect(page.get_by_role("heading", name="No links yet", exact=True)).to_be_visible()
+    finally:
+        with psycopg.connect(os.environ["POSTGRES_OWNER_TEST_URL"]) as connection:
+            connection.execute("DELETE FROM links.pools WHERE id = ANY(%s)", (ids,))
+        context.close()

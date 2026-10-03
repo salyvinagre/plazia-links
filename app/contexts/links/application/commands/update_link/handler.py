@@ -37,5 +37,5 @@ class UpdateLinkHandler:
                 await self._repository.ready_subscriptions(organization.id, link.id, context)
             if self._telemetry is not None:
                 self._telemetry.metrics.emit(ENQUEUE_DURATION, value=perf_counter() - started)
-        await self._repository.audit(organization.id, "update", link.id, context)
+        await self._repository.audit(organization.id, "update", (link.id,), context)
         return link

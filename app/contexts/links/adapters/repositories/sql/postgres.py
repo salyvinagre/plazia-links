@@ -223,9 +223,16 @@ class PostgresLinkRepository:
         organization_id: OrganizationId,
         ids: tuple[LinkId, ...],
         pool_id: PoolId | None = None,
-    ) -> None:
-        parameters: tuple[object, ...] = (organization_id.uuid, [id.uuid for id in ids])
-        where = "organization_id = %s AND id = ANY(%s)"
+        *,
+        all: bool = False,
+    ) -> tuple[LinkId, ...]:
+        if all and pool_id is not None:
+            await self.get_pool(organization_id, pool_id)
+        parameters: tuple[object, ...] = (organization_id.uuid,)
+        where = "organization_id = %s"
+        if not all:
+            where += " AND id = ANY(%s)"
+            parameters += ([id.uuid for id in ids],)
         if pool_id is not None:
             where += " AND pool_id = %s"
             parameters += (pool_id.uuid,)
@@ -233,9 +240,15 @@ class PostgresLinkRepository:
         cursor = await self._connection.execute(
             f"SELECT id FROM links.links WHERE {where} ORDER BY id FOR UPDATE", parameters
         )
-        if len(await cursor.fetchall()) != len(ids):
+        rows = await cursor.fetchall()
+        if not all and len(rows) != len(ids):
             raise LinkNotFoundError("selection")
-        await self._connection.execute(f"DELETE FROM links.links WHERE {where}", parameters)
+        # Delete exactly the locked set; a later insert must not escape the audit.
+        await self._connection.execute(
+            "DELETE FROM links.links WHERE organization_id = %s AND id = ANY(%s)",
+            (organization_id.uuid, [row[0] for row in rows]),
+        )
+        return tuple(LinkId(uuid=row[0]) for row in rows)
 
     async def reserve(
         self,
@@ -411,25 +424,23 @@ class PostgresLinkRepository:
         self,
         organization_id: OrganizationId,
         action: str,
-        resource_id: LinkId | PoolId,
+        resource_ids: tuple[LinkId | PoolId, ...],
         context: Invocation,
     ) -> None:
         actor = context.actor_context
         operation = context.operation_context
-        resource_type = "link" if isinstance(resource_id, LinkId) else "pool"
         await self._connection.execute(
             """
             INSERT INTO platform.audit_events
                 (organization_id, action, resource_type, resource_id, actor_id, actor_type,
                  principal_id, principal_type, request_id, correlation_id, source_channel,
                  traceparent, tracestate, idempotency_key)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            SELECT %s, %s, resource.type, resource.id, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            FROM unnest(%s::text[], %s::uuid[]) AS resource(type, id)
             """,
             (
                 organization_id.uuid,
                 action,
-                resource_type,
-                resource_id.uuid,
                 actor.actor_id,
                 actor.actor_type,
                 actor.principal_id,
@@ -440,6 +451,8 @@ class PostgresLinkRepository:
                 operation.traceparent,
                 operation.tracestate,
                 operation.idempotency_key,
+                ["link" if isinstance(id, LinkId) else "pool" for id in resource_ids],
+                [id.uuid for id in resource_ids],
             ),
         )
 

@@ -34,10 +34,15 @@ The acceptance lane creates isolated local PostgreSQL, Redis, OpenFGA and Mailpi
 
 Start the API with uv run uvicorn app.main:app --port 8000 and the persistent worker with uv run python -m worker.run. /login opens the organization management interface. Reserve 1–100 links, share a public URL, then use Activate to assign a valid HTTP(S) destination. Visitors receive one activation email for that link.
 
-Choose a pool to inspect its links, rename it, or delete the pool and all its
-links. Select individual checkboxes or “Select this page”, then use “Delete
-selected” to remove several links together. Deletion also removes their
-subscriptions and queued notifications; other pools and unselected links remain.
+Use the pool navigation pages to reach all reserved pools. Choose a pool to inspect
+its links. The three-dot “Pool actions” menu offers “Rename pool”, “Delete links”
+and “Delete pool”. “Delete links” reveals checkboxes: select individual links or
+“Select all links”, then confirm “Delete selected”. Selecting all covers every
+page in the current pool, or the entire organization in All links. Clear that
+choice to select individual links on the visible page. “Cancel selection” clears the
+selection and hides the controls. “Link actions” offers the same selection mode
+in All links. Deletion also removes subscriptions and queued notifications;
+other pools and unselected links remain.
 
 The interface uses server-rendered Jinja templates, HTMX, Tailwind CSS and daisyUI.
 Its assets follow the [daisyUI Django installation approach](https://daisyui.com/docs/install/django/):
@@ -65,13 +70,17 @@ Company brand book, edition 1.3; see `app/static/brand/README.md` for asset prov
 | PATCH /api/v1/links/{link_id} | links:update |
 | DELETE /api/v1/links/{link_id} | links:delete |
 | DELETE /api/v1/links?ids=lnk_…&ids=lnk_… | links:delete |
+| DELETE /api/v1/links?all=true[&pool_id=lpl_…] | links:delete |
 
 Each management request also requires OpenFGA organization authority and an active local binding. Pool ownership comes exclusively from the verified org claim. Pool creation returns its id, name and size; its Location header identifies the canonical pool read. List its links with the pool_id filter. PATCH destination_url activates a reserved link. POST /{code}/subscriptions accepts a form email. Disabled links return 410, unknown links 404, reserved links a waiting page, and active links 307.
 
 Pool PATCH accepts only `{"name": "Upcoming launch"}`; `null` clears the name.
-Bulk DELETE accepts 1–100 distinct `ids` query values and an optional `pool_id`
-restriction. Any missing, foreign or mismatched link produces 404 without
-deleting the other selected links. Successful deletion returns 204. Invalid
+Bulk DELETE accepts either 1–100 distinct `ids` query values or `all=true`, with
+an optional `pool_id` restriction. All selects matching links across every page
+when the command executes, including standalone links in the organization view;
+the pools remain. Combining IDs with all or omitting both is rejected. Any
+missing, foreign or mismatched explicit link or pool produces 404 without
+deleting other links. Successful deletion returns 204. Invalid
 selections return 422; changed idempotency payloads return 409. Generated
 `/openapi.json` is the authoritative typed request/response contract.
 

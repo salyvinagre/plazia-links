@@ -7,3 +7,9 @@
 - [x] Root: pool rename/delete, explicit bulk link deletion, canonical API routes and Flyway V2 implementation.
 - [x] Root: current fast checks/tests and disposable service/browser regressions.
 - [x] Existing independent Luna reviewer: pool-management follow-up review; Cycle 2 PASS.
+- [x] Root: reproduce second-pass API/context/help/navigation defects and fix through existing owners.
+- [x] Root: shared CLI, pure environment declarations and architecture drawer/import enforcement; justify net SLOC.
+- [x] Root: current coverage/checks/native/browser/package/image evidence.
+- [x] Existing independent Luna reviewer: terminal Cycle 3 second-pass review; PASS with no critical/warning findings.
+- [x] Root: pool overflow menu, on-demand rename and cancellable link selection; existing primitives and justified source-line budget.
+- [x] Root: identical action triggers and collection-wide selection through the canonical bulk DELETE command; cross-page, tenant, audit and replay proof.

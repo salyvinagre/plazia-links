@@ -85,7 +85,7 @@ async def test_pool_management_and_bulk_delete_are_tenant_scoped_and_durable(pos
             await _bind_organization(postgres_urls.owner, issuer, id)
         bus, _ = build_buses(database, PostgresUowFactory(database), FixtureAuthority())
         pool = (
-            await bus.dispatch(ReservePoolCommand(actor, 3, "Launch"), context=context("reserve"))
+            await bus.dispatch(ReservePoolCommand(actor, 100, "Launch"), context=context("reserve"))
         ).value
         other = (
             await bus.dispatch(ReservePoolCommand(actor, 1, "Keep"), context=context("keep"))
@@ -121,7 +121,7 @@ async def test_pool_management_and_bulk_delete_are_tenant_scoped_and_durable(pos
                 context=context("foreign-selection"),
             )
         async with database.scope(org) as scope:
-            assert (await scope.links.get_pool(org, pool.id)).size == 3
+            assert (await scope.links.get_pool(org, pool.id)).size == 100
         with pytest.raises(LinkNotFoundError):
             await bus.dispatch(
                 DeleteLinksCommand(actor, (rows[0].id,), other.id), context=context("wrong-pool")
@@ -131,7 +131,18 @@ async def test_pool_management_and_bulk_delete_are_tenant_scoped_and_durable(pos
         assert (await bus.dispatch(deletion, context=context("selection"))).replayed
         assert not await _ready_emails(postgres_urls.worker, org, rows[0].id)
         async with database.scope(org) as scope:
-            assert (await scope.links.get_pool(org, pool.id)).size == 1
+            assert (await scope.links.get_pool(org, pool.id)).size == 98
+        with pytest.raises(LinkNotFoundError):
+            await bus.dispatch(
+                DeleteLinksCommand(actor, pool_id=foreign_pool.id, all=True),
+                context=context("foreign-all"),
+            )
+        all_pool = DeleteLinksCommand(actor, pool_id=pool.id, all=True)
+        await bus.dispatch(all_pool, context=context("all-pool"))
+        assert (await bus.dispatch(all_pool, context=context("all-pool"))).replayed
+        await bus.dispatch(all_pool, context=context("empty-pool"))
+        async with database.scope(org) as scope:
+            assert (await scope.links.get_pool(org, pool.id)).size == 0
         delete_pool = DeletePoolCommand(actor, pool.id)
         await bus.dispatch(delete_pool, context=context("delete-pool"))
         assert (await bus.dispatch(delete_pool, context=context("delete-pool"))).replayed
@@ -142,6 +153,23 @@ async def test_pool_management_and_bulk_delete_are_tenant_scoped_and_durable(pos
             for row in rows:
                 with pytest.raises(LinkNotFoundError):
                     await scope.links.public(row.short_code)
+        extra = (
+            await bus.dispatch(ReservePoolCommand(actor, 100, "More"), context=context("more"))
+        ).value
+        all_links = DeleteLinksCommand(actor, all=True)
+        await bus.dispatch(all_links, context=context("all-org"))
+        async with database.scope(org) as scope:
+            assert (await scope.links.list(org, 1, 20)).total == 0
+            assert (await scope.links.get_pool(org, other.id)).size == 0
+            assert (await scope.links.get_pool(org, extra.id)).size == 0
+        async with database.scope(foreign) as scope:
+            assert (await scope.links.get_pool(foreign, foreign_pool.id)).size == 1
+        new = (
+            await bus.dispatch(ReservePoolCommand(actor, 1, "New"), context=context("new"))
+        ).value
+        assert (await bus.dispatch(all_links, context=context("all-org"))).replayed
+        async with database.scope(org) as scope:
+            assert (await scope.links.get_pool(org, new.id)).size == 1
         from psycopg import AsyncConnection
 
         async with await AsyncConnection.connect(postgres_urls.owner) as connection:
@@ -153,6 +181,15 @@ async def test_pool_management_and_bulk_delete_are_tenant_scoped_and_durable(pos
                     )
                 ).fetchone()
             )[0] == 0
+            assert (
+                await (
+                    await connection.execute(
+                        "SELECT count(*) FROM platform.audit_events WHERE organization_id=%s "
+                        "AND resource_type='link' AND action='delete'",
+                        (org.uuid,),
+                    )
+                ).fetchone()
+            )[0] == 201
     finally:
         await database.close()
         await _cleanup(postgres_urls.owner, (org, foreign))

@@ -114,7 +114,7 @@ async def test_activation_outbox_is_atomic_private_and_tenant_scoped(
                 await scope.links.get(organization_id, link.id, lock=True)
                 await scope.links.update(organization_id, link.id, patch)
                 await scope.links.ready_subscriptions(organization_id, link.id)
-                await scope.links.audit(organization_id, "update", link.id, invocation)
+                await scope.links.audit(organization_id, "update", (link.id,), invocation)
                 raise _AbortWriteError
 
         async with database.scope(organization_id, readonly=True) as scope:
@@ -126,7 +126,7 @@ async def test_activation_outbox_is_atomic_private_and_tenant_scoped(
             await scope.links.get(organization_id, link.id, lock=True)
             active = await scope.links.update(organization_id, link.id, patch)
             await scope.links.ready_subscriptions(organization_id, active.id)
-            await scope.links.audit(organization_id, "update", active.id, invocation)
+            await scope.links.audit(organization_id, "update", (active.id,), invocation)
             assert active.destination_url == patch.destination_url
 
         jobs = await _ready_emails(postgres_urls.worker, organization_id, link.id)

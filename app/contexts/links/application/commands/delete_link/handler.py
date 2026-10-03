@@ -12,4 +12,4 @@ class DeleteLinkHandler:
     async def execute(self, command: DeleteLinkCommand, *, context: Invocation) -> None:
         organization = await self._access.require(command.actor, "links:delete")
         await self._repository.delete(organization.id, command.link_id)
-        await self._repository.audit(organization.id, "delete", command.link_id, context)
+        await self._repository.audit(organization.id, "delete", (command.link_id,), context)

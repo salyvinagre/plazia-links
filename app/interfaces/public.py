@@ -6,19 +6,16 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, EmailStr, ValidationError
+from pydantic import ValidationError
 from shared_kernel.contacts import NormalizedEmail
 
 from app.contexts.links.contracts import Destination, ResolveLinkQuery, SubscribeLinkCommand
+from app.interfaces.api.schemas.links import SubscriptionForm
 from app.interfaces.authentication import runtime
 from app.interfaces.dispatch import commands, queries, request_context
 
 router = APIRouter(include_in_schema=False)
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
-
-
-class SubscriptionForm(BaseModel):
-    email: EmailStr
 
 
 def public_host(request: Request) -> None:

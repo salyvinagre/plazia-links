@@ -21,7 +21,6 @@ from app.contexts.access.contracts import (
 from app.contexts.links.contracts import (
     CreateLinkCommand,
     DeleteLinkCommand,
-    DeleteLinksCommand,
     DeletePoolCommand,
     GetLinkQuery,
     GetPoolQuery,
@@ -52,6 +51,14 @@ Session = Annotated[BrowserSession, Depends(browser_session)]
 
 def _redirect(path: str) -> RedirectResponse:
     return RedirectResponse(path, status_code=303, headers={"Cache-Control": "no-store"})
+
+
+def _links_redirect(pool_id: str | None = None, pool_page: int = 1) -> RedirectResponse:
+    params = {"pool_id": pool_id} if pool_id else {}
+    if pool_page > 1:
+        params["pool_page"] = str(pool_page)
+    path = "/dashboard/links"
+    return _redirect(f"{path}?{urlencode(params)}" if params else path)
 
 
 @router.get("/login")
@@ -163,9 +170,13 @@ async def dashboard() -> Response:
 
 @router.get("/dashboard/links", response_class=HTMLResponse)
 async def links(
-    request: Request, session: Session, page: int = Query(1, ge=1), pool_id: str | None = None
+    request: Request,
+    session: Session,
+    page: int = Query(1, ge=1, le=100000),
+    pool_id: str | None = None,
+    pool_page: int = Query(1, ge=1, le=100000),
 ) -> Response:
-    return await _links_page(request, session, page, pool_id)
+    return await _links_page(request, session, page, pool_id, pool_page=pool_page)
 
 
 async def _links_page(
@@ -174,6 +185,7 @@ async def _links_page(
     page: int,
     pool_id: str | None,
     *,
+    pool_page: int = 1,
     pool_error: str | None = None,
     pool_name: str | None = None,
 ) -> Response:
@@ -185,7 +197,9 @@ async def _links_page(
         ListLinksQuery(session.principal, page, 20, PoolId(pool_id) if pool_id else None),
         context=context,
     )
-    pools = await queries(request).ask(ListPoolsQuery(session.principal, 1, 100), context=context)
+    pools = await queries(request).ask(
+        ListPoolsQuery(session.principal, pool_page, 100), context=context
+    )
     pool = (
         await queries(request).ask(
             GetPoolQuery(session.principal, PoolId(pool_id)), context=context
@@ -229,7 +243,12 @@ async def reserve_pool(request: Request, session: Session) -> Response:
 
 
 @router.post("/dashboard/pools/{pool_id}")
-async def rename_pool(pool_id: str, request: Request, session: Session) -> Response:
+async def rename_pool(
+    pool_id: str,
+    request: Request,
+    session: Session,
+    pool_page: int = Query(1, ge=1, le=100000),
+) -> Response:
     form = await request.form(max_fields=3, max_files=0)
     csrf(request, session, str(form.get("csrf_token", "")))
     name = str(form.get("name", ""))
@@ -247,14 +266,20 @@ async def rename_pool(pool_id: str, request: Request, session: Session) -> Respo
             session,
             1,
             pool_id,
+            pool_page=pool_page,
             pool_error="Use a pool name of 200 characters or fewer.",
             pool_name=name,
         )
-    return _redirect(f"/dashboard/links?{urlencode({'pool_id': pool_id})}")
+    return _links_redirect(pool_id, pool_page)
 
 
 @router.post("/dashboard/pools/{pool_id}/delete")
-async def delete_pool(pool_id: str, request: Request, session: Session) -> Response:
+async def delete_pool(
+    pool_id: str,
+    request: Request,
+    session: Session,
+    pool_page: int = Query(1, ge=1, le=100000),
+) -> Response:
     form = await request.form(max_fields=2, max_files=0)
     csrf(request, session, str(form.get("csrf_token", "")))
     await mutate(
@@ -263,25 +288,28 @@ async def delete_pool(pool_id: str, request: Request, session: Session) -> Respo
         session.principal,
         key=str(form.get("idempotency_key", "")),
     )
-    return _redirect("/dashboard/links")
+    return _links_redirect(pool_page=pool_page)
 
 
 @router.post("/dashboard/links/delete")
-async def delete_links(request: Request, session: Session, pool_id: str | None = None) -> Response:
-    form = await request.form(max_fields=102, max_files=0)
+async def delete_links(
+    request: Request,
+    session: Session,
+    pool_id: str | None = None,
+    pool_page: int = Query(1, ge=1, le=100000),
+) -> Response:
+    form = await request.form(max_fields=103, max_files=0)
     csrf(request, session, str(form.get("csrf_token", "")))
-    data = DeleteLinksParams.model_validate({"ids": form.getlist("ids"), "pool_id": pool_id})
+    data = DeleteLinksParams.model_validate(
+        {"ids": form.getlist("ids") or None, "pool_id": pool_id, "all": form.get("all", False)}
+    )
     await mutate(
         request,
-        DeleteLinksCommand(
-            session.principal, data.identifiers(), PoolId(pool_id) if pool_id else None
-        ),
+        data.command(session.principal),
         session.principal,
         key=str(form.get("idempotency_key", "")),
     )
-    return _redirect(
-        f"/dashboard/links?{urlencode({'pool_id': pool_id})}" if pool_id else "/dashboard/links"
-    )
+    return _links_redirect(pool_id, pool_page)
 
 
 @router.get("/dashboard/links/new", response_class=HTMLResponse)
@@ -383,7 +411,11 @@ async def update_link(link_id: str, request: Request, session: Session) -> Respo
 
 @router.post("/dashboard/links/{link_id}/delete")
 async def delete_link(
-    link_id: str, request: Request, session: Session, pool_id: str | None = None
+    link_id: str,
+    request: Request,
+    session: Session,
+    pool_id: str | None = None,
+    pool_page: int = Query(1, ge=1, le=100000),
 ) -> Response:
     form = await request.form(max_fields=2, max_files=0)
     csrf(request, session, str(form.get("csrf_token", "")))
@@ -393,5 +425,4 @@ async def delete_link(
         session.principal,
         key=str(form.get("idempotency_key", "")),
     )
-    path = "/dashboard/links"
-    return _redirect(f"{path}?{urlencode({'pool_id': pool_id})}" if pool_id else path)
+    return _links_redirect(pool_id, pool_page)

@@ -100,3 +100,40 @@ Local disposable-service evidence does not close the external gates. Shared-auth
 
 ### Verdict: PASS
 Reason: The reviewed Wave 2 behavior and current Flyway migration path satisfy the local API, atomicity, authorization, browser, schema, and native acceptance criteria; no critical or warning findings remain.
+
+## Cycle 3 - 2026-10-03
+Reviewing: Wave 3 - second-pass regression fixes, environment/CLI/architecture alignment, SLOC justification and integrated implementation against `f569415`
+Analysts: None; terminal independent reviewer `/root/independent_review`.
+
+### Critical
+
+None found.
+
+### Warning
+
+None found in the reviewed local implementation and acceptance scope.
+
+### Suggestion
+
+The generated OpenAPI has zero hard errors and 104 non-error style warnings, down from 184 in the prior pool-management pass. In particular, runtime ID validators enforce the canonical prefix and UUIDv7 shape while generated schemas primarily publish length bounds. A future shared-kernel schema hook could expose that format to clients without duplicating its UUID rules in this route layer. The checked-in schemas remain typed and the server rejects malformed IDs, so this is contract polish rather than a runtime correctness issue.
+
+### Spec And Golden-Principles Alignment
+
+- The five failures recorded in `output/second-pass-regressions.log` were reproducible before their fixes: coercive JSON booleans, accepting a foreign canonical-ID type in bulk deletion, inaccessible pools beyond the first 100, lost request context for anonymous public resolution, and CLI help loading runtime secrets. Each fix extends its existing schema, command, query context, browser navigation, CLI or platform owner; no parallel service or parser was added.
+- The API reuses `ApiRequest`/`ApiResponse`, Pydantic query models, canonical identifier normalizers, versioned `/api/v1` routes, explicit bounded selection, verified organization capabilities and required mutation keys. Mutation paths preserve the existing typed replay and owner transaction boundary. Request schemas reject unknown fields; public times are timezone-aware.
+- Operator commands use shared `plazia-cli` command definitions. Owner bus construction and database lifetime remain in platform composition, while CLI help constructs neither settings nor database connections. The documentation correctly scopes the owner DSN to operator commands.
+- The environment registry is a pure declaration built from existing settings metadata and the shared `EnvRegistry`; it does not load secrets or implement a local settings parser. `.env.example` is generated from it. `PLZL_` follows the explicit user choice despite the sibling prefix table, and the pre-existing native `FLYWAY_*` inputs remain confined to the pinned Flyway process. The disabled preview release declaration does not claim release readiness.
+- Application ports and telemetry signals now occupy their required drawers. Architecture tests enforce context ownership, framework/storage-free application cores, and runtime-owned bus composition. The exact SLOC deltas were independently reproduced: app/worker +148, tooling +111, tests +139. The justification in `decisions.md` ties those additions to the shared registry, CLI ownership, contract constraints, browser navigation and regression/architecture evidence; telemetry relocation is net zero.
+- Four environment scanner findings are explained by current `Literal` or typed-IP settings annotations and their traced runtime consumers. The three Flyway zero-use notes are due to Make forwarding to the separate CLI process. Neither is suppressed or hidden by duplicate aliases. The Redis `get`/`take` duplication has distinct consume-once semantics; short wrapper candidates retain their adapter, transport or runtime boundary.
+
+### Verification And Evidence Limits
+
+- `output/second-pass-coverage.log`: 162 tests passed at 88.96% branch coverage, above the 85% gate.
+- `output/second-pass-checks.log` and `output/second-pass-final-check.log`: formatting/Ruff, strict typing, shared normalizers, Actions, Make help, environment audit and documentation checks pass. OpenAPI has zero hard errors and 104 style warnings; no validator rules are excluded. The shared semantic/wrapper and dependency deprecation notices are advisory and documented above.
+- `output/second-pass-acceptance.log`: the configured pinned Flyway migrated a populated V1 database through the guarded V2 path, preserved the fixture and verified cascade cleanup; 30 native service/browser tests passed and the owned-resource residue check was empty.
+- Current Chromium coverage includes navigation beyond 100 pools and rename/delete flows in container and serverless modes at 1280px and 390px. The fresh captures under `output/playwright/pool-navigation-{container,serverless}-{1280,390}.png` were visually inspected.
+- Current wheel/image checks passed. The image inspection verifies Python 3.14.8, uid 10001, required runtime assets, V1/V2 migration files, CLI help with unavailable secret files, and absence of development tools (`output/second-pass-image-inspection.log`; image hash recorded in `validation.md`). `uv.lock --check --offline` passes. CRAP remains deferred as instructed.
+- Shared-authz Links action/fragment publication, private package publication and GitHub workflow execution, actual Identity enrollment, deployed smoke, restore drills, collector ingestion and production inbox delivery remain external gates. Local disposable services and screenshots do not substitute for them; `validation.md` and `drift.md` retain these limits.
+
+### Verdict: PASS
+Reason: The reviewed regressions are closed through existing owners, architecture and environment boundaries follow the applicable shared principles, all new SLOC is justified, and current fast, broad, native-service, browser, packaging and image evidence passes. No critical or warning findings remain within the authorized local scope; the OpenAPI style suggestion and external gates above are non-blocking and explicitly bounded.

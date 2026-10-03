@@ -2,14 +2,13 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Query, Request, Response, Security
+from fastapi import APIRouter, Header, Path, Query, Request, Response, Security
 from shared_http.fastapi import ApiErrorResponse, LinkedResponse, NavigationFacts, linked
 
 from app.contexts.access.contracts import Principal
 from app.contexts.links.contracts import (
     CreateLinkCommand,
     DeleteLinkCommand,
-    DeleteLinksCommand,
     DeletePoolCommand,
     GetLinkQuery,
     GetPoolQuery,
@@ -23,9 +22,11 @@ from app.interfaces.api.schemas.links import (
     CreateLinkRequest,
     DeleteLinksParams,
     LinkFilter,
+    LinkIdText,
     LinkResponse,
     PageResponse,
     Pagination,
+    PoolIdText,
     PoolResponse,
     RenamePoolRequest,
     ReservePoolRequest,
@@ -47,6 +48,8 @@ KeyHeader = Annotated[
     str,
     Header(
         alias="Idempotency-Key",
+        min_length=1,
+        max_length=128,
         description="Required mutation key. Retries replay the original result.",
     ),
 ]
@@ -106,18 +109,16 @@ async def delete_links(
     filters: Annotated[DeleteLinksParams, Query()],
     _key: KeyHeader,
 ) -> None:
-    """Atomically delete 1–100 explicit links. Any unavailable selection fails the whole request."""
-    await mutate(
-        request,
-        DeleteLinksCommand(
-            actor, filters.identifiers(), PoolId(filters.pool_id) if filters.pool_id else None
-        ),
-        actor,
-    )
+    """Delete explicit links or all matching links across pages, preserving their pools."""
+    await mutate(request, filters.command(actor), actor)
 
 
 @router.get("/links/{link_id}", response_model=LinkResponse, operation_id="get_link")
-async def get_link(link_id: str, request: Request, actor: Reader) -> LinkResponse:
+async def get_link(
+    link_id: Annotated[LinkIdText, Path(description="Canonical link identifier.")],
+    request: Request,
+    actor: Reader,
+) -> LinkResponse:
     """Read one link belonging to the current organization."""
     result = await queries(request).ask(
         GetLinkQuery(actor, LinkId(link_id)), context=request_context(request, actor)
@@ -127,7 +128,11 @@ async def get_link(link_id: str, request: Request, actor: Reader) -> LinkRespons
 
 @router.patch("/links/{link_id}", response_model=LinkResponse, operation_id="update_link")
 async def update_link(
-    link_id: str, data: UpdateLinkRequest, request: Request, actor: Updater, _key: KeyHeader
+    link_id: Annotated[LinkIdText, Path(description="Canonical link identifier.")],
+    data: UpdateLinkRequest,
+    request: Request,
+    actor: Updater,
+    _key: KeyHeader,
 ) -> LinkResponse:
     """Update a link. First activation atomically queues prior subscriptions."""
     result = await mutate(request, UpdateLinkCommand(actor, LinkId(link_id), data.patch()), actor)
@@ -135,7 +140,12 @@ async def update_link(
 
 
 @router.delete("/links/{link_id}", status_code=204, operation_id="delete_link")
-async def delete_link(link_id: str, request: Request, actor: Deleter, _key: KeyHeader) -> None:
+async def delete_link(
+    link_id: Annotated[LinkIdText, Path(description="Canonical link identifier.")],
+    request: Request,
+    actor: Deleter,
+    _key: KeyHeader,
+) -> None:
     """Delete a link and cancel waiting subscriptions. Repeated keys replay success."""
     await mutate(request, DeleteLinkCommand(actor, LinkId(link_id)), actor)
 
@@ -176,7 +186,11 @@ async def list_pools(
 
 
 @router.get("/pools/{pool_id}", response_model=PoolResponse, operation_id="get_pool")
-async def get_pool(pool_id: str, request: Request, actor: Reader) -> PoolResponse:
+async def get_pool(
+    pool_id: Annotated[PoolIdText, Path(description="Canonical pool identifier.")],
+    request: Request,
+    actor: Reader,
+) -> PoolResponse:
     """Read one pool and its current number of links in the verified organization."""
     pool = await queries(request).ask(
         GetPoolQuery(actor, PoolId(pool_id)), context=request_context(request, actor)
@@ -186,7 +200,11 @@ async def get_pool(pool_id: str, request: Request, actor: Reader) -> PoolRespons
 
 @router.patch("/pools/{pool_id}", response_model=PoolResponse, operation_id="rename_pool")
 async def rename_pool(
-    pool_id: str, data: RenamePoolRequest, request: Request, actor: Updater, _key: KeyHeader
+    pool_id: Annotated[PoolIdText, Path(description="Canonical pool identifier.")],
+    data: RenamePoolRequest,
+    request: Request,
+    actor: Updater,
+    _key: KeyHeader,
 ) -> PoolResponse:
     """Rename a pool without changing its links. Repeated keys replay the original name."""
     pool = await mutate(request, RenamePoolCommand(actor, PoolId(pool_id), data.name), actor)
@@ -194,6 +212,11 @@ async def rename_pool(
 
 
 @router.delete("/pools/{pool_id}", status_code=204, operation_id="delete_pool")
-async def delete_pool(pool_id: str, request: Request, actor: Deleter, _key: KeyHeader) -> None:
+async def delete_pool(
+    pool_id: Annotated[PoolIdText, Path(description="Canonical pool identifier.")],
+    request: Request,
+    actor: Deleter,
+    _key: KeyHeader,
+) -> None:
     """Delete a pool, all its links, subscriptions and queued activation emails atomically."""
     await mutate(request, DeletePoolCommand(actor, PoolId(pool_id)), actor)

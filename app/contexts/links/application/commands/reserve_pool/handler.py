@@ -21,6 +21,6 @@ class ReservePoolHandler:
                 pool = await self._repository.reserve(organization.id, command.name, codes)
             except LinkConflictError:
                 continue
-            await self._repository.audit(organization.id, "reserve", pool.id, context)
+            await self._repository.audit(organization.id, "reserve", (pool.id,), context)
             return pool
         raise LinkConflictError
