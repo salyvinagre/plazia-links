@@ -151,7 +151,7 @@ async def test_rate_identity_requires_exact_trusted_peer(
 ):
     import hashlib
 
-    import httpx
+    import httpx2
 
     from app.interfaces.middleware import rate_limiter
 
@@ -161,8 +161,8 @@ async def test_rate_identity_requires_exact_trusted_peer(
     rate_limiter.setup_rate_limiter(
         application, frozenset({"10.0.0.10"}) if trusted else frozenset()
     )
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=application, client=("10.0.0.10", 123)),
+    async with httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=application, client=("10.0.0.10", 123)),
         base_url="http://links.test",
     ) as client:
         assert (await client.get("/unknown", headers=headers)).status_code == 404
@@ -170,7 +170,7 @@ async def test_rate_identity_requires_exact_trusted_peer(
 
 
 async def test_rate_admission_atomic_and_unavailable(application, monkeypatch):
-    import httpx
+    import httpx2
 
     from app.interfaces.middleware import rate_limiter
 
@@ -178,8 +178,8 @@ async def test_rate_admission_atomic_and_unavailable(application, monkeypatch):
     redis.eval.return_value = [21, 30]
     monkeypatch.setattr(rate_limiter, "get_redis", AsyncMock(return_value=redis))
     rate_limiter.setup_rate_limiter(application)
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=application), base_url="http://127.0.0.1:8000"
+    async with httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=application), base_url="http://127.0.0.1:8000"
     ) as client:
         assert (await client.get("/health")).status_code == 200
         denied = await client.post("/unknown/subscriptions", headers={"X-Forwarded-For": "spoofed"})

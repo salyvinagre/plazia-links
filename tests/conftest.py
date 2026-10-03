@@ -1,4 +1,4 @@
-import httpx
+import httpx2
 import pytest
 
 from app.main import create_app
@@ -59,9 +59,9 @@ async def identity_client(application):
             # Most fast tests construct browser posts; real browser proof uses the hidden form key.
             request.headers.setdefault("Idempotency-Key", uuid4().hex)
 
-    async with httpx.AsyncClient(
+    async with httpx2.AsyncClient(
         event_hooks={"request": [creation_key]},
-        transport=httpx.ASGITransport(app=application, raise_app_exceptions=False),
+        transport=httpx2.ASGITransport(app=application, raise_app_exceptions=False),
         base_url="http://127.0.0.1:8000",
         follow_redirects=False,
     ) as client:

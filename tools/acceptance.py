@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import httpx
+import httpx2
 import psycopg
 import yaml
 from plazia_tooling.release.postgres import PostgresConfig
@@ -51,9 +51,9 @@ def port(name, internal):
 def wait_http(url):
     for _ in range(100):
         try:
-            if httpx.get(url, timeout=1).status_code == 200:
+            if httpx2.get(url, timeout=1).status_code == 200:
                 return
-        except httpx.HTTPError:
+        except httpx2.HTTPError:
             pass
         time.sleep(0.1)
     raise RuntimeError("Test service readiness timed out")
@@ -226,7 +226,7 @@ def run():
         print("Populated V1 -> V2 upgrade and deletion-chain cleanup verified.", flush=True)
         fga = f"http://127.0.0.1:{port(NAME + '-openfga', 8080)}"
         wait_http(fga + "/healthz")
-        store = httpx.post(fga + "/stores", json={"name": NAME})
+        store = httpx2.post(fga + "/stores", json={"name": NAME})
         store.raise_for_status()
         storeid = store.json()["id"]
         from plazia_authlib.authz.resources import AuthzResources
@@ -252,7 +252,7 @@ def run():
                 "/model.fga",
             )
         )
-        response = httpx.post(fga + f"/stores/{storeid}/authorization-models", json=model)
+        response = httpx2.post(fga + f"/stores/{storeid}/authorization-models", json=model)
         response.raise_for_status()
         mail = f"http://127.0.0.1:{port(NAME + '-mailpit', 8025)}"
         wait_http(mail + "/api/v1/messages")

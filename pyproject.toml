@@ -15,8 +15,7 @@ requires-python = ">=3.14,<3.16"
 dependencies = [
  "fastapi>=0.115,<1", "uvicorn[standard]>=0.32", "redis>=5.2,<6",
  "pydantic-settings>=2.6,<3", "jinja2>=3.1,<4", "python-multipart>=0.0.18",
- "httpx>=0.28,<1",
- "dependency-injector>=4.49,<5", "psycopg[binary]>=3.2,<4", "plazia-authlib[authn,authz]==0.2.0", "plazia-http[fastapi]", "plazia-observability[otel]",
+ "dependency-injector>=4.49,<5", "psycopg[binary]>=3.2,<4", "plazia-authlib[authn,authz]==0.2.0", "plazia-http[httpx2,fastapi]>=0.2.0,<0.3", "plazia-observability[otel]",
   "plazia-kernel[contacts]", "plazia-contracts",
  "plazia-persistence", "plazia-messaging", "plazia-notifications", "plazia-settings", "plazia-cli",
 ]
@@ -26,6 +25,7 @@ plazia-links = "app.cli:main"
 
 [dependency-groups]
 dev = [
+ "httpx2>=2.7,<3",
  "pytest>=9,<10", "pytest-asyncio>=1,<2", "pytest-cov>=7,<8", "pytest-bdd>=8,<9",
  "plazia-authlib[testing]==0.2.0", "ruff>=0.15,<1", "mypy>=1.13,<3", "playwright>=1.55,<2", "plazia-tooling",
 ]

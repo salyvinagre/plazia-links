@@ -3,7 +3,7 @@ import json
 from dataclasses import replace
 from urllib.parse import parse_qs, urlsplit
 
-import httpx
+import httpx2
 import pytest
 from joserfc import jwk, jwt
 from plazia_authlib.testing import TokenAuthority
@@ -14,7 +14,7 @@ from tests.identity_support import ORG_A, ORG_B, RESOURCE, bearer
 async def sign_in(client):
     start = await client.get("/login")
     assert start.status_code == 303
-    async with httpx.AsyncClient(follow_redirects=False, trust_env=False) as browser:
+    async with httpx2.AsyncClient(follow_redirects=False, trust_env=False) as browser:
         authorization = await browser.get(start.headers["location"])
     callback = authorization.headers["location"]
     response = await client.get(callback)
@@ -315,7 +315,7 @@ async def test_callback_nonce_and_browser_binding(identity_client, issuer, failu
         issuer.id_token_claim_overrides["nonce"] = "wrong-nonce"
     else:
         issuer.discovery_overrides["token_endpoint"] = "https://foreign.example.test/token"
-    async with httpx.AsyncClient(trust_env=False) as browser:
+    async with httpx2.AsyncClient(trust_env=False) as browser:
         auth = await browser.get(start.headers["location"])
     assert (await identity_client.get(auth.headers["location"])).status_code == 400
     assert identity_client.cookies.get("plazia_links_session") is None
@@ -404,11 +404,11 @@ async def test_authentication_unavailability_never_enables_local_login(identity_
 @pytest.mark.asyncio
 async def test_oauth_code_cannot_be_completed_in_another_browser(identity_client, issuer):
     start = await identity_client.get("/login")
-    async with httpx.AsyncClient(trust_env=False) as browser:
+    async with httpx2.AsyncClient(trust_env=False) as browser:
         authorization = await browser.get(start.headers["location"])
     location = authorization.headers["location"]
     original_cookies = identity_client.cookies
-    identity_client.cookies = httpx.Cookies()
+    identity_client.cookies = httpx2.Cookies()
     assert (await identity_client.get(location)).status_code == 400
     identity_client.cookies = original_cookies
     assert (await identity_client.get(location)).status_code == 303

@@ -3,9 +3,9 @@
 import time
 from dataclasses import replace
 from unittest.mock import AsyncMock, Mock
+from uuid import uuid7
 
 import pytest
-from uuid6 import uuid7
 
 from app.contexts.access.application.dto.session import (
     LoginAttemptDto,

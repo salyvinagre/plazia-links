@@ -8,6 +8,7 @@ from plazia_authlib.authn.errors import IdentityApiError, IdentityTransportError
 from plazia_authlib.authn.oauth import OAuthAuthorizationArtifacts
 from pydantic import ValidationError
 from shared_http import HttpRequest, HttpResponse
+from shared_http.httpx import HttpxClient
 
 from app.contexts.access.application.dto.session import TokenPairDto
 from app.contexts.access.domain.principal import AccessUnavailableError, InvalidCredentialsError
@@ -45,7 +46,8 @@ class OidcCodeClient:
 
     async def redeem(self, code: str, verifier: str) -> TokenPairDto:
         try:
-            async with PlaziaIdentity(base_url=self._issuer, timeout=5) as identity:
+            async with HttpxClient(follow_redirects=False) as http:
+                identity = PlaziaIdentity(base_url=self._issuer, http_client=http, timeout=5)
                 tokens = await identity.tokens.authorization_code(
                     client_id=self._client_id,
                     client_secret=self._client_secret,

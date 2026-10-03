@@ -9,12 +9,11 @@ from dataclasses import fields
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid7
 
 import pytest
 from psycopg.errors import UniqueViolation
 from shared_identity.canonical_ids import OrganizationId
-from uuid6 import uuid7
 
 from app.contexts.access.adapters.repositories.sql.postgres import PostgresOrganizationRepository
 from app.contexts.links.adapters.repositories.sql.postgres import PostgresLinkRepository

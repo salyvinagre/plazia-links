@@ -2,6 +2,7 @@
 
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
+from uuid import uuid7
 
 import pytest
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -10,7 +11,6 @@ from shared_observability.telemetry import (
     InMemoryTelemetrySink,
     TelemetryService,
 )
-from uuid6 import uuid7
 
 from app.contexts.links.application.dto.notification import EmailJobDto
 from app.contexts.links.application.workflows.notifications import ActivationEmailsWorkflow

@@ -4,7 +4,7 @@ from typing import cast
 
 from plazia_authlib.authn.contracts import SharedIdentityRejectedError
 from plazia_authlib.authn.verifier import DiscoveryBackedSharedIdentityVerifier
-from shared_http import HttpxTextClient
+from shared_http.httpx import HttpxTextClient
 from shared_identity import MachineId, OrganizationId, UserId
 
 from app.contexts.access.domain.principal import (

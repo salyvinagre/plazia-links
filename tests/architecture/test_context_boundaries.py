@@ -23,6 +23,7 @@ def test_context_core_contains_no_framework_or_storage_imports():
                             "sqlalchemy",
                             "redis",
                             "httpx",
+                            "httpx2",
                             "smtplib",
                             "dependency_injector",
                             "openfga_sdk",

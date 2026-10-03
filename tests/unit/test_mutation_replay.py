@@ -2,7 +2,7 @@
 
 from unittest.mock import AsyncMock
 
-import httpx
+import httpx2
 import pytest
 
 from tests.identity_support import ORG_B, bearer
@@ -81,8 +81,8 @@ async def test_replay_rolls_back_with_failed_commit_and_rechecks_authority(
 
 
 async def test_missing_or_invalid_key_is_a_context_error(application, issuer):
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=application), base_url="http://127.0.0.1:8000"
+    async with httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=application), base_url="http://127.0.0.1:8000"
     ) as client:
         for value in (None, "with space", "a" * 129):
             headers = bearer(issuer)

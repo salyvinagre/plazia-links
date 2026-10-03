@@ -1,9 +1,9 @@
 import asyncio
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock
+from uuid import uuid7
 
 import pytest
-from uuid6 import uuid7
 
 from app.contexts.links.adapters.repositories.sql.notifications import PostgresDeliveryQueue
 from app.contexts.links.application.dto.notification import EmailJobDto

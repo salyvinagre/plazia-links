@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from tests.identity_support import ORG_A, LinksIssuer
@@ -57,7 +57,7 @@ def live_application(request):
         "relation": "owner",
         "object": f"organization:{ORG_A}",
     }
-    httpx.post(
+    httpx2.post(
         fga + f"/stores/{store}/write",
         json={
             "writes": {"tuple_keys": [tuple_key]},
@@ -89,9 +89,9 @@ def live_application(request):
                 if process.poll() is not None:
                     raise AssertionError((output / f"server-{request.param}.log").read_text())
                 try:
-                    if httpx.get(base + "/health", timeout=0.5).status_code == 200:
+                    if httpx2.get(base + "/health", timeout=0.5).status_code == 200:
                         break
-                except httpx.HTTPError:
+                except httpx2.HTTPError:
                     pass
                 time.sleep(0.1)
             else:
@@ -106,7 +106,7 @@ def live_application(request):
             process.terminate()
             process.wait(timeout=10)
             issuer.close()
-            httpx.post(
+            httpx2.post(
                 fga + f"/stores/{store}/write",
                 json={
                     "deletes": {"tuple_keys": [tuple_key]},
@@ -152,7 +152,7 @@ def test_reserve_subscribe_activate_and_delivery(live_application):
     page.get_by_role("button", name="Save changes").click()
     expect(page.get_by_role("heading", name="Links", exact=True)).to_be_visible()
     assert (
-        httpx.get(base + "/" + code, follow_redirects=False).headers["location"]
+        httpx2.get(base + "/" + code, follow_redirects=False).headers["location"]
         == "https://example.com/ready"
     )
     queue = PostgresDeliveryQueue(os.environ["POSTGRES_WORKER_TEST_URL"])
@@ -173,7 +173,7 @@ def test_reserve_subscribe_activate_and_delivery(live_application):
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         executor.submit(asyncio.run, deliver()).result(timeout=30)
-    messages = httpx.get(os.environ["MAILPIT_TEST_URL"] + "/api/v1/messages").json()["messages"]
+    messages = httpx2.get(os.environ["MAILPIT_TEST_URL"] + "/api/v1/messages").json()["messages"]
     matching = [
         message
         for message in messages
@@ -183,7 +183,7 @@ def test_reserve_subscribe_activate_and_delivery(live_application):
     assert matching
     assert any(
         f"{base}/{code}"
-        in httpx.get(os.environ["MAILPIT_TEST_URL"] + f"/api/v1/message/{message['ID']}").json()[
+        in httpx2.get(os.environ["MAILPIT_TEST_URL"] + f"/api/v1/message/{message['ID']}").json()[
             "Text"
         ]
         for message in matching

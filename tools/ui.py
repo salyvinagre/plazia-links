@@ -8,7 +8,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import httpx
+import httpx2
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE = ROOT / ".cache/ui"
@@ -20,7 +20,7 @@ def fetch(name: str) -> Path:
     target = CACHE / name
     if target.exists() and hashlib.sha256(target.read_bytes()).hexdigest() == asset["sha256"]:
         return target
-    response = httpx.get(asset["url"], follow_redirects=True, timeout=60)
+    response = httpx2.get(asset["url"], follow_redirects=True, timeout=60)
     response.raise_for_status()
     if hashlib.sha256(response.content).hexdigest() != asset["sha256"]:
         raise ValueError(f"Checksum mismatch for {name}")

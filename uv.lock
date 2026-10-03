@@ -1294,7 +1294,6 @@ source = { editable = "../plazia/packages/plazia-authlib" }
 [package.optional-dependencies]
 authn = [
     { name = "joserfc" },
-    { name = "plazia-contracts" },
     { name = "plazia-http" },
     { name = "plazia-kernel" },
     { name = "pydantic" },
@@ -1315,7 +1314,6 @@ requires-dist = [
     { name = "joserfc", marker = "extra == 'testing'", specifier = ">=1.6.4,<2" },
     { name = "openfga-sdk", marker = "extra == 'authz'", specifier = ">=0.10.4,<0.11" },
     { name = "plazia-authlib", extras = ["authn", "authz", "testing"], marker = "extra == 'all'", specifier = "==0.2.0" },
-    { name = "plazia-contracts", marker = "extra == 'authn'", editable = "../plazia/packages/plazia-contracts" },
     { name = "plazia-contracts", marker = "extra == 'authz'", editable = "../plazia/packages/plazia-contracts" },
     { name = "plazia-http", marker = "extra == 'authn'", editable = "../plazia/packages/plazia-http" },
     { name = "plazia-kernel", marker = "extra == 'authn'", editable = "../plazia/packages/plazia-kernel" },
@@ -1411,10 +1409,9 @@ dev = [
 
 [[package]]
 name = "plazia-http"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "../plazia/packages/plazia-http" }
 dependencies = [
-    { name = "httpx2" },
     { name = "plazia-kernel" },
 ]
 
@@ -1423,21 +1420,26 @@ fastapi = [
     { name = "fastapi" },
     { name = "pydantic" },
 ]
+httpx2 = [
+    { name = "httpx2" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.115,<1" },
-    { name = "httpx2", specifier = ">=2.7.0" },
+    { name = "httpx2", marker = "extra == 'httpx2'", specifier = ">=2.7.0" },
     { name = "plazia-feature", marker = "extra == 'feature'", editable = "../plazia/packages/plazia-feature" },
     { name = "plazia-kernel", editable = "../plazia/packages/plazia-kernel" },
     { name = "pydantic", marker = "extra == 'fastapi'", specifier = ">=2.12,<3" },
 ]
-provides-extras = ["feature", "fastapi"]
+provides-extras = ["httpx2", "feature", "fastapi"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "plazia-feature", editable = "../plazia/packages/plazia-feature" },
+    { name = "plazia-http", extras = ["httpx2"], specifier = "==0.2.0" },
+    { name = "plazia-observability", editable = "../plazia/packages/plazia-observability" },
     { name = "pydantic", specifier = ">=2.12,<3" },
     { name = "pytest", specifier = ">=9.0.0,<10" },
     { name = "pytest-asyncio", specifier = ">=1.0.0,<2" },
@@ -1447,11 +1449,8 @@ dev = [
 
 [[package]]
 name = "plazia-kernel"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "../plazia/packages/plazia-kernel" }
-dependencies = [
-    { name = "uuid6" },
-]
 
 [package.optional-dependencies]
 contacts = [
@@ -1467,7 +1466,6 @@ requires-dist = [
     { name = "id-validation", marker = "extra == 'contacts'", specifier = "==0.6.1" },
     { name = "phonenumberslite", marker = "extra == 'contacts'", specifier = ">=8,<9" },
     { name = "typing-extensions", marker = "extra == 'contacts'", specifier = ">=4.10,<5" },
-    { name = "uuid6", specifier = ">=2025.0.1" },
 ]
 provides-extras = ["contacts"]
 
@@ -1489,12 +1487,11 @@ source = { editable = "." }
 dependencies = [
     { name = "dependency-injector" },
     { name = "fastapi" },
-    { name = "httpx" },
     { name = "jinja2" },
     { name = "plazia-authlib", extra = ["authn", "authz"] },
     { name = "plazia-cli" },
     { name = "plazia-contracts" },
-    { name = "plazia-http", extra = ["fastapi"] },
+    { name = "plazia-http", extra = ["fastapi", "httpx2"] },
     { name = "plazia-kernel", extra = ["contacts"] },
     { name = "plazia-messaging" },
     { name = "plazia-notifications" },
@@ -1510,6 +1507,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx2" },
     { name = "mypy" },
     { name = "playwright" },
     { name = "plazia-authlib", extra = ["testing"] },
@@ -1525,12 +1523,11 @@ dev = [
 requires-dist = [
     { name = "dependency-injector", specifier = ">=4.49,<5" },
     { name = "fastapi", specifier = ">=0.115,<1" },
-    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "jinja2", specifier = ">=3.1,<4" },
     { name = "plazia-authlib", extras = ["authn", "authz"], editable = "../plazia/packages/plazia-authlib" },
     { name = "plazia-cli", editable = "../plazia/packages/plazia-cli" },
     { name = "plazia-contracts", editable = "../plazia/packages/plazia-contracts" },
-    { name = "plazia-http", extras = ["fastapi"], editable = "../plazia/packages/plazia-http" },
+    { name = "plazia-http", extras = ["httpx2", "fastapi"], editable = "../plazia/packages/plazia-http" },
     { name = "plazia-kernel", extras = ["contacts"], editable = "../plazia/packages/plazia-kernel" },
     { name = "plazia-messaging", editable = "../plazia/packages/plazia-messaging" },
     { name = "plazia-notifications", editable = "../plazia/packages/plazia-notifications" },
@@ -1546,6 +1543,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx2", specifier = ">=2.7,<3" },
     { name = "mypy", specifier = ">=1.13,<3" },
     { name = "playwright", specifier = ">=1.55,<2" },
     { name = "plazia-authlib", extras = ["testing"], editable = "../plazia/packages/plazia-authlib" },
@@ -1564,7 +1562,7 @@ source = { editable = "../plazia/packages/plazia-messaging" }
 dependencies = [
     { name = "nats-py" },
     { name = "plazia-feature" },
-    { name = "plazia-http" },
+    { name = "plazia-http", extra = ["httpx2"] },
     { name = "plazia-kernel" },
 ]
 
@@ -1572,7 +1570,7 @@ dependencies = [
 requires-dist = [
     { name = "nats-py", specifier = ">=2.15,<2.16" },
     { name = "plazia-feature", editable = "../plazia/packages/plazia-feature" },
-    { name = "plazia-http", editable = "../plazia/packages/plazia-http" },
+    { name = "plazia-http", extras = ["httpx2"], editable = "../plazia/packages/plazia-http" },
     { name = "plazia-kernel", editable = "../plazia/packages/plazia-kernel" },
 ]
 
@@ -1590,7 +1588,7 @@ version = "0.1.0"
 source = { editable = "../plazia/packages/plazia-notifications" }
 dependencies = [
     { name = "httpx2" },
-    { name = "plazia-http" },
+    { name = "plazia-http", extra = ["httpx2"] },
     { name = "plazia-kernel", extra = ["contacts"] },
     { name = "plazia-messaging" },
     { name = "plazia-observability" },
@@ -1601,7 +1599,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "httpx2", specifier = ">=2.7.0" },
-    { name = "plazia-http", editable = "../plazia/packages/plazia-http" },
+    { name = "plazia-http", extras = ["httpx2"], editable = "../plazia/packages/plazia-http" },
     { name = "plazia-kernel", extras = ["contacts"], editable = "../plazia/packages/plazia-kernel" },
     { name = "plazia-messaging", editable = "../plazia/packages/plazia-messaging" },
     { name = "plazia-observability", editable = "../plazia/packages/plazia-observability" },
@@ -1707,7 +1705,7 @@ dependencies = [
     { name = "jinja2" },
     { name = "plazia-authlib", extra = ["authn", "authz"] },
     { name = "plazia-cli", extra = ["prompts"] },
-    { name = "plazia-http" },
+    { name = "plazia-http", extra = ["httpx2"] },
     { name = "plazia-kernel", extra = ["contacts"] },
     { name = "plazia-messaging" },
     { name = "plazia-persistence" },
@@ -1721,7 +1719,6 @@ dependencies = [
     { name = "radon" },
     { name = "structlog" },
     { name = "tomli-w" },
-    { name = "uuid6" },
     { name = "vulture" },
 ]
 
@@ -1732,7 +1729,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1,<4" },
     { name = "plazia-authlib", extras = ["authn", "authz"], editable = "../plazia/packages/plazia-authlib" },
     { name = "plazia-cli", extras = ["prompts"], editable = "../plazia/packages/plazia-cli" },
-    { name = "plazia-http", editable = "../plazia/packages/plazia-http" },
+    { name = "plazia-http", extras = ["httpx2"], editable = "../plazia/packages/plazia-http" },
     { name = "plazia-kernel", extras = ["contacts"], editable = "../plazia/packages/plazia-kernel" },
     { name = "plazia-messaging", editable = "../plazia/packages/plazia-messaging" },
     { name = "plazia-persistence", editable = "../plazia/packages/plazia-persistence" },
@@ -1746,7 +1743,6 @@ requires-dist = [
     { name = "radon", specifier = ">=6.0.1,<7" },
     { name = "structlog", specifier = ">=25,<26" },
     { name = "tomli-w", specifier = ">=1.2,<2" },
-    { name = "uuid6", specifier = ">=2025.0.1" },
     { name = "vulture", specifier = ">=2.14,<3" },
 ]
 
@@ -2348,15 +2344,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz", hash = "sha256:63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63", size = 458972, upload-time = "2026-09-15T19:29:36.253Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl", hash = "sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3", size = 135717, upload-time = "2026-09-15T19:29:34.577Z" },
-]
-
-[[package]]
-name = "uuid6"
-version = "2025.0.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ca/b7/4c0f736ca824b3a25b15e8213d1bcfc15f8ac2ae48d1b445b310892dc4da/uuid6-2025.0.1.tar.gz", hash = "sha256:cd0af94fa428675a44e32c5319ec5a3485225ba2179eefcf4c3f205ae30a81bd", size = 13932, upload-time = "2025-07-04T18:30:35.186Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3d/b2/93faaab7962e2aa8d6e174afb6f76be2ca0ce89fde14d3af835acebcaa59/uuid6-2025.0.1-py3-none-any.whl", hash = "sha256:80530ce4d02a93cdf82e7122ca0da3ebbbc269790ec1cb902481fa3e9cc9ff99", size = 6979, upload-time = "2025-07-04T18:30:34.001Z" },
 ]
 
 [[package]]
