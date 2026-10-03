@@ -18,6 +18,33 @@ from app.kernel.api import ApiContract
 from tests.unit.test_notifications import Lease, Queue
 
 
+async def test_public_resolution_preserves_request_lineage(application, identity_client, issuer):
+    from tests.acceptance.test_identity_links import bearer
+
+    headers = bearer(issuer)
+    pool = (await identity_client.post("/api/v1/pools", headers=headers, json={"size": 1})).json()
+    link = (
+        await identity_client.get("/api/v1/links", headers=headers, params={"pool_id": pool["id"]})
+    ).json()["items"][0]
+    delegate = application.state.queries
+    seen = []
+
+    class RecordingQueries:
+        async def ask(self, query, *, context=None):
+            seen.append(context)
+            return await delegate.ask(query, context=context)
+
+    application.state.queries = RecordingQueries()
+    response = await identity_client.get(
+        "/" + link["short_code"],
+        headers={"X-Request-ID": "visitor-request", "X-Correlation-ID": "visitor-correlation"},
+    )
+    assert response.status_code == 200
+    assert seen[0] is not None
+    assert seen[0].request_id == "visitor-request"
+    assert seen[0].correlation_id == "visitor-correlation"
+
+
 @pytest.mark.parametrize(
     ("failure", "attempts", "outcome"), [(False, 0, "sent"), (True, 0, "retry"), (True, 4, "dead")]
 )

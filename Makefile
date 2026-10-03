@@ -13,7 +13,7 @@ PLAZIA_PRIVATE_TARGETS := flyway-migrate
 PLAZIA_HELP_ROOT := $(CURDIR)/help
 
 PLAZIA_HELP_SELECTOR_check := CHECK_TOOL
-PLAZIA_HELP_VALUES_check := fast all normalizers actions links openapi vulture semantic-dry wrap crap make-help
+PLAZIA_HELP_VALUES_check := fast all normalizers actions links env openapi vulture semantic-dry wrap crap make-help
 PLAZIA_HELP_DEFAULT_check := fast
 PLAZIA_HELP_SELECTOR_test := TEST_SUITE
 PLAZIA_HELP_VALUES_test := fast unit architecture integration acceptance all

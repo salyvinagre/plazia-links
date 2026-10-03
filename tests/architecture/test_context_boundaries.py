@@ -24,10 +24,36 @@ def test_context_core_contains_no_framework_or_storage_imports():
                             "redis",
                             "httpx",
                             "smtplib",
+                            "dependency_injector",
+                            "openfga_sdk",
+                            "jwt",
+                            "oauthlib",
+                            "shared_persistence",
                         }
                         or name.startswith(("app.platform", "app.interfaces"))
                         for name in names
                     ), path
+                    for name in names:
+                        parts = name.split(".")
+                        if parts[:2] == ["app", "contexts"] and parts[2] != root.name:
+                            assert parts[3:] == ["contracts"], path
+
+
+def test_application_drawers_and_interface_dispatch_keep_ownership():
+    # Access authorization is the explicit golden-principles authority boundary.
+    for root in Path("app/contexts").iterdir():
+        allowed = {"__init__.py", "authorization.py"} if root.name == "access" else {"__init__.py"}
+        assert {path.name for path in (root / "application").glob("*.py")} <= allowed
+    for path in Path("app/interfaces").rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.ImportFrom):
+                assert not (node.module or "").startswith("app.contexts.") or (
+                    node.module or ""
+                ).endswith(".contracts"), path
+                assert not (
+                    node.module == "shared_messaging"
+                    and any(name.name.startswith("InProcess") for name in node.names)
+                ), path
 
 
 def test_legacy_runtime_paths_and_dependencies_are_removed():

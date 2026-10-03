@@ -9,7 +9,7 @@ from shared_observability.telemetry import TelemetryService
 from shared_persistence import PostgresConnectionContext
 
 from app.contexts.links.application.dto.notification import EmailJobDto
-from app.contexts.links.application.telemetry import DEAD, OLDEST, PENDING
+from app.contexts.links.application.telemetry.signals import DEAD, OLDEST, PENDING
 
 
 @dataclass

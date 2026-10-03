@@ -1,5 +1,20 @@
 delivery:
   stack: {}
-  releases: {}
+  releases:
+    repository: salyvinagre/plazia-links
+    registry_provider: tools.environment:build_registry
+    common:
+      enabled: false
+      execution:
+        local: local
+        remote: remote
+    policies:
+      preview:
+        kind: preview
+    targets:
+      local:
+        kind: local-compose
+      remote:
+        kind: remote-compose
   dependencies: {}
   tunnels: {}

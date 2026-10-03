@@ -13,3 +13,24 @@
 - Runtime uses shared passive HTTP/OTLP providers and Links-owned bounded queue signals. Jobs persist W3C handoff context; terminal delivery outcomes follow transaction commit. Local evidence does not prove collector ingestion.
 - Pool names are editable metadata; deletion owns the lifecycle of all pool links. Bulk link deletion is one bounded, explicit transaction using the existing repository deletion path, receipt boundary and per-link audit. The pool's deletion is recorded as one pool audit fact.
 - New endpoints follow the shared `external-api.md` and `fastapi.md` obtained through `uv run --locked plazia-tools principles path`: canonical resource GET/PATCH/DELETE, typed schemas, snake_case parameters, verified org context, capabilities and CQRS authority, bounded explicit IDs, required write keys, standard status/error/replay semantics. Bulk DELETE uses query IDs rather than a verb path or a DELETE body.
+
+## Second-pass SLOC justification
+
+New production lines must own behavior, a boundary, or required validation. This
+pass measured nonblank, noncomment Python lines against f569415: app/worker +148,
+operator tooling +111, tests +139. These are source counts, including docstrings,
+not a complexity score. The moved telemetry catalog contributes zero net lines.
+Generated CSS and .env.example are build outputs of the existing tools.
+
+| Addition | Need and reuse |
+| --- | --- |
+| Shared CLI adapter and operator composition | Replaces the existing argparse path, moves bus construction into platform, closes the owner database, and keeps help independent of secrets; no second parser or service layer. |
+| Environment declarations | Required shared EnvRegistry classifies existing selectors and generates the reference; derives settings metadata and uses shared taxonomy/source selection rather than a second settings loader. |
+| API aliases/constraints | Reuses canonical ID normalization and publishes bounds, aware timestamps and strict JSON boolean semantics; no local identifier parser. |
+| Browser pool page and redirects | Makes pools beyond 100 reachable and preserves navigation through rename/errors/deletion; reuses the existing ListPoolsQuery and centralizes repeated redirects. |
+| Command item guard/public context | Rejects a foreign canonical-ID type before deletion and preserves caller correlation on anonymous queries; two existing boundaries extended. |
+| Regression/architecture/browser tests | Five failures were reproduced before fixes; tests guard authority boundaries, offline help, malformed inputs and actual multi-page browser behavior. Existing fixture/test flows are extended. |
+
+Access ports now live in application/ports and the telemetry catalog in its own
+application drawer. Imports and contract exports were moved, not duplicated.
+PLZL_ remains the explicit user-selected prefix. CRAP is deferred by instruction.

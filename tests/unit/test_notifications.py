@@ -104,22 +104,20 @@ async def test_queue_maps_private_driver_rows_and_updates_only_claimed_job(monke
     await queue.cleanup()
 
 
-def test_smtp_security_modes_are_mutually_exclusive(monkeypatch):
-    from worker.run import settings
+def test_smtp_security_modes_are_mutually_exclusive():
+    from app.platform.settings import Settings
 
     for security in ("tls", "starttls", "plain"):
-        monkeypatch.setattr(settings, "smtp_security", security)
-        config = transport()._configuration
+        config = transport(Settings(smtp_security=security))._configuration
         assert config.use_ssl == (security == "tls")
         assert config.starttls == (security == "starttls")
 
 
 async def test_worker_failures_retry_without_exposing_recipient(monkeypatch, caplog):
-    from pydantic import SecretStr
-
     import worker.run as worker
 
-    monkeypatch.setattr(worker.settings, "worker_database_url", SecretStr("postgresql://worker"))
+    configured = worker.Settings(worker_database_url="postgresql://worker")
+    monkeypatch.setattr(worker, "Settings", lambda: configured)
     monkeypatch.setattr(
         worker,
         "IdentitySettings",

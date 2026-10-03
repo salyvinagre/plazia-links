@@ -9,7 +9,7 @@ from shared_observability.telemetry import TelemetryService
 from shared_observability.tracing import finish_span, start_client_span
 
 from app.contexts.links.application.ports.notifications import DeliveryQueue, EmailTransport
-from app.contexts.links.application.telemetry import (
+from app.contexts.links.application.telemetry.signals import (
     LEASES,
     OUTCOME,
     PROCESS,

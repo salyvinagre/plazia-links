@@ -67,6 +67,7 @@ quality:
             - argv: [uv, run, --locked, plazia-tools, check, actions]
             - argv: [uv, run, --locked, plazia-tools, check, make-help]
             - argv: [uv, run, --locked, plazia-tools, check, links]
+            - argv: [uv, run, --locked, plazia-tools, check, env]
         all:
           steps:
             - argv: [uv, run, --locked, plazia-tools, check, fast]

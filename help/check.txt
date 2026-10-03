@@ -10,7 +10,7 @@ VARIABLES
 CHECK_TOOL selects the diagnostic. CHECK_FLAGS are passed to that tool.
 
 VALUES
-fast (default), all, normalizers, actions, links, openapi, vulture, semantic-
+fast (default), all, normalizers, actions, links, env, openapi, vulture, semantic-
 dry, wrap, crap, make-help.
 
 WHEN

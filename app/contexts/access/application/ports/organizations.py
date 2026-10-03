@@ -3,6 +3,12 @@ from typing import Protocol
 from shared_identity.canonical_ids import OrganizationId
 
 from app.contexts.access.application.dto.organization import OrganizationDto
+from app.contexts.access.domain.principal import Permission, Principal
+
+
+class OrganizationAccessPort(Protocol):
+    async def require(self, principal: Principal, permission: Permission) -> OrganizationDto: ...
+    async def resolve(self, principal: Principal) -> OrganizationDto: ...
 
 
 class OrganizationRepository(Protocol):

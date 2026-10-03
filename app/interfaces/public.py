@@ -29,7 +29,9 @@ def public_host(request: Request) -> None:
 @router.get("/{short_code}")
 async def resolve(short_code: str, request: Request) -> Response:
     public_host(request)
-    link = await queries(request).ask(ResolveLinkQuery(short_code))
+    link = await queries(request).ask(
+        ResolveLinkQuery(short_code), context=request_context(request)
+    )
     if not link.is_active:
         raise HTTPException(410, "link_disabled")
     if link.destination_url is None:

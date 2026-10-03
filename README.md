@@ -17,7 +17,7 @@ Python or service configuration. `make <target> help` shows guidance without
 running that target; for example, `make check help CHECK_TOOL=normalizers`.
 
 `make check` defaults to the offline `fast` lane: lint, formatting, types,
-normalizers, Actions and Make-help policy, and Markdown links. Select a shared tool with
+normalizers, environment declarations, Actions and Make-help policy, and Markdown links. Select a shared tool with
 `make check CHECK_TOOL=links CHECK_FLAGS='README.md'`, or use `CHECK_TOOL=all`
 for the broader diagnostics, including freshly generated OpenAPI validation.
 Checks and suites are declared in `.plazia/quality.yaml`. `make test` accepts

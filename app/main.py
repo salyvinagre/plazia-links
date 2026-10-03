@@ -28,7 +28,7 @@ from app.platform.database import PostgresDatabase, PostgresUowFactory
 from app.platform.logging import get_logger, setup_logging
 from app.platform.persistence.schema import SchemaAuthority
 from app.platform.redis import close_redis, get_redis
-from app.platform.settings import IdentitySettings, Settings, settings
+from app.platform.settings import IdentitySettings, Settings
 from app.platform.telemetry import build_telemetry
 
 
@@ -102,7 +102,7 @@ def create_app(
     authority: Any = None,
     config: Settings | None = None,
 ) -> FastAPI:
-    config = config or settings
+    config = config or Settings()
     identity = access.config if access else IdentitySettings()
 
     @asynccontextmanager

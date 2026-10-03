@@ -9,11 +9,11 @@ from app.contexts.links.adapters.repositories.sql.notifications import PostgresD
 from app.contexts.links.application.workflows.notifications import ActivationEmailsWorkflow
 from app.platform.logging import get_logger, setup_logging
 from app.platform.persistence.schema import SchemaAuthority
-from app.platform.settings import IdentitySettings, settings
+from app.platform.settings import IdentitySettings, Settings
 from app.platform.telemetry import build_telemetry
 
 
-def transport() -> SmtpEmailTransport:
+def transport(settings: Settings) -> SmtpEmailTransport:
     return SmtpEmailTransport(
         configuration=SmtpEmailTransportConfiguration(
             host=settings.smtp_host,
@@ -31,6 +31,7 @@ def transport() -> SmtpEmailTransport:
 
 async def run() -> None:
     setup_logging()
+    settings = Settings()
     settings.validate_runtime()
     url = settings.worker_database_url.get_secret_value()
     if not url:
@@ -39,7 +40,7 @@ async def run() -> None:
     origin.validate_public_origin(production=settings.environment in {"production", "prod"})
     SchemaAuthority(url).check(runtime="worker")
     queue = PostgresDeliveryQueue(url)
-    smtp = transport()
+    smtp = transport(settings)
     telemetry = build_telemetry(settings, "worker")
     workflow = ActivationEmailsWorkflow(queue, smtp, origin.public_base_url, telemetry)
     iterations = 0

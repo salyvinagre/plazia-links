@@ -7,7 +7,7 @@ from app.contexts.access.contracts import OrganizationAccessPort
 from app.contexts.links.application.commands.update_link.command import UpdateLinkCommand
 from app.contexts.links.application.dto.links import LinkDto
 from app.contexts.links.application.ports.repository import LinkRepository
-from app.contexts.links.application.telemetry import ENQUEUE, ENQUEUE_DURATION
+from app.contexts.links.application.telemetry.signals import ENQUEUE, ENQUEUE_DURATION
 from app.contexts.links.domain.link import InvalidLinkError
 
 

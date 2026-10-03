@@ -174,6 +174,3 @@ class IdentitySettings(BaseSettings):
                     or parsed.scheme != "http"
                 ):
                     raise ValueError("Identity endpoints require HTTPS")
-
-
-settings = Settings()

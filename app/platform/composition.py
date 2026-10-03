@@ -2,8 +2,8 @@
 
 import hashlib
 import json
-from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol, cast
 
@@ -20,13 +20,23 @@ from app.contexts.access.application.authorization import (
     AuthorizationAttempt,
     OrganizationAuthority,
 )
+from app.contexts.access.application.commands.bind_organization.handler import (
+    BindOrganizationHandler,
+)
+from app.contexts.access.application.commands.disable_organization.handler import (
+    DisableOrganizationHandler,
+)
 from app.contexts.access.application.queries.resolve_organization.handler import (
     ResolveOrganizationHandler,
 )
 from app.contexts.access.application.queries.resolve_organization.query import (
     ResolveOrganizationQuery,
 )
-from app.contexts.access.contracts import Principal
+from app.contexts.access.contracts import (
+    BindOrganizationCommand,
+    DisableOrganizationCommand,
+    Principal,
+)
 from app.contexts.links.application.commands.create_link.command import CreateLinkCommand
 from app.contexts.links.application.commands.create_link.handler import CreateLinkHandler
 from app.contexts.links.application.commands.delete_link.command import DeleteLinkCommand
@@ -54,7 +64,28 @@ from app.contexts.links.application.queries.list_pools.handler import ListPoolsH
 from app.contexts.links.application.queries.list_pools.query import ListPoolsQuery
 from app.contexts.links.application.queries.resolve_link.handler import ResolveLinkHandler
 from app.contexts.links.application.queries.resolve_link.query import ResolveLinkQuery
-from app.platform.database import Scope
+from app.platform.database import PostgresDatabase, PostgresUowFactory, Scope
+from app.platform.settings import Settings
+
+
+@asynccontextmanager
+async def operator_commands() -> AsyncIterator[InProcessCommandBus[Any]]:
+    """Owner-only dispatch and resource lifetime; never part of API composition."""
+    database = PostgresDatabase(Settings().database_url.get_secret_value(), pooled=False)
+    try:
+        yield InProcessCommandBus(
+            handlers={
+                BindOrganizationCommand: lambda uow: BindOrganizationHandler(
+                    uow.scope.organizations
+                ),
+                DisableOrganizationCommand: lambda uow: DisableOrganizationHandler(
+                    uow.scope.organizations
+                ),
+            },
+            unit_of_work_factory=PostgresUowFactory(database),
+        )
+    finally:
+        await database.close()
 
 
 class Database(Protocol):

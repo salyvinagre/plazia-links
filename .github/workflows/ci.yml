@@ -60,10 +60,12 @@ jobs:
       - name: Verify interpreter, user and installed assets
         run: >-
           docker run --rm plazia-links:local python -c
-          'import os, sys; from pathlib import Path; import app, app.main, worker.run;
+          'import os, sys; from pathlib import Path; import app, app.main, worker.run; from app.interfaces import cli;
           assert sys.version_info[:2] == (3, 14); assert os.getuid() == 10001;
           root=Path(app.__file__).parent; assert (root/"templates/public/waiting.html").is_file();
-          assert (root/"platform/persistence/sql/migrations/V1__link_pools.sql").is_file()'
+          assert (root/"platform/persistence/sql/migrations/V1__link_pools.sql").is_file();
+          assert (root/"platform/persistence/sql/migrations/V2__pool_management.sql").is_file();
+          assert cli.main(["--help"]) == 0'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ !cancelled() }}
         with:
