@@ -1,16 +1,14 @@
 import asyncio
 import json
+from dataclasses import replace
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
-import jwt
 import pytest
+from joserfc import jwk, jwt
+from plazia_authlib.testing import TokenAuthority
 
-from tests.identity_support import ORG_A, ORG_B, RESOURCE
-
-
-def bearer(issuer, **claims):
-    return {"Authorization": "Bearer " + issuer.access(**claims)}
+from tests.identity_support import ORG_A, ORG_B, RESOURCE, bearer
 
 
 async def sign_in(client):
@@ -86,7 +84,7 @@ async def test_scopes_and_binding_are_both_required(identity_client, identity_db
     assert (
         await identity_client.post(
             "/api/v1/links",
-            headers=bearer(issuer, scopes="links:read"),
+            headers=bearer(issuer, scope="links:read"),
             json={"destination_url": "https://example.com"},
         )
     ).status_code == 403
@@ -122,9 +120,8 @@ async def test_invalid_access_claims_fail_closed(identity_client, issuer, claims
 async def test_id_tokens_local_credentials_and_duplicate_headers_are_not_api_access(
     identity_client, issuer
 ):
-    claims = jwt.decode(issuer.access(), options={"verify_signature": False})
-    identity = jwt.encode(
-        claims, issuer.key, algorithm="RS256", headers={"kid": issuer.kid, "typ": "JWT"}
+    identity = issuer.authority.issue_human_session(
+        issuer.identity.user, issuer.identity.client, header_overrides={"typ": "JWT"}
     )
     for token in (identity, "uf_old_api_key", "opaque-token"):
         assert (
@@ -133,8 +130,20 @@ async def test_id_tokens_local_credentials_and_duplicate_headers_are_not_api_acc
     response = await identity_client.get(
         "/api/v1/links",
         headers=[
-            ("Authorization", "Bearer " + issuer.access()),
-            ("Authorization", "Bearer " + issuer.access()),
+            (
+                "Authorization",
+                "Bearer "
+                + issuer.authority.issue_human_session(
+                    issuer.identity.user, issuer.identity.client
+                ),
+            ),
+            (
+                "Authorization",
+                "Bearer "
+                + issuer.authority.issue_human_session(
+                    issuer.identity.user, issuer.identity.client
+                ),
+            ),
         ],
     )
     assert response.status_code == 401
@@ -142,12 +151,15 @@ async def test_id_tokens_local_credentials_and_duplicate_headers_are_not_api_acc
 
 @pytest.mark.asyncio
 async def test_dpop_machine_token_and_shared_replay_protection(identity_client, issuer):
-    key, thumbprint = issuer.proof_key()
-    token = issuer.access(
-        client_id="m2m-fixture", sub="mch_0199a112345670008000000000000004", cnf={"jkt": thumbprint}
+    key = issuer.proof_key()
+    thumbprint = key.thumbprint
+    token = issuer.authority.issue_machine_credential(
+        issuer.identity.machine,
+        replace(issuer.identity.client, client_id="m2m-fixture"),
+        confirmation_jkt=thumbprint,
     )
     uri = str(identity_client.base_url).rstrip("/") + "/api/v1/links"
-    proof = issuer.proof(token, key, "POST", uri)
+    proof = await issuer.proof(key, method="POST", uri=uri, access_token=token)
     headers = {"Authorization": "DPoP " + token, "DPoP": proof}
     response = await identity_client.post(
         "/api/v1/links", headers=headers, json={"destination_url": "https://example.com/machine"}
@@ -174,14 +186,19 @@ async def test_dpop_machine_token_and_shared_replay_protection(identity_client, 
     ],
 )
 async def test_dpop_request_bindings_are_checked(identity_client, issuer, override):
-    key, thumbprint = issuer.proof_key()
-    token = issuer.access(cnf={"jkt": thumbprint})
+    key = issuer.proof_key()
+    thumbprint = key.thumbprint
+    token = issuer.authority.issue_human_session(
+        issuer.identity.user, issuer.identity.client, claim_overrides={"cnf": {"jkt": thumbprint}}
+    )
     uri = str(identity_client.base_url).rstrip("/") + "/api/v1/links"
     response = await identity_client.get(
         "/api/v1/links",
         headers={
             "Authorization": "DPoP " + token,
-            "DPoP": issuer.proof(token, key, "GET", uri, **override),
+            "DPoP": await issuer.proof(
+                key, method="GET", uri=uri, access_token=token, claim_overrides={**override}
+            ),
         },
     )
     assert response.status_code == 401
@@ -189,21 +206,29 @@ async def test_dpop_request_bindings_are_checked(identity_client, issuer, overri
 
 @pytest.mark.asyncio
 async def test_dpop_store_outage_and_concurrent_replay(identity_client, issuer, ephemeral):
-    key, jkt = issuer.proof_key()
-    token = issuer.access(cnf={"jkt": jkt})
+    key = issuer.proof_key()
+    jkt = key.thumbprint
+    token = issuer.authority.issue_human_session(
+        issuer.identity.user, issuer.identity.client, claim_overrides={"cnf": {"jkt": jkt}}
+    )
     uri = str(identity_client.base_url).rstrip("/") + "/api/v1/links"
-    proof = issuer.proof(token, key, "GET", uri)
+    proof = await issuer.proof(key, method="GET", uri=uri, access_token=token)
     ephemeral.available = False
     response = await identity_client.get(
         "/api/v1/links", headers={"Authorization": "DPoP " + token, "DPoP": proof}
     )
     assert response.status_code == 503
     ephemeral.available = True
-    from app.contexts.access.adapters.dpop import DPoPVerifier
+    from app.contexts.access.adapters.dpop import DpopReplayVerifier
     from app.contexts.access.domain.principal import InvalidCredentialsError
 
     results = await asyncio.gather(
-        *[DPoPVerifier(ephemeral).verify(proof, token, jkt, "GET", uri) for _ in range(6)],
+        *[
+            DpopReplayVerifier(ephemeral, allow_insecure_loopback=True).verify(
+                proof, token, jkt, "GET", uri
+            )
+            for _ in range(6)
+        ],
         return_exceptions=True,
     )
     assert sum(result is None for result in results) == 1
@@ -221,7 +246,10 @@ async def test_cookie_session_does_not_authorize_api_and_logout_revokes(
     dashboard = await client.get("/dashboard/links")
     assert dashboard.status_code == 200
     assert dashboard.headers["referrer-policy"] == "same-origin"
-    assert issuer.access() not in dashboard.text
+    assert (
+        issuer.authority.issue_human_session(issuer.identity.user, issuer.identity.client)
+        not in dashboard.text
+    )
     assert (await client.get("/api/v1/links")).status_code == 401
     assert (await client.get(callback)).status_code == 400
     # State is stored as verified facts, not access or refresh token strings.
@@ -276,13 +304,17 @@ async def test_browser_forms_share_core_commands_and_escape_html(
     assert (await client.get("/browser")).headers["location"] == "https://example.com/new"
 
 
+@pytest.mark.parametrize("failure", ["nonce", "token_endpoint"])
 @pytest.mark.asyncio
-async def test_callback_nonce_and_browser_binding(identity_client, issuer):
+async def test_callback_nonce_and_browser_binding(identity_client, issuer, failure):
     start = await identity_client.get("/login")
     query = parse_qs(urlsplit(start.headers["location"]).query)
     assert query["resource"] == [RESOURCE]
     assert query["code_challenge_method"] == ["S256"]
-    issuer.bad_nonce = True
+    if failure == "nonce":
+        issuer.id_token_claim_overrides["nonce"] = "wrong-nonce"
+    else:
+        issuer.discovery_overrides["token_endpoint"] = "https://foreign.example.test/token"
     async with httpx.AsyncClient(trust_env=False) as browser:
         auth = await browser.get(start.headers["location"])
     assert (await identity_client.get(auth.headers["location"])).status_code == 400
@@ -324,24 +356,26 @@ async def test_code_conflict_is_409_and_does_not_break_following_requests(identi
 
 @pytest.mark.asyncio
 async def test_wrong_signature_and_private_dpop_key_are_rejected(identity_client, issuer):
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
-    claims = jwt.decode(issuer.access(), options={"verify_signature": False})
-    foreign_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    forged = jwt.encode(
-        claims, foreign_key, algorithm="RS256", headers={"kid": issuer.kid, "typ": "at+jwt"}
+    foreign = TokenAuthority(issuer=issuer.url, audience=RESOURCE)
+    forged = foreign.issue_human_session(
+        issuer.identity.user,
+        issuer.identity.client,
+        header_overrides={"kid": issuer.authority.key_id},
     )
     assert (
         await identity_client.get("/api/v1/links", headers={"Authorization": "Bearer " + forged})
     ).status_code == 401
-    key, jkt = issuer.proof_key()
-    token = issuer.access(cnf={"jkt": jkt})
+    key = issuer.proof_key()
+    jkt = key.thumbprint
+    token = issuer.authority.issue_human_session(
+        issuer.identity.user, issuer.identity.client, claim_overrides={"cnf": {"jkt": jkt}}
+    )
     uri = str(identity_client.base_url).rstrip("/") + "/api/v1/links"
-    proof = issuer.proof(token, key, "GET", uri)
-    payload = jwt.decode(proof, options={"verify_signature": False})
-    private_jwk = json.loads(jwt.algorithms.ECAlgorithm.to_jwk(key))
+    proof = await issuer.proof(key, method="GET", uri=uri, access_token=token)
+    private = jwk.import_key(dict(key.private_jwk()))
+    payload = jwt.decode(proof, private, algorithms=["ES256"]).claims
     unsafe = jwt.encode(
-        payload, key, algorithm="ES256", headers={"typ": "dpop+jwt", "jwk": private_jwk}
+        {"alg": "ES256", "typ": "dpop+jwt", "jwk": dict(key.private_jwk())}, payload, private
     )
     assert (
         await identity_client.get(

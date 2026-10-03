@@ -4,13 +4,13 @@ import pytest
 from app.main import create_app
 from app.platform.access import AccessRuntime
 from app.platform.settings import Settings
-from tests.identity_support import LocalIssuer, MemoryState
+from tests.identity_support import LinksIssuer, MemoryState
 from tests.support import FixtureAuthority, MemoryDatabase, MemoryRepository, MemoryUowFactory
 
 
 @pytest.fixture
 def issuer():
-    value = LocalIssuer()
+    value = LinksIssuer()
     yield value
     value.close()
 

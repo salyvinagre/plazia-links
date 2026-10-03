@@ -1,0 +1,23 @@
+IMAGE-SMOKE
+
+PURPOSE
+Verify the built runtime interpreter, non-root user, imports and required assets.
+
+USAGE
+  [verify] make image-smoke help
+
+VARIABLES
+CONTAINER selects the engine (default podman); the built image is plazia-links:local.
+
+WHEN
+Run after make image, using the same container engine.
+
+BOUNDARIES
+Starts a disposable inspection container without providers or runtime credentials.
+
+EVIDENCE
+The packaging assertions pass; this does not prove provider or production readiness.
+
+EXAMPLES
+  [verify] make image-smoke help
+  [static] make image-smoke

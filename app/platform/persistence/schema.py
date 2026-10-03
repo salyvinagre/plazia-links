@@ -12,10 +12,10 @@ from typing import Any, Final, Literal
 
 import psycopg
 from psycopg import Connection
+from shared_persistence.roles import PostgresRoles
 
 _MIGRATION_SCHEMA: Final = "links_migrations"
 _OWNED_SCHEMAS: Final = ("access", "links", "platform")
-_ROLE_PATTERN: Final = re.compile(r"links_[a-z][a-z0-9_]{0,24}")
 _MIGRATIONS: Final = tuple(sorted((Path(__file__).parent / "sql/migrations").glob("V*.sql")))
 _SQL: Final = "\n".join(path.read_text() for path in _MIGRATIONS)
 # Flyway CRC32 ignores line endings/BOM and is stored as a signed Java int.
@@ -117,31 +117,21 @@ class SchemaStatus:
 class SchemaAuthority:
     """Check Links storage without creating schemas or running migrations."""
 
-    def __init__(
-        self,
-        database_url: str,
-        *,
-        app_role: str = "links_app",
-        worker_role: str = "links_worker",
-    ) -> None:
+    def __init__(self, database_url: str) -> None:
         if not database_url.strip():
             raise ValueError("schema database URL is required")
         if not database_url.strip().startswith(("postgresql://", "postgres://")):
             raise ValueError("Schema verification requires a PostgreSQL URL")
         self.database_url = database_url.strip()
-        self.app_role = self._role(app_role)
-        self.worker_role = self._role(worker_role)
-        if self.app_role == self.worker_role:
-            raise ValueError("application and worker database roles must be distinct")
 
     def prepare(self) -> None:
         """Admit only an empty target or a verified packaged migration prefix."""
 
-        with self._connection() as connection:
-            self._require_runtime_roles(connection)
+        with self._connection() as (connection, roles):
+            self._require_runtime_roles(connection, roles)
             history = self._history(connection)
             if history:
-                self._status(connection, upgrading=True)
+                self._status(connection, roles, upgrading=True)
                 return
             existing = self._owned_schemas(connection)
             if existing:
@@ -152,16 +142,17 @@ class SchemaAuthority:
     def finish(self) -> SchemaStatus:
         """Verify the schema and authority produced by Flyway."""
 
-        with self._connection() as connection:
-            self._require_runtime_roles(connection)
-            return self._status(connection)
+        with self._connection() as (connection, roles):
+            self._require_runtime_roles(connection, roles)
+            return self._status(connection, roles)
 
     def check(self, *, runtime: Literal["app", "worker"] | None = None) -> SchemaStatus:
         """Read and verify the current Flyway schema state."""
 
-        with self._connection() as connection:
-            self._require_runtime_roles(connection)
+        with self._connection() as (connection, roles):
+            self._require_runtime_roles(connection, roles)
             if runtime is not None:
+                app, worker = roles.names["links_app"], roles.names["links_worker"]
                 row = connection.execute(
                     """SELECT current_user, EXISTS (
                     SELECT 1 FROM pg_catalog.pg_roles r
@@ -170,47 +161,63 @@ class SchemaAuthority:
                         (r.rolname <> current_user AND r.rolname = ANY(%s)) OR r.oid IN (
                             SELECT nspowner FROM pg_catalog.pg_namespace
                             WHERE nspname = ANY(%s))))""",
-                    ([self.app_role, self.worker_role], [*_OWNED_SCHEMAS, _MIGRATION_SCHEMA]),
+                    ([app, worker], [*_OWNED_SCHEMAS, _MIGRATION_SCHEMA]),
                 ).fetchone()
-                expected = self.app_role if runtime == "app" else self.worker_role
+                expected = app if runtime == "app" else worker
                 if row is None or row[0] != expected or row[1]:
                     raise SchemaError(
                         "Runtime requires its dedicated role without owner membership"
                     )
-            return self._status(connection)
+            return self._status(connection, roles)
 
     @contextmanager
-    def _connection(self) -> Generator[Connection[tuple[Any, ...]]]:
+    def _connection(self) -> Generator[tuple[Connection[tuple[Any, ...]], PostgresRoles]]:
         try:
             with psycopg.connect(self.database_url, autocommit=True) as db:
                 with db.transaction():
                     db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
-                    yield db
+                    try:
+                        roles = PostgresRoles.read(db, owner="salyvinagre/plazia-links")
+                        _ = roles.names["links_app"], roles.names["links_worker"]
+                    except (ValueError, KeyError) as error:
+                        raise SchemaError(
+                            "Links database role binding is missing or invalid"
+                        ) from error
+                    yield db, roles
         except SchemaError:
             raise
         except psycopg.Error as error:
             raise SchemaError("Links schema verification failed") from error
 
-    def _require_runtime_roles(self, connection: Connection[tuple[Any, ...]]) -> None:
+    @staticmethod
+    def _require_runtime_roles(
+        connection: Connection[tuple[Any, ...]], roles: PostgresRoles
+    ) -> None:
+        names = (roles.names["links_app"], roles.names["links_worker"])
         rows = connection.execute(
             """
-            SELECT rolname, rolcanlogin, rolsuper, rolbypassrls
+            SELECT rolname, rolcanlogin, rolsuper, rolbypassrls,
+                   rolcreatedb, rolcreaterole, rolreplication, rolinherit
             FROM pg_catalog.pg_roles
             WHERE rolname = ANY(%s)
             """,
-            ([self.app_role, self.worker_role],),
+            (list(names),),
         ).fetchall()
-        roles = {row[0]: row[1:] for row in rows}
-        if set(roles) != {self.app_role, self.worker_role}:
+        if {row[0] for row in rows} != set(names):
             raise SchemaError("Links application and worker roles must already exist")
-        if any(
-            not login or superuser or bypass_rls for login, superuser, bypass_rls in roles.values()
-        ):
-            raise SchemaError("Links runtime roles must be login roles without elevated bypass")
+        if any(not row[1] or any(row[2:]) for row in rows):
+            raise SchemaError(
+                "Links runtime roles require login without elevated privileges or inheritance"
+            )
 
     def _status(
-        self, connection: Connection[tuple[Any, ...]], *, upgrading: bool = False
+        self,
+        connection: Connection[tuple[Any, ...]],
+        roles: PostgresRoles,
+        *,
+        upgrading: bool = False,
     ) -> SchemaStatus:
+        app, worker = roles.names["links_app"], roles.names["links_worker"]
         history = self._history(connection)
         expected = _EXPECTED_HISTORY[: len(history)] if upgrading else _EXPECTED_HISTORY
         if not history or history != expected:
@@ -293,7 +300,7 @@ class SchemaAuthority:
                 (list(_OWNED_SCHEMAS),),
             ).fetchall()
         }
-        if policies != self._policies():
+        if policies != self._policies(worker):
             raise SchemaError("Links tenant policies differ from the packaged migration")
         private_access = connection.execute(
             """SELECT bool_or(CASE
@@ -316,22 +323,22 @@ class SchemaAuthority:
             FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
             WHERE n.nspname=ANY(%s) AND c.relkind IN ('r','p')""",
             (
-                self.app_role,
-                self.app_role,
-                self.app_role,
-                self.worker_role,
+                app,
+                app,
+                app,
+                worker,
                 revision == "1",
-                self.app_role,
+                app,
                 [
                     "access.organizations",
                     "links.pools",
                     "platform.audit_events",
                     "platform.command_receipts",
                 ],
-                self.worker_role,
-                self.worker_role,
-                self.app_role,
-                self.worker_role,
+                worker,
+                worker,
+                app,
+                worker,
                 [*_OWNED_SCHEMAS, _MIGRATION_SCHEMA],
             ),
         ).fetchone()
@@ -341,7 +348,7 @@ class SchemaAuthority:
             grants = connection.execute(
                 """SELECT has_table_privilege(%s, 'links.pools', 'UPDATE')
                     AND has_table_privilege(%s, 'links.pools', 'DELETE') AS pool_management""",
-                (self.app_role, self.app_role),
+                (app, app),
             ).fetchone()
             if grants is None or not grants[0]:
                 raise SchemaError("Links pool management differs from the packaged migrations")
@@ -417,7 +424,8 @@ class SchemaAuthority:
         ).fetchall()
         return frozenset(row[0] for row in names)
 
-    def _policies(self) -> dict[tuple[str, str], tuple[object, ...]]:
+    @staticmethod
+    def _policies(worker: str) -> dict[tuple[str, str], tuple[object, ...]]:
         tenant = "(organization_id = platform.current_organization_id())"
         values: dict[tuple[str, str], tuple[object, ...]] = {
             (table, name): ("*", True, ("public",), tenant, tenant)
@@ -430,46 +438,40 @@ class SchemaAuthority:
                 ("platform.command_receipts", "command_receipts_tenant_scope"),
             )
         }
-        worker = (self.worker_role,)
+        role = (worker,)
         values.update(
             {
                 ("links.subscriptions", "subscriptions_worker_read"): (
                     "r",
                     True,
-                    worker,
+                    role,
                     "true",
                     None,
                 ),
                 ("links.subscriptions", "subscriptions_worker_delete"): (
                     "d",
                     True,
-                    worker,
+                    role,
                     "true",
                     None,
                 ),
                 ("links.links", "links_worker_active_read"): (
                     "r",
                     True,
-                    worker,
+                    role,
                     "(is_active AND (destination_url IS NOT NULL))",
                     None,
                 ),
                 ("platform.activation_emails", "activation_emails_worker_access"): (
                     "*",
                     True,
-                    worker,
+                    role,
                     "true",
                     "true",
                 ),
             }
         )
         return values
-
-    @staticmethod
-    def _role(value: str) -> str:
-        if not isinstance(value, str) or _ROLE_PATTERN.fullmatch(value) is None:
-            raise ValueError("Links database roles must match links_[a-z][a-z0-9_]{0,24}")
-        return value
 
 
 __all__ = ["SchemaAuthority", "SchemaError", "SchemaStatus"]

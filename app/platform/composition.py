@@ -65,13 +65,13 @@ from app.contexts.links.application.queries.list_pools.query import ListPoolsQue
 from app.contexts.links.application.queries.resolve_link.handler import ResolveLinkHandler
 from app.contexts.links.application.queries.resolve_link.query import ResolveLinkQuery
 from app.platform.database import PostgresDatabase, PostgresUowFactory, Scope
-from app.platform.settings import Settings
+from app.platform.settings import OwnerSettings
 
 
 @asynccontextmanager
 async def operator_commands() -> AsyncIterator[InProcessCommandBus[Any]]:
     """Owner-only dispatch and resource lifetime; never part of API composition."""
-    database = PostgresDatabase(Settings().database_url.get_secret_value(), pooled=False)
+    database = PostgresDatabase(OwnerSettings().database_url.get_secret_value(), pooled=False)
     try:
         yield InProcessCommandBus(
             handlers={

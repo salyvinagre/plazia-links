@@ -1,0 +1,24 @@
+[client]
+client_id = "links-browser"
+client_secret = "fixture-browser-secret-not-a-real-credential"
+authentication_method = "basic"
+redirect_uris = ["http://127.0.0.1:8000/auth/callback"]
+
+[user]
+id = "usr_0199a112345670008000000000000003"
+session_id = "ses_0199a112345670008000000000000006"
+provider = "local_fixture"
+environment_id = "env_0199a112345670008000000000000007"
+business_id = "biz_0199a112345670008000000000000008"
+organization_id = "org_0199a112345670008000000000000001"
+scopes = ["openid", "links:read", "links:create", "links:update", "links:delete"]
+
+[machine]
+id = "mch_0199a112345670008000000000000004"
+actor_id = "app_0199a112345670008000000000000005"
+actor_type = "application"
+provider = "machine_token"
+environment_id = "env_0199a112345670008000000000000007"
+business_id = "biz_0199a112345670008000000000000008"
+organization_id = "org_0199a112345670008000000000000001"
+scopes = ["links:read", "links:create", "links:update", "links:delete"]

@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from tests.identity_support import ORG_A, LocalIssuer
+from tests.identity_support import ORG_A, LinksIssuer
 
 pytestmark = [
     pytest.mark.slow,
@@ -24,34 +24,34 @@ pytestmark = [
 def live_application(request):
     from playwright.sync_api import sync_playwright
 
-    issuer = LocalIssuer()
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     base = f"http://127.0.0.1:{port}"
+    issuer = LinksIssuer(public_base=base)
     env = {
         **os.environ,
-        "PLZL_ENVIRONMENT": "test",
-        "PLZL_DEPLOYMENT_MODE": request.param,
-        "PLZL_DATABASE_URL": os.environ["POSTGRES_TEST_URL"],
-        "PLZL_IDENTITY_ISSUER": issuer.url,
-        "PLZL_IDENTITY_AUDIENCE": "https://links.example.test/api/v1",
-        "PLZL_IDENTITY_CLIENT_ID": issuer.client_id,
-        "PLZL_IDENTITY_CLIENT_SECRET": issuer.client_secret,
-        "PLZL_IDENTITY_PUBLIC_BASE_URL": base,
-        "PLZL_IDENTITY_ALLOW_INSECURE_LOOPBACK": "true",
-        "PLZL_RATE_LIMIT_ENABLED": "false",
+        "PLZK_ENVIRONMENT": "test",
+        "PLZK_DEPLOYMENT_MODE": request.param,
+        "PLZK_DATABASE_URL": os.environ["POSTGRES_TEST_URL"],
+        "PLZK_IDENTITY_ISSUER": issuer.url,
+        "PLZK_IDENTITY_AUDIENCE": "https://links.example.test/api/v1",
+        "PLZK_IDENTITY_CLIENT_ID": issuer.identity.client.client_id,
+        "PLZK_IDENTITY_CLIENT_SECRET": issuer.identity.client.client_secret,
+        "PLZK_IDENTITY_PUBLIC_BASE_URL": base,
+        "PLZK_IDENTITY_ALLOW_INSECURE_LOOPBACK": "true",
+        "PLZK_RATE_LIMIT_ENABLED": "false",
     }
     root = Path(__file__).resolve().parents[2]
     subprocess.run(
         [sys.executable, "-m", "app.cli", "bind-organization", ORG_A, "--name", "Browser tenant"],
         cwd=root,
-        env=env | {"PLZL_DATABASE_URL": os.environ["POSTGRES_OWNER_TEST_URL"]},
+        env=env | {"PLZK_SCHEMA_DATABASE_URL": os.environ["POSTGRES_OWNER_TEST_URL"]},
         check=True,
         capture_output=True,
     )
-    fga = os.environ["PLZL_OPENFGA_URL"]
-    store = os.environ["PLZL_OPENFGA_STORE_ID"]
+    fga = os.environ["PLZK_OPENFGA_URL"]
+    store = os.environ["PLZK_OPENFGA_STORE_ID"]
     tuple_key = {
         "user": "user:usr_0199a112345670008000000000000003",
         "relation": "owner",
@@ -61,7 +61,7 @@ def live_application(request):
         fga + f"/stores/{store}/write",
         json={
             "writes": {"tuple_keys": [tuple_key]},
-            "authorization_model_id": os.environ["PLZL_OPENFGA_MODEL_ID"],
+            "authorization_model_id": os.environ["PLZK_OPENFGA_MODEL_ID"],
         },
     ).raise_for_status()
     output = root / "output" / "playwright"
@@ -110,7 +110,7 @@ def live_application(request):
                 fga + f"/stores/{store}/write",
                 json={
                     "deletes": {"tuple_keys": [tuple_key]},
-                    "authorization_model_id": os.environ["PLZL_OPENFGA_MODEL_ID"],
+                    "authorization_model_id": os.environ["PLZK_OPENFGA_MODEL_ID"],
                 },
             ).raise_for_status()
 

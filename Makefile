@@ -6,9 +6,15 @@ TEST_FLAGS ?=
 TEST_OPTION = $(if $(strip $(TEST_FLAGS)),-- $(TEST_FLAGS))
 CHECK_TOOL ?= fast
 CHECK_FLAGS ?=
+MAKE_SHELL_QUOTE = '$(subst ','"'"',$(1))'
+RELEASE_ENV ?=
+override RELEASE_ENV := $(value RELEASE_ENV)
+RELEASE_ID ?=
+override RELEASE_ID := $(value RELEASE_ID)
+RELEASE_ID_OPTION = $(if $(strip $(value RELEASE_ID)),--release-id $(call MAKE_SHELL_QUOTE,$(value RELEASE_ID)))
 
 PLAZIA_MAKE_HELP_VERSION := 1
-PLAZIA_PUBLIC_TARGETS := help bootstrap format lint typecheck frontend browser-install build image check test integration acceptance coverage preflight hardening-checks normalizers docs-check actions-check openapi openapi-check migrate schema-check
+PLAZIA_PUBLIC_TARGETS := help bootstrap format lint typecheck frontend browser-install build image image-plan image-smoke env-example plan deploy smoke destroy check test integration acceptance coverage preflight hardening-checks normalizers docs-check actions-check openapi openapi-check migrate schema-check
 PLAZIA_PRIVATE_TARGETS := flyway-migrate
 PLAZIA_HELP_ROOT := $(CURDIR)/help
 
@@ -21,6 +27,10 @@ PLAZIA_HELP_DEFAULT_test := fast
 PLAZIA_HELP_SELECTOR_coverage := TEST_SUITE
 PLAZIA_HELP_VALUES_coverage := fast
 PLAZIA_HELP_DEFAULT_coverage := fast
+PLAZIA_HELP_SELECTOR_plan := RELEASE_ENV
+PLAZIA_HELP_SELECTOR_deploy := RELEASE_ENV
+PLAZIA_HELP_SELECTOR_smoke := RELEASE_ENV
+PLAZIA_HELP_SELECTOR_destroy := RELEASE_ENV
 
 PLAZIA_HELP_EFFECT_help := read-only
 PLAZIA_HELP_EFFECT_bootstrap := workspace
@@ -31,6 +41,13 @@ PLAZIA_HELP_EFFECT_frontend := workspace
 PLAZIA_HELP_EFFECT_browser-install := workspace
 PLAZIA_HELP_EFFECT_build := workspace
 PLAZIA_HELP_EFFECT_image := runtime
+PLAZIA_HELP_EFFECT_image-plan := read-only
+PLAZIA_HELP_EFFECT_image-smoke := runtime
+PLAZIA_HELP_EFFECT_env-example := workspace
+PLAZIA_HELP_EFFECT_plan := read-only
+PLAZIA_HELP_EFFECT_deploy := external
+PLAZIA_HELP_EFFECT_smoke := external
+PLAZIA_HELP_EFFECT_destroy := external
 PLAZIA_HELP_EFFECT_check := runtime
 PLAZIA_HELP_EFFECT_test := runtime
 PLAZIA_HELP_EFFECT_integration := runtime
@@ -79,9 +96,9 @@ hardening-checks:
 	@$(MAKE) check CHECK_TOOL=all
 
 CONTAINER ?= podman
-FLYWAY_IMAGE := docker.io/flyway/flyway:13.4.0@sha256:e19dbd5c73a1487d825ffe02f9e11e0ce3f37b80bbc012ece1cba15af4f9f9ce
+FLYWAY_IMAGE = $(shell $(UV) run --locked python -c 'import os; from plazia_tooling.release.image_catalog import ImageCatalog; print(ImageCatalog.default().resolve("flyway", version=None, registry_profile=None, explicit_reference=os.environ.get("PLZ_FLYWAY_IMAGE")))')
 FLYWAY_NETWORK_ARGS ?=
-FLYWAY = $(CONTAINER) run --rm $(FLYWAY_NETWORK_ARGS) -v $(CURDIR)/app/platform/persistence/sql:/flyway/project:ro -w /flyway/project -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD $(FLYWAY_IMAGE) -configFiles=/flyway/project/flyway.toml
+FLYWAY = $(CONTAINER) run --rm $(FLYWAY_NETWORK_ARGS) -v $(CURDIR)/app/platform/persistence/sql:/flyway/project:ro -v "$${PLZK_FLYWAY_USER_TOML_FILE:?Select the owner Flyway secret}:/run/secrets/flyway-user.toml:ro" -w /flyway/project $(FLYWAY_IMAGE) -configFiles=/flyway/project/flyway.toml,/run/secrets/flyway-user.toml
 migrate:
 	$(UV) run --locked python -m app.cli schema-prepare
 	@$(MAKE) flyway-migrate
@@ -95,7 +112,21 @@ acceptance:
 	@CONTAINER=$(CONTAINER) $(PLAZIA_TOOLS) test acceptance
 
 image:
-	CONTAINER=$(CONTAINER) $(UV) run --locked python tools/image.py
+	@$(PLAZIA_TOOLS) build links
+image-plan:
+	@$(PLAZIA_TOOLS) build links --dry-run
+image-smoke:
+	@$(CONTAINER) run --rm plazia-links:local python -c 'import os, sys; from pathlib import Path; import app, app.main, worker.run; from app.interfaces import cli; assert sys.version_info[:2] == (3, 14); assert os.getuid() == 10001; root=Path(app.__file__).parent; assert (root/"templates/public/waiting.html").is_file(); assert (root/"platform/persistence/sql/migrations/V1__link_pools.sql").is_file(); assert (root/"platform/persistence/sql/migrations/V2__pool_management.sql").is_file(); assert cli.main(["--help"]) == 0'
+env-example:
+	@$(PLAZIA_TOOLS) env example --write
+plan:
+	@$(PLAZIA_TOOLS) deploy plan --release-env $(call MAKE_SHELL_QUOTE,$(RELEASE_ENV)) $(RELEASE_ID_OPTION)
+deploy:
+	@$(PLAZIA_TOOLS) deploy --release-env $(call MAKE_SHELL_QUOTE,$(RELEASE_ENV)) $(RELEASE_ID_OPTION)
+smoke:
+	@$(PLAZIA_TOOLS) verify --release-env $(call MAKE_SHELL_QUOTE,$(RELEASE_ENV)) $(RELEASE_ID_OPTION)
+destroy:
+	@$(PLAZIA_TOOLS) destroy --release-env $(call MAKE_SHELL_QUOTE,$(RELEASE_ENV)) $(RELEASE_ID_OPTION)
 openapi:
 	$(UV) run --locked python -c 'import json; from pathlib import Path; from app.main import app; Path(".plazia/local").mkdir(parents=True, exist_ok=True); Path(".plazia/local/openapi.json").write_text(json.dumps(app.openapi(), indent=2)+"\n")'
 openapi-check:

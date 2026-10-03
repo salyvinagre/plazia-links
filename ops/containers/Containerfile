@@ -1,0 +1,21 @@
+ARG PLZ_UV_IMAGE
+ARG PLZ_PYTHON_IMAGE
+FROM ${PLZ_UV_IMAGE} AS uv
+FROM ${PLZ_PYTHON_IMAGE} AS builder
+COPY --from=uv /uv /bin/uv
+ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_COMPILE_BYTECODE=1
+WORKDIR /plazia-links
+COPY plazia/packages /plazia/packages
+COPY plazia-links/pyproject.toml plazia-links/uv.lock ./
+COPY plazia-links/app ./app
+COPY plazia-links/worker ./worker
+RUN uv sync --locked --no-dev --no-editable
+
+FROM ${PLZ_PYTHON_IMAGE}
+WORKDIR /app
+RUN useradd --uid 10001 --create-home app
+COPY --from=builder --chown=app:app /plazia-links/.venv /plazia-links/.venv
+ENV PATH="/plazia-links/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+USER app
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--no-proxy-headers"]

@@ -8,15 +8,15 @@ USAGE
 
 VARIABLES
 CONTAINER selects the engine (default podman). FLYWAY_NETWORK_ARGS selects its
-network. PLZL_DATABASE_URL and FLYWAY_URL/FLYWAY_USER/FLYWAY_PASSWORD are
-environment inputs.
+network. PLZK_SCHEMA_DATABASE_URL supplies the owner credential and
+PLZK_FLYWAY_USER_TOML_FILE selects the private provider-generated Flyway document.
 
 WHEN
 Run when preparing the authorized fresh database or applying an owned
 migration.
 
 BOUNDARIES
-Mutates the selected database. Requires the owner PLZL_DATABASE_URL and Flyway
+Mutates the selected database. Requires the owner PLZK_SCHEMA_DATABASE_URL and Flyway
 connection inputs; the fresh schema is not a customer-data upgrade.
 
 EVIDENCE

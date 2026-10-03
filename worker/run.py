@@ -9,69 +9,76 @@ from app.contexts.links.adapters.repositories.sql.notifications import PostgresD
 from app.contexts.links.application.workflows.notifications import ActivationEmailsWorkflow
 from app.platform.logging import get_logger, setup_logging
 from app.platform.persistence.schema import SchemaAuthority
-from app.platform.settings import IdentitySettings, Settings
+from app.platform.settings import PublicSettings, WorkerSettings
 from app.platform.telemetry import build_telemetry
 
 
-def transport(settings: Settings) -> SmtpEmailTransport:
-    return SmtpEmailTransport(
-        configuration=SmtpEmailTransportConfiguration(
-            host=settings.smtp_host,
-            port=settings.smtp_port,
-            from_address=settings.smtp_from,
-            from_name=settings.smtp_from_name,
-            username=settings.smtp_user,
-            password=settings.smtp_password.get_secret_value(),
-            timeout_seconds=settings.smtp_timeout,
-            starttls=settings.smtp_security == "starttls",
-            use_ssl=settings.smtp_security == "tls",
+class WorkerRuntime:
+    """Own worker composition and telemetry for the lifetime of the queue loop."""
+
+    def __init__(self, settings: WorkerSettings, origin: PublicSettings) -> None:
+        setup_logging()
+        settings.validate_runtime()
+        origin.validate_public_origin(production=settings.environment in {"production", "prod"})
+        url = settings.database_url.get_secret_value()
+        SchemaAuthority(url).check(runtime="worker")
+        self._queue = PostgresDeliveryQueue(url)
+        transport = self.transport(settings)
+        self._telemetry = build_telemetry(settings, "worker")
+        self._workflow = ActivationEmailsWorkflow(
+            self._queue, transport, origin.public_base_url, self._telemetry
         )
-    )
+        self._interval = settings.interval
 
+    @staticmethod
+    def transport(settings: WorkerSettings) -> SmtpEmailTransport:
+        return SmtpEmailTransport(
+            configuration=SmtpEmailTransportConfiguration(
+                host=settings.smtp_host,
+                port=settings.smtp_port,
+                from_address=settings.smtp_from,
+                from_name=settings.smtp_from_name,
+                username=settings.smtp_user,
+                password=settings.smtp_password.get_secret_value(),
+                timeout_seconds=settings.smtp_timeout,
+                starttls=settings.smtp_security == "starttls",
+                use_ssl=settings.smtp_security == "tls",
+            )
+        )
 
-async def run() -> None:
-    setup_logging()
-    settings = Settings()
-    settings.validate_runtime()
-    url = settings.worker_database_url.get_secret_value()
-    if not url:
-        raise ValueError("PLZL_WORKER_DATABASE_URL is required")
-    origin = IdentitySettings()
-    origin.validate_public_origin(production=settings.environment in {"production", "prod"})
-    SchemaAuthority(url).check(runtime="worker")
-    queue = PostgresDeliveryQueue(url)
-    smtp = transport(settings)
-    telemetry = build_telemetry(settings, "worker")
-    workflow = ActivationEmailsWorkflow(queue, smtp, origin.public_base_url, telemetry)
-    iterations = 0
-    sample_due = 0.0
-    try:
-        while True:
-            if monotonic() >= sample_due:
+    async def run(self) -> None:
+        iterations = 0
+        sample_due = 0.0
+        try:
+            while True:
+                if monotonic() >= sample_due:
+                    try:
+                        await self._queue.sample(self._telemetry)
+                    except Exception as error:
+                        get_logger(__name__).warning(
+                            "Activation queue sample failed",
+                            extra={"error_type": type(error).__name__},
+                        )
+                    sample_due = monotonic() + 60
                 try:
-                    await queue.sample(telemetry)
+                    worked = await self._workflow.run_once()
+                    if iterations % 720 == 0:
+                        await self._queue.cleanup()
+                    iterations += 1
                 except Exception as error:
-                    get_logger(__name__).warning(
-                        "Activation queue sample failed", extra={"error_type": type(error).__name__}
+                    get_logger(__name__).error(
+                        "Activation delivery iteration failed",
+                        extra={"error_type": type(error).__name__},
                     )
-                sample_due = monotonic() + 60
+                    worked = False
+                if not worked:
+                    await asyncio.sleep(self._interval)
+        finally:
             try:
-                worked = await workflow.run_once()
-                if iterations % 720 == 0:
-                    await queue.cleanup()
-                iterations += 1
-            except Exception as error:
-                get_logger(__name__).error(
-                    "Activation delivery iteration failed",
-                    extra={"error_type": type(error).__name__},
-                )
-                worked = False
-            if not worked:
-                await asyncio.sleep(settings.worker_interval)
-    finally:
-        telemetry.force_flush()
-        telemetry.shutdown()
+                self._telemetry.force_flush()
+            finally:
+                self._telemetry.shutdown()
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    asyncio.run(WorkerRuntime(WorkerSettings(), PublicSettings()).run())

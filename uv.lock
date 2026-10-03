@@ -1084,15 +1084,6 @@ wheels = [
 ]
 
 [[package]]
-name = "oauthlib"
-version = "3.3.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0b/5f/19930f824ffeb0ad4372da4812c50edbd1434f678c90c2733e1188edfc63/oauthlib-3.3.1.tar.gz", hash = "sha256:0f0f8aa759826a193cf66c12ea1af1637f87b9b4622d46e866952bb022e538c9", size = 185918, upload-time = "2025-06-19T22:48:08.269Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/9c/92789c596b8df838baa98fa71844d84283302f7604ed565dafe5a6b5041a/oauthlib-3.3.1-py3-none-any.whl", hash = "sha256:88119c938d2b8fb88561af5f6ee0eec8cc8d552b7bb1f712743136eb7523b7a1", size = 160065, upload-time = "2025-06-19T22:48:06.508Z" },
-]
-
-[[package]]
 name = "openfeature-sdk"
 version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1297,51 +1288,51 @@ wheels = [
 
 [[package]]
 name = "plazia-authlib"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "../plazia/packages/plazia-authlib" }
-dependencies = [
+
+[package.optional-dependencies]
+authn = [
     { name = "joserfc" },
+    { name = "plazia-contracts" },
     { name = "plazia-http" },
     { name = "plazia-kernel" },
     { name = "pydantic" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "joserfc", specifier = ">=1.6.4,<2" },
-    { name = "plazia-http", editable = "../plazia/packages/plazia-http" },
-    { name = "plazia-kernel", editable = "../plazia/packages/plazia-kernel" },
-    { name = "pydantic", specifier = ">=2.11,<3" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.0,<10" },
-    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=1.0.0,<2" },
-]
-provides-extras = ["test"]
-
-[[package]]
-name = "plazia-authz"
-version = "0.1.0"
-source = { editable = "../plazia/packages/plazia-authz" }
-dependencies = [
+authz = [
     { name = "openfga-sdk" },
     { name = "plazia-contracts" },
     { name = "plazia-kernel" },
     { name = "pyyaml" },
 ]
+testing = [
+    { name = "joserfc" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "openfga-sdk", specifier = ">=0.10.4,<0.11" },
-    { name = "plazia-contracts", editable = "../plazia/packages/plazia-contracts" },
-    { name = "plazia-kernel", editable = "../plazia/packages/plazia-kernel" },
-    { name = "pyyaml", specifier = ">=6.0.2,<7" },
+    { name = "joserfc", marker = "extra == 'authn'", specifier = ">=1.6.4,<2" },
+    { name = "joserfc", marker = "extra == 'testing'", specifier = ">=1.6.4,<2" },
+    { name = "openfga-sdk", marker = "extra == 'authz'", specifier = ">=0.10.4,<0.11" },
+    { name = "plazia-authlib", extras = ["authn", "authz", "testing"], marker = "extra == 'all'", specifier = "==0.2.0" },
+    { name = "plazia-contracts", marker = "extra == 'authn'", editable = "../plazia/packages/plazia-contracts" },
+    { name = "plazia-contracts", marker = "extra == 'authz'", editable = "../plazia/packages/plazia-contracts" },
+    { name = "plazia-http", marker = "extra == 'authn'", editable = "../plazia/packages/plazia-http" },
+    { name = "plazia-kernel", marker = "extra == 'authn'", editable = "../plazia/packages/plazia-kernel" },
+    { name = "plazia-kernel", marker = "extra == 'authz'", editable = "../plazia/packages/plazia-kernel" },
+    { name = "pydantic", marker = "extra == 'authn'", specifier = ">=2.11,<3" },
+    { name = "pyyaml", marker = "extra == 'authz'", specifier = ">=6.0.2,<7" },
 ]
+provides-extras = ["authn", "authz", "testing", "all"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "basedpyright", specifier = ">=1.31.2,<2" },
     { name = "jsonschema", specifier = ">=4.23,<5" },
+    { name = "plazia-authlib", extras = ["all"], specifier = "==0.2.0" },
+    { name = "plazia-observability", editable = "../plazia/packages/plazia-observability" },
     { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "pytest-cov", specifier = ">=7.0.0,<8" },
+    { name = "pytest-asyncio", specifier = ">=1.0.0,<2" },
     { name = "ruff", specifier = ">=0.11.13,<1" },
 ]
 
@@ -1500,9 +1491,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "jinja2" },
-    { name = "oauthlib" },
-    { name = "openfga-sdk" },
-    { name = "plazia-authz" },
+    { name = "plazia-authlib", extra = ["authn", "authz"] },
     { name = "plazia-cli" },
     { name = "plazia-contracts" },
     { name = "plazia-http", extra = ["fastapi"] },
@@ -1514,7 +1503,6 @@ dependencies = [
     { name = "plazia-settings" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
-    { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
     { name = "redis" },
     { name = "uvicorn", extra = ["standard"] },
@@ -1524,6 +1512,7 @@ dependencies = [
 dev = [
     { name = "mypy" },
     { name = "playwright" },
+    { name = "plazia-authlib", extra = ["testing"] },
     { name = "plazia-tooling" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1538,9 +1527,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "jinja2", specifier = ">=3.1,<4" },
-    { name = "oauthlib", specifier = ">=3.3.1,<4" },
-    { name = "openfga-sdk", specifier = ">=0.10.4,<0.11" },
-    { name = "plazia-authz", editable = "../plazia/packages/plazia-authz" },
+    { name = "plazia-authlib", extras = ["authn", "authz"], editable = "../plazia/packages/plazia-authlib" },
     { name = "plazia-cli", editable = "../plazia/packages/plazia-cli" },
     { name = "plazia-contracts", editable = "../plazia/packages/plazia-contracts" },
     { name = "plazia-http", extras = ["fastapi"], editable = "../plazia/packages/plazia-http" },
@@ -1552,7 +1539,6 @@ requires-dist = [
     { name = "plazia-settings", editable = "../plazia/packages/plazia-settings" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "pydantic-settings", specifier = ">=2.6,<3" },
-    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.15.1,<3" },
     { name = "python-multipart", specifier = ">=0.0.18" },
     { name = "redis", specifier = ">=5.2,<6" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
@@ -1562,6 +1548,7 @@ requires-dist = [
 dev = [
     { name = "mypy", specifier = ">=1.13,<3" },
     { name = "playwright", specifier = ">=1.55,<2" },
+    { name = "plazia-authlib", extras = ["testing"], editable = "../plazia/packages/plazia-authlib" },
     { name = "plazia-tooling", editable = "../plazia/packages/plazia-tooling" },
     { name = "pytest", specifier = ">=9,<10" },
     { name = "pytest-asyncio", specifier = ">=1,<2" },
@@ -1712,14 +1699,13 @@ dev = [
 
 [[package]]
 name = "plazia-tooling"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "../plazia/packages/plazia-tooling" }
 dependencies = [
     { name = "cloudflare" },
     { name = "cryptography" },
     { name = "jinja2" },
-    { name = "plazia-authlib" },
-    { name = "plazia-authz" },
+    { name = "plazia-authlib", extra = ["authn", "authz"] },
     { name = "plazia-cli", extra = ["prompts"] },
     { name = "plazia-http" },
     { name = "plazia-kernel", extra = ["contacts"] },
@@ -1744,8 +1730,7 @@ requires-dist = [
     { name = "cloudflare", specifier = ">=5.6,<6" },
     { name = "cryptography", specifier = ">=46,<50" },
     { name = "jinja2", specifier = ">=3.1,<4" },
-    { name = "plazia-authlib", editable = "../plazia/packages/plazia-authlib" },
-    { name = "plazia-authz", editable = "../plazia/packages/plazia-authz" },
+    { name = "plazia-authlib", extras = ["authn", "authz"], editable = "../plazia/packages/plazia-authlib" },
     { name = "plazia-cli", extras = ["prompts"], editable = "../plazia/packages/plazia-cli" },
     { name = "plazia-http", editable = "../plazia/packages/plazia-http" },
     { name = "plazia-kernel", extras = ["contacts"], editable = "../plazia/packages/plazia-kernel" },
@@ -2068,11 +2053,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/43/ea/5194e52748b0da83d71e082d75496eaec6e58f419f5e184786ded517e6a9/pyjwt-2.15.1.tar.gz", hash = "sha256:4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8", size = 121252, upload-time = "2026-09-28T18:40:42.598Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl", hash = "sha256:42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193", size = 33860, upload-time = "2026-09-28T18:40:41.429Z" },
-]
-
-[package.optional-dependencies]
-crypto = [
-    { name = "cryptography" },
 ]
 
 [[package]]

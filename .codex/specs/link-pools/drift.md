@@ -14,15 +14,48 @@ Golden Principles resolve through plazia-tools principles path to ../plazia/pack
 | Normalization/context | Shared AnnotatedFields normalizers, normalized email, canonical IDs, RequestContext/ActorContext/OperationContext and bounded TraceContext. Tenant selector is plazia.organization_id. | [domain](../../../app/contexts/links/domain/link.py), [dispatch](../../../app/interfaces/dispatch.py) |
 | HTTP | /api/v1 audience/routes; shared envelopes, HAL and forward tokens. Required mutation keys replay typed original results. Receipts/state/audit/jobs share the transaction. | [API contract](../../../app/kernel/api.py), [routes](../../../app/interfaces/api/links.py), [replay](../../../tests/integration/test_command_replay.py) |
 | Notifications | Shared SMTP transport. Links owns wording/subscriptions/jobs; separate worker role, same-row activation locks, SKIP LOCKED, five attempts, retention and at-least-once crash duplicates. | [workflow](../../../app/contexts/links/application/workflows/notifications.py), [queue](../../../app/contexts/links/adapters/repositories/sql/notifications.py) |
-| Configuration/tooling | Shared settings sources, PLZL_ selectors, guarded secret files and non-secret TOML. Pure shared EnvRegistry declarations generate .env.example; Make/shared env/normalizer/OpenAPI/docs/Actions lanes. Operator intents use plazia-cli with runtime-owned CQRS composition. Locked image build materializes a source allowlist. | [settings](../../../app/platform/settings.py), [Make](../../../Makefile), [image](../../../tools/image.py) |
+| Configuration/tooling | Shared settings sources, PLZK_ selectors, guarded secret files and non-secret TOML. Pure shared EnvRegistry declarations generate .env.example; Make/shared env/normalizer/OpenAPI/docs/Actions lanes. Operator intents use plazia-cli with runtime-owned CQRS composition. Locked image build materializes a source allowlist. | [settings](../../../app/platform/settings.py), [Make](../../../Makefile), [image](../../../.plazia/delivery.yaml) |
 | Telemetry | Shared HTTP/runtime export lifecycle, bounded queue signals, W3C durable handoff and passive failures. No recipient/tenant metric dimensions. | [runtime](../../../app/platform/telemetry.py), [signals](../../../app/contexts/links/application/telemetry/signals.py), [tests](../../../tests/unit/test_telemetry.py) |
 
 ## Retained protocol boundary
 
-Identity's adopted OAuth access-token profile uses RFC 9068 fields and client capabilities. Shared authlib's session verifier expects uid/sid/ver/env fields. Direct substitution changes the consumer contract. Links retains PyJWT/OAuthlib profile adapters while adopting shared IDs, authorization subjects, settings, messaging, HTTP contracts and SMTP transport. See the [Identity contract](../../../docs/IDENTITY.md).
+Identity's OAuth access-token profile uses RFC 9068 fields and client capabilities. `plazia_authlib.authn` now owns this validation, OIDC ID-token checks and PKCE exchange. Links deletes its PyJWT/OAuthlib implementations and retains principal mapping, sessions and replay storage. See the [Identity contract](../../../docs/IDENTITY.md).
 
 ## Remaining gates
 
-The shared authz registry has no Links action/fragment packet. Links checks token capabilities and existing Identity-owned organization reader/manager relations through the official SDK. It never writes membership tuples or impersonates another product's actions. Product-specific registry publication belongs to the shared package/model owner.
+The shared `plazia_authlib.authz` registry contains Links read/create/update/delete actions on Identity organizations. The shared adapter checks reader/manager relations; Links retains token capability checks and active organization bindings. Identity owns membership tuples.
 
 CI needs matching published shared 3.14 manifests and read access to its private sibling checkout. Local resolution/image builds do not prove publication or a successful GitHub run. Real Identity enrollment, deployed smoke, collector ingestion, restore drills and production inbox delivery remain live gates. Serverless needs a separate persistent worker. See [validation evidence](validation.md) for exact local closure.
+
+## Runtime and deployment disposition
+
+The `PLZK_` cutover now separates API, worker, public Identity and schema-owner
+configuration through one shared settings-source adapter. Owner credentials
+are never API/worker inputs. Shared release tooling owns ordered TOML and
+service-scoped secret projections; shared image tooling replaces `tools/image.py`.
+Container artifacts live under `ops/containers`; the final image uses installed
+packages rather than a second application source tree. Make owns the public
+image and release lanes with grouped offline help.
+
+The current Delivery release contract supersedes the fixed enabled-dev
+recommendation. All retained non-production names use preview policy; native
+development remains separate. The root PostgreSQL capability now declares the
+Links claim with owner/API/worker outputs. Shared `PostgresRoles` resolves
+provider-issued physical roles. A generic optional Flyway placeholder alias
+preserves applied SQL history. The workload declares shared ingress at
+`links.liberalia.net`, policy-independent per-process secrets and preview hosts.
+Redis remains an explicit external API binding; no current root Redis provider
+was found. Shared activation and root production-suite admission remain deferred
+until Identity deploys and Links worker qualification/fencing is implemented.
+Stateless API/serverless behavior stays supported with external state.
+
+The authlib merge is reflected in the dependency, authorization import and
+image allowlist: `plazia-authlib[authz]` replaces the deleted `plazia-authz`.
+Other concurrent authentication adapter changes require their own evidence.
+
+The prior runtime pass reported 21 advisory unused findings: it does not
+follow inherited settings fields/prefixes and still omits Literal/typed-IP
+annotations. Runtime readers and projection tests cover these selectors; no
+duplicate field declarations or audit suppressions were introduced. The separate native Flyway URL/user/password selectors were removed; native
+and release jobs now consume the same private provider-generated document. See the [source budget](decisions.md) and
+[current validation](validation.md).

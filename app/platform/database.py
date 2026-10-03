@@ -48,7 +48,6 @@ class PostgresDatabase:
         if not url.strip().startswith(("postgresql://", "postgres://")):
             raise ValueError("PostgreSQL URL is required")
         self._url = url.strip()
-        self._pooled = pooled
         self._runtime = (
             PostgresRuntimeDatabase.from_url(
                 url,

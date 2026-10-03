@@ -1,4 +1,0 @@
-# A TLS reverse proxy for the external-provider Compose deployment.
-{$PLZL_HOST} {
-    reverse_proxy api:8000
-}

@@ -1,0 +1,15 @@
+[app]
+deployment_mode = "container"
+rate_limit_enabled = true
+trusted_proxy_ips = []
+telemetry_export_driver = "noop"
+
+[identity]
+session_ttl = 900
+allow_insecure_loopback = false
+
+[worker]
+smtp_port = 587
+smtp_security = "starttls"
+interval = 5
+telemetry_export_driver = "noop"

@@ -1,23 +1,22 @@
 IMAGE
 
 PURPOSE
-Build the production API and worker image from an allowed source context.
+Build the API and worker image through shared catalog-backed Plazia tooling.
 
 USAGE
   [verify] make image help
 
 VARIABLES
-CONTAINER selects the engine (default podman). CONTAINER_CONNECTION selects a
-configured Podman connection.
+Builds use the selected native Podman engine. Environment examples read declarations only.
 
 WHEN
-Run before inspecting the production runtime or deploying a new image.
+Use for the selected owner operation.
 
 BOUNDARIES
-Requires a container engine; updates the local plazia-links:local image tag.
+Builds the declared local image from an isolated allowed source snapshot.
 
 EVIDENCE
-The container engine reports a successful plazia-links:local build.
+Shared tooling reports the selected operation and its result.
 
 EXAMPLES
   [verify] make image help

@@ -3,6 +3,8 @@ import asyncio
 import pytest
 from pytest_bdd import given, scenarios, then, when
 
+from tests.identity_support import bearer
+
 scenarios("features/link_pools.feature")
 
 
@@ -10,7 +12,7 @@ scenarios("features/link_pools.feature")
 def flow(identity_client, issuer, identity_db):
     return {
         "client": identity_client,
-        "headers": {"Authorization": "Bearer " + issuer.access()},
+        "headers": bearer(issuer),
         "repository": identity_db,
     }
 

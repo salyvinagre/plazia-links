@@ -16,7 +16,10 @@ SETUP AND BUILD
   make frontend            Compile the Tailwind/daisyUI interface and install pinned HTMX assets.
   make browser-install     Install the Chromium browser used by Playwright acceptance tests.
   make build               Build the Python wheel and source distribution.
-  make image               Build the production API and worker image from an allowed source context.
+  make image               Build the API and worker image through shared Plazia tooling.
+  make image-plan          Inspect the build inputs and catalog images without building.
+  make image-smoke         Verify the built runtime's interpreter, user, imports and packaged assets.
+  make env-example         Regenerate the composed environment example.
 
 SOURCE AND CONTRACTS
   make format              Format and apply Ruff fixes to app, worker, tests and tools.
@@ -37,6 +40,12 @@ TESTS AND GATES
   make preflight           Run the fast checks and one fast test pass within 285 seconds.
   make hardening-checks    Collect coverage once and run the broader checks.
 
+RELEASES
+  make plan                Inspect the selected owner release without deploying.
+  make deploy              Converge the selected owner release.
+  make smoke               Verify the selected deployed owner release.
+  make destroy             Tear down the selected owner release explicitly.
+
 DATABASE
   make migrate             Prepare owner authority, apply Flyway, validate and finish schema authority.
   make schema-check        Verify Flyway history, owned roles, tenant policies and critical grants.
@@ -44,6 +53,7 @@ DATABASE
 SELECTORS
   CHECK_TOOL defaults to fast; CHECK_FLAGS forwards check options.
   TEST_SUITE defaults to fast; TEST_FLAGS forwards pytest arguments.
-  CONTAINER defaults to podman.
+  CONTAINER defaults to podman for acceptance and standalone migration.
+  RELEASE_ENV selects a retained name; shared activation is pending qualification.
 
 Run make check help or make test help for the available values.

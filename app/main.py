@@ -1,7 +1,7 @@
 """FastAPI composition: one production profile, one PostgreSQL schema authority."""
 
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
@@ -110,17 +110,24 @@ def create_app(
         setup_logging()
         config.validate_runtime()
         identity.validate_deployment(production=config.environment in {"production", "prod"})
-        application.state.telemetry = build_telemetry(config, "api")
-        try:
+        async with AsyncExitStack() as cleanup:
+            application.state.telemetry = build_telemetry(config, "api")
+            cleanup.callback(application.state.telemetry.shutdown)
+            cleanup.callback(application.state.telemetry.force_flush)
             if application.state.database is None:
+                cleanup.push_async_callback(close_redis)
                 SchemaAuthority(config.database_url.get_secret_value()).check(runtime="app")
                 application.state.database = PostgresDatabase(
                     config.database_url.get_secret_value(),
                     pooled=config.deployment_mode == "container",
                 )
+                cleanup.push_async_callback(application.state.database.close)
                 application.state.authority = OpenFgaOrganizationAuthority(
-                    config.openfga_url, config.openfga_store_id, config.openfga_model_id
+                    config.openfga_url,
+                    config.openfga_store_id.get_secret_value(),
+                    config.openfga_model_id.get_secret_value(),
                 )
+                cleanup.push_async_callback(application.state.authority.close)
                 application.state.commands, application.state.queries = build_buses(
                     application.state.database,
                     PostgresUowFactory(application.state.database),
@@ -130,16 +137,8 @@ def create_app(
                 store = await get_redis()
                 await store.ping()
                 application.state.access = AccessRuntime.build(identity)
+                cleanup.push_async_callback(application.state.access.tokens.close)
             yield
-        finally:
-            application.state.telemetry.force_flush()
-            application.state.telemetry.shutdown()
-            if database is None:
-                if application.state.database is not None:
-                    await application.state.database.close()
-                if application.state.authority is not None:
-                    await application.state.authority.close()
-                await close_redis()
 
     production = config.environment in {"production", "prod"}
     application = FastAPI(

@@ -1,10 +1,13 @@
-"""OAuthlib/HTTPX transport adapter for the configured confidential browser client."""
+"""Links browser-grant port over the shared OAuth client and PKCE values."""
 
-from urllib.parse import quote_plus, urlencode
+from dataclasses import replace
+from urllib.parse import urlencode
 
-import httpx
-from oauthlib.oauth2 import WebApplicationClient
-from oauthlib.oauth2.rfc6749.errors import OAuth2Error
+from plazia_authlib.authn.client import PlaziaIdentity
+from plazia_authlib.authn.errors import IdentityApiError, IdentityTransportError
+from plazia_authlib.authn.oauth import OAuthAuthorizationArtifacts
+from pydantic import ValidationError
+from shared_http import HttpRequest, HttpResponse
 
 from app.contexts.access.application.dto.session import TokenPairDto
 from app.contexts.access.domain.principal import AccessUnavailableError, InvalidCredentialsError
@@ -12,27 +15,19 @@ from app.contexts.access.domain.principal import AccessUnavailableError, Invalid
 
 class OidcCodeClient:
     def __init__(
-        self,
-        client_id: str,
-        client_secret: str,
-        authorization_endpoint: str,
-        token_endpoint: str,
-        redirect_uri: str,
-        audience: str,
+        self, client_id: str, client_secret: str, issuer: str, redirect_uri: str, audience: str
     ) -> None:
         self._client_id = client_id
         self._client_secret = client_secret
-        self._authorization_endpoint = authorization_endpoint
-        self._token_endpoint = token_endpoint
+        self._issuer = issuer
         self._redirect_uri = redirect_uri
         self._audience = audience
 
     def authorization_url(self, verifier: str, state: str, nonce: str, scopes: str) -> str:
-        client = WebApplicationClient(self._client_id)
-        challenge = str(client.create_code_challenge(verifier, "S256"))
+        artifacts = OAuthAuthorizationArtifacts.from_values(state=state, code_verifier=verifier)
         return (
-            self._authorization_endpoint
-            + "?"
+            self._issuer.rstrip("/")
+            + "/oauth2/auth?"
             + urlencode(
                 {
                     "response_type": "code",
@@ -42,53 +37,40 @@ class OidcCodeClient:
                     "resource": self._audience,
                     "state": state,
                     "nonce": nonce,
-                    "code_challenge": challenge,
+                    "code_challenge": artifacts.code_challenge,
                     "code_challenge_method": "S256",
                 }
             )
         )
 
     async def redeem(self, code: str, verifier: str) -> TokenPairDto:
-        client = WebApplicationClient(self._client_id)
-        body = client.prepare_request_body(
-            code=code,
-            redirect_uri=self._redirect_uri,
-            code_verifier=verifier,
-            include_client_id=False,
-            resource=self._audience,
-        )
         try:
-            async with httpx.AsyncClient(
-                timeout=5, follow_redirects=False, trust_env=False
-            ) as http:
-                response = await http.post(
-                    self._token_endpoint,
-                    content=body,
-                    headers={
-                        "Content-Type": "application/x-www-form-urlencoded",
-                        "Accept": "application/json",
-                    },
-                    auth=httpx.BasicAuth(
-                        quote_plus(self._client_id, safe=""),
-                        quote_plus(self._client_secret, safe=""),
-                    ),
+            async with PlaziaIdentity(base_url=self._issuer, timeout=5) as identity:
+                tokens = await identity.tokens.authorization_code(
+                    client_id=self._client_id,
+                    client_secret=self._client_secret,
+                    code=code,
+                    redirect_uri=self._redirect_uri,
+                    code_verifier=verifier,
+                    resource=self._audience,
+                    authority=self,
                 )
-            if response.status_code >= 500:
-                raise AccessUnavailableError
-            if response.status_code != 200 or len(response.content) > 65536:
-                raise InvalidCredentialsError
-            token = client.parse_request_body_response(response.text)
-        except httpx.HTTPError as exc:
-            raise AccessUnavailableError from exc
-        except (OAuth2Error, ValueError) as exc:
-            raise InvalidCredentialsError from exc
-        if not isinstance(token, dict):
+        except IdentityApiError as error:
+            if error.detail.status_code >= 500:
+                raise AccessUnavailableError from error
+            raise InvalidCredentialsError from error
+        except IdentityTransportError as error:
+            raise AccessUnavailableError from error
+        except (ValueError, ValidationError) as error:
+            raise InvalidCredentialsError from error
+        if tokens.token_type.lower() != "bearer" or not tokens.id_token:
             raise InvalidCredentialsError
-        access_token, id_token = token.get("access_token"), token.get("id_token")
-        if (
-            not isinstance(access_token, str)
-            or not isinstance(id_token, str)
-            or str(token.get("token_type", "")).lower() != "bearer"
-        ):
+        return TokenPairDto(tokens.access_token, tokens.id_token)
+
+    async def authorize(self, request: HttpRequest) -> HttpRequest:
+        if request.method != "POST" or request.url != self._issuer.rstrip("/") + "/oauth2/token":
             raise InvalidCredentialsError
-        return TokenPairDto(access_token, id_token)
+        return replace(request, max_response_bytes=65536)
+
+    def consume_response(self, response: HttpResponse) -> bool:
+        return False

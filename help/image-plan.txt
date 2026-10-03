@@ -1,0 +1,23 @@
+IMAGE-PLAN
+
+PURPOSE
+Inspect the declared source snapshot and catalog base images without building.
+
+USAGE
+  [verify] make image-plan help
+
+VARIABLES
+Builds use the selected native Podman engine. Environment examples read declarations only.
+
+WHEN
+Use for the selected owner operation.
+
+BOUNDARIES
+No deployment or external provider mutation.
+
+EVIDENCE
+Shared tooling reports the selected operation and its result.
+
+EXAMPLES
+  [verify] make image-plan help
+  [static] make image-plan

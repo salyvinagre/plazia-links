@@ -6,14 +6,20 @@ import subprocess
 import time
 import uuid
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import httpx
 import psycopg
+import yaml
+from plazia_tooling.release.postgres import PostgresConfig
+from plazia_tooling.release.postgres_environment import PostgresStackEnvironment
+from plazia_tooling.repo.private_file import PrivateFile
+from psycopg import sql
 
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = os.getenv("CONTAINER", "podman")
-NAME = "plzl-acceptance-" + uuid.uuid4().hex[:10]
-LABEL = "plzl.acceptance=" + NAME
+NAME = "plzk-acceptance-" + uuid.uuid4().hex[:10]
+LABEL = "plzk.acceptance=" + NAME
 PG = (
     "public.ecr.aws/docker/library/postgres@sha256:"
     "77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
@@ -57,6 +63,7 @@ def run():
     owned = []
     print("Acceptance target: disposable " + NAME, flush=True)
     command(ENGINE, "network", "create", "--label", LABEL, NAME)
+    credentials = TemporaryDirectory(prefix=NAME)
     try:
         for kind, image, ports, args in (
             (
@@ -103,29 +110,55 @@ def run():
                 time.sleep(0.1)
         else:
             raise RuntimeError("PostgreSQL did not become ready")
-        command(
-            ENGINE,
-            "exec",
-            NAME + "-postgres",
-            "psql",
-            "-U",
-            "postgres",
-            "-d",
-            "links",
-            "-v",
-            "ON_ERROR_STOP=1",
-            "-c",
-            "CREATE ROLE links_app LOGIN; CREATE ROLE links_worker LOGIN;",
+        catalog = yaml.safe_load((ROOT.parent / "plazia/.plazia/delivery.yaml").read_text())
+        provider = PostgresConfig.from_mapping(
+            catalog["delivery"]["infrastructure"]["capabilities"]["postgres"]["postgres"]
+        )
+        claim = provider.select(["links"], owner="salyvinagre/plazia-links")[0].scoped(NAME)
+        roles = {role.key: role.name for role in claim.roles}
+        with psycopg.connect(owner, autocommit=True) as connection:
+            for role in claim.roles:
+                connection.execute(
+                    sql.SQL("CREATE ROLE {} LOGIN {}").format(
+                        sql.Identifier(role.name),
+                        sql.SQL("INHERIT" if role.inherit else "NOINHERIT"),
+                    )
+                )
+            connection.execute(
+                sql.SQL("ALTER DATABASE links OWNER TO {}").format(sql.Identifier(claim.owner_role))
+            )
+            connection.execute(
+                sql.SQL("COMMENT ON DATABASE links IS {}").format(
+                    sql.Literal(
+                        json.dumps(
+                            {
+                                "provider": "plazia-postgres-v1",
+                                "owner": claim.owner,
+                                "environment": claim.environment,
+                                "roles": roles,
+                            }
+                        )
+                    )
+                )
+            )
+        flyway = Path(credentials.name) / "flyway-user.toml"
+        PrivateFile(flyway).write(
+            PostgresStackEnvironment.flyway_configuration(
+                f"postgresql://{roles['links_owner']}:fixture@postgres:5432/links",
+                roles=roles,
+                placeholders={
+                    role.placeholder: role.name for role in claim.roles if role.placeholder
+                },
+            )
         )
         env = {
             **os.environ,
             "POSTGRES_OWNER_TEST_URL": owner,
-            "POSTGRES_TEST_URL": owner.replace("postgres@", "links_app@"),
-            "POSTGRES_WORKER_TEST_URL": owner.replace("postgres@", "links_worker@"),
-            "PLZL_DATABASE_URL": owner,
-            "PLZL_REDIS_URL": f"redis://127.0.0.1:{port(NAME + '-redis', 6379)}/0",
-            "FLYWAY_URL": "jdbc:postgresql://postgres:5432/links",
-            "FLYWAY_USER": "postgres",
+            "POSTGRES_TEST_URL": owner.replace("postgres@", roles["links_app"] + "@"),
+            "POSTGRES_WORKER_TEST_URL": owner.replace("postgres@", roles["links_worker"] + "@"),
+            "PLZK_SCHEMA_DATABASE_URL": owner.replace("postgres@", roles["links_owner"] + "@"),
+            "PLZK_REDIS_URL": f"redis://127.0.0.1:{port(NAME + '-redis', 6379)}/0",
+            "PLZK_FLYWAY_USER_TOML_FILE": str(flyway),
             "FLYWAY_NETWORK_ARGS": "--network " + NAME,
             "CONTAINER": ENGINE,
         }
@@ -196,7 +229,7 @@ def run():
         store = httpx.post(fga + "/stores", json={"name": NAME})
         store.raise_for_status()
         storeid = store.json()["id"]
-        from shared_authz.resources import AuthzResources
+        from plazia_authlib.authz.resources import AuthzResources
 
         modelpath = AuthzResources.package().openfga_model
         # Compile the canonical model using the existing official CLI.
@@ -225,9 +258,9 @@ def run():
         wait_http(mail + "/api/v1/messages")
         env.update(
             {
-                "PLZL_OPENFGA_URL": fga,
-                "PLZL_OPENFGA_STORE_ID": storeid,
-                "PLZL_OPENFGA_MODEL_ID": response.json()["authorization_model_id"],
+                "PLZK_OPENFGA_URL": fga,
+                "PLZK_OPENFGA_STORE_ID": storeid,
+                "PLZK_OPENFGA_MODEL_ID": response.json()["authorization_model_id"],
                 "SMTP_TEST_PORT": str(port(NAME + "-mailpit", 1025)),
                 "MAILPIT_TEST_URL": mail,
                 "IDENTITY_E2E": "1",
@@ -235,6 +268,7 @@ def run():
         )
         subprocess.run(["make", "integration"], cwd=ROOT, env=env, check=True)
     finally:
+        credentials.cleanup()
         for name in reversed(owned):
             command(ENGINE, "rm", "-f", name)
         command(ENGINE, "network", "rm", NAME)

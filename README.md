@@ -2,7 +2,7 @@
 
 Reserve organization-owned short links, share them before a destination exists, and notify subscribers when the owner activates them.
 
-Requires Python 3.14, uv 0.12.21, PostgreSQL 18, Redis, an Identity OAuth client and the portfolio OpenFGA organization model. Shared Python packages are consumed from the sibling plazia/packages checkout. Copy .env.example and supply the Identity, OpenFGA and SMTP configuration; all application selectors start with PLZL_.
+Requires Python 3.14, uv 0.12.21, PostgreSQL 18, Redis, an Identity OAuth client and the portfolio OpenFGA organization model. Shared Python packages are consumed from the sibling plazia/packages checkout. Review the generated .env.example and supply process-owned secrets and provider bindings; all application selectors start with PLZK_.
 
 ```sh
 uv tool run --from uv==0.12.21 uv sync --locked
@@ -89,3 +89,7 @@ Every protected POST, PATCH and DELETE requires an `Idempotency-Key` of 1–128 
 Collections accept `limit` (1–100), an opaque `token` and the optional link `pool_id` filter. Follow their shared HAL `self`, `first` and `next` links. Tokens bind the caller, organization, issuer, filter and limit. Navigation uses bounded offsets; concurrent inserts/deletes can move page contents. The OAuth resource audience is the canonical HTTPS `/api/v1` base.
 
 This is a fresh-schema cutover: no customer-data upgrade is supported. Removed inherited marketing/authentication/workspace routes have no compatibility mode. See [architecture](docs/ARCHITECTURE.md), [configuration and deployment](docs/DEPLOYMENT.md), [Identity contract](docs/IDENTITY.md), [implementation packet](.codex/specs/link-pools/spec.md), and [validation evidence](.codex/specs/link-pools/validation.md).
+
+Configuration and releases use shared Plazia tooling. Shared activation remains pending Identity deployment and worker qualification; see
+[deployment ownership and admission](docs/DEPLOYMENT.md). Owner commands require
+`PLZK_SCHEMA_DATABASE_URL`; worker SMTP settings use `PLZK_WORKER_`.

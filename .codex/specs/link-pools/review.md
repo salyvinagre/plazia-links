@@ -22,7 +22,7 @@ None found within the authorized local cutover scope.
 
 ### Cross-Task Consistency
 
-- Runtime settings and deployment examples use the `PLZL_` namespace. The separate owner DSN is confined to the documented schema-provisioning operation; API and worker startup require their dedicated runtime roles.
+- Runtime settings and deployment examples use the `PLZK_` namespace. The separate owner DSN is confined to the documented schema-provisioning operation; API and worker startup require their dedicated runtime roles.
 - Container and serverless API modes share the API contract, identity audience, and application behavior. The API and worker use distinct database identities. No legacy SQLAlchemy/Alembic path or compatibility migration is retained, consistent with the authorized clean break.
 - Shared package source and Python-version constraints align locally. CI still depends on published matching Python 3.14 package manifests and private package checkout access; provider execution is listed under external validation.
 
@@ -122,7 +122,7 @@ The generated OpenAPI has zero hard errors and 104 non-error style warnings, dow
 - The five failures recorded in `output/second-pass-regressions.log` were reproducible before their fixes: coercive JSON booleans, accepting a foreign canonical-ID type in bulk deletion, inaccessible pools beyond the first 100, lost request context for anonymous public resolution, and CLI help loading runtime secrets. Each fix extends its existing schema, command, query context, browser navigation, CLI or platform owner; no parallel service or parser was added.
 - The API reuses `ApiRequest`/`ApiResponse`, Pydantic query models, canonical identifier normalizers, versioned `/api/v1` routes, explicit bounded selection, verified organization capabilities and required mutation keys. Mutation paths preserve the existing typed replay and owner transaction boundary. Request schemas reject unknown fields; public times are timezone-aware.
 - Operator commands use shared `plazia-cli` command definitions. Owner bus construction and database lifetime remain in platform composition, while CLI help constructs neither settings nor database connections. The documentation correctly scopes the owner DSN to operator commands.
-- The environment registry is a pure declaration built from existing settings metadata and the shared `EnvRegistry`; it does not load secrets or implement a local settings parser. `.env.example` is generated from it. `PLZL_` follows the explicit user choice despite the sibling prefix table, and the pre-existing native `FLYWAY_*` inputs remain confined to the pinned Flyway process. The disabled preview release declaration does not claim release readiness.
+- The environment registry is a pure declaration built from existing settings metadata and the shared `EnvRegistry`; it does not load secrets or implement a local settings parser. `.env.example` is generated from it. `PLZK_` follows the explicit user choice despite the sibling prefix table, and the pre-existing native `FLYWAY_*` inputs remain confined to the pinned Flyway process. The disabled preview release declaration does not claim release readiness.
 - Application ports and telemetry signals now occupy their required drawers. Architecture tests enforce context ownership, framework/storage-free application cores, and runtime-owned bus composition. The exact SLOC deltas were independently reproduced: app/worker +148, tooling +111, tests +139. The justification in `decisions.md` ties those additions to the shared registry, CLI ownership, contract constraints, browser navigation and regression/architecture evidence; telemetry relocation is net zero.
 - Four environment scanner findings are explained by current `Literal` or typed-IP settings annotations and their traced runtime consumers. The three Flyway zero-use notes are due to Make forwarding to the separate CLI process. Neither is suppressed or hidden by duplicate aliases. The Redis `get`/`take` duplication has distinct consume-once semantics; short wrapper candidates retain their adapter, transport or runtime boundary.
 
@@ -137,3 +137,114 @@ The generated OpenAPI has zero hard errors and 104 non-error style warnings, dow
 
 ### Verdict: PASS
 Reason: The reviewed regressions are closed through existing owners, architecture and environment boundaries follow the applicable shared principles, all new SLOC is justified, and current fast, broad, native-service, browser, packaging and image evidence passes. No critical or warning findings remain within the authorized local scope; the OpenAPI style suggestion and external gates above are non-blocking and explicitly bounded.
+
+## Runtime and deployment refactor review - 2026-10-03
+
+Primary-agent review against `12a8fa3`; the earlier independent verdicts apply
+to their recorded source, not this diff. The process models reuse shared
+settings sources and preserve driver-free domain/application code. Owner
+credentials do not enter API/worker settings or mounts. Runtime secrets are
+excluded from representations and dumps. Source snapshots and release
+projections delegate to shared tooling; the obsolete builder and duplicate
+runtime checkout are removed.
+
+Real projection tests exposed incorrect layer paths and missing secret
+attachments; both declarations were fixed. Current fast, native-service,
+browser, packaging and image probes pass, with disabled remote/promoted
+destinations. Advisory environment-scanner limitations and external admission
+gates remain explicitly recorded in [validation](validation.md). The
+[source budget](decisions.md) justifies every category of added source and
+records a net reduction of 31 production Python lines.
+
+
+## Current Delivery alignment review - 2026-10-03
+
+Primary-agent review covers deployment/persistence alignment only; prior independent
+verdicts apply to their recorded revisions. PostgreSQL provisioning stays with
+the existing provider, whose selected Links claim issues three restricted
+credentials. Read-only admission resolves shared role bindings and rejects
+extra privileges. The optional Flyway role alias uses existing normalizers,
+closed claim parsing and the existing projector; applied SQL stays unchanged.
+
+The public route is stable at links.liberalia.net; preview hosts bind the retained
+environment. Both process origins derive from that routed resource, only the API
+joins ingress, and schema jobs use PostgreSQL alone. Remote migration mounts the
+packaged artifact instead of an absent source checkout. SMTP inputs and secrets
+are worker-only. The API/serverless path retains its external state boundary.
+
+Local checks, 191 fast tests, 32 native tests, 316 provider tests, preview source
+planning and image/distribution probes pass. Production entry is guarded by the
+root-aggregate contract. New source is justified in [decisions](decisions.md);
+no new domain/API abstractions or validation exclusions were introduced.
+Shared activation, installed-provider proof and worker rollout qualification
+remain deferred as recorded in [validation](validation.md).
+
+
+## Reviewer follow-up - 2026-10-03
+
+Local review and fixes against the current working tree, without commits or
+external publication. This is a primary-agent review; earlier independent
+verdicts do not establish coverage of this patch.
+
+Closed findings:
+
+- The release overlay replaced TOML SMTP credentials/options with defaults.
+  Bare Compose bindings now preserve configured username, port and TLS mode,
+  while explicit process overrides retain precedence.
+- Public origins accepted malformed ports. The existing settings owner now
+  delegates origin syntax to the shared `HttpOrigin` normalizer.
+- API shutdown could skip remaining cleanup after startup or flush/close
+  failures. `AsyncExitStack` registers acquired resources immediately and
+  closes them all. Worker telemetry shuts down even when flushing fails.
+- CI image/smoke selected different engines, and Docker's generated command
+  included Podman's format flag. CI explicitly selects Docker for both steps;
+  native formats remain portable and Compose owns the API healthcheck.
+
+`OperatorCli.router` replaces the module helper. `WorkerRuntime` owns assembly
+and the queue-loop lifetime; obsolete loose worker entrypoints are removed.
+Required CLI/module entry bridges remain. These changes add no application
+ports, repositories, compatibility aliases or alternate persistence paths.
+
+`LinksIssuer` accepts an optional `IdentityFixture`, retaining the default
+TOML and callback rewrite. The focused custom/default cases use the shared
+loader/local issuer and Links' real production authentication verifier.
+Custom subject, organization, client and scopes reach the verified principal.
+No authlib implementation was changed by this reviewer.
+
+Validation: `make coverage` passed 202 tests at 89.97%; `make acceptance`
+passed 32 native service/browser cases, including populated V1-to-V2 migration
+and cleanup, with empty owned-resource residue. `make check CHECK_TOOL=all`,
+`make image image-smoke`, both engine build plans and `git diff --check` passed.
+The environment audit retains 21 advisory findings for derived settings
+selectors; existing semantic/wrapper/OpenAPI advisories are not suppressed.
+Docker execution on GitHub and deployed/provider acceptance are unverified.
+
+The source balance and necessity of new test lines are recorded in
+[decisions](decisions.md). No publication or deployment was performed during
+this pass.
+
+### Second code-quality pass - 2026-10-03
+
+Fixed transaction-specific role bindings stored on `SchemaAuthority` itself.
+An overlapping-check regression failed before the change: a nested check
+replaced the outer check's role names. Each connection now carries the
+existing immutable shared `PostgresRoles`; verification accepts that value
+explicitly and retains no transaction-dependent role state. Native drift
+tests read the provider binding directly rather than inspecting verifier
+side effects. Packaged SQL and runtime privilege rules are unchanged.
+
+Removed the unreferenced `IdentitySettings.jwks_uri` property and unused
+`PostgresDatabase._pooled` field. Flattened the HTTPS policy after shared
+`HttpOrigin` normalization. Worker failure tests now use real settings models
+instead of dynamically fabricated classes. Redis GET and GETDEL remain
+distinct operations despite their advisory structural-duplication finding;
+CQRS handlers and repository contract methods retain their required owners.
+
+Validation: the regression failed before the fix, then all 12 schema unit
+cases passed. `make coverage` passed 203 tests at 90.03%; `make acceptance`
+passed 32 cases with empty owned-resource residue. `make check CHECK_TOOL=all`
+passed without changing thresholds or exclusions; its 21 environment audit
+findings and existing semantic/wrapper/OpenAPI advisories remain advisory.
+The third-party Gherkin deprecation warning remains. Source changes are
+justified in [decisions](decisions.md). No publication or deployment was
+performed during this pass.

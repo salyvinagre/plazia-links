@@ -2,10 +2,10 @@
 
 from shared_observability.telemetry import ConfiguredTelemetryFactory, TelemetryService
 
-from app.platform.settings import Settings
+from app.platform.settings import ServiceSettings
 
 
-def build_telemetry(config: Settings, role: str) -> TelemetryService:
+def build_telemetry(config: ServiceSettings, role: str) -> TelemetryService:
     return ConfiguredTelemetryFactory.build(
         {
             "telemetry_export_driver": config.telemetry_export_driver,

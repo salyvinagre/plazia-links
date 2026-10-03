@@ -1,0 +1,32 @@
+SMOKE
+
+PURPOSE
+Verify the selected deployed Links owner release.
+
+USAGE
+  [verify] make smoke help RELEASE_ENV=dev
+
+VARIABLES
+RELEASE_ENV selects the owner environment. RELEASE_ID selects a retained deployment.
+Shared activation remains disabled pending Identity deployment and worker qualification.
+
+VALUES
+RELEASE_ENV is a retained name: production uses production policy; all others use preview.
+
+ENVIRONMENTS
+Native development is separate from retained releases. Shared ingress routes production
+to links.liberalia.net. PostgreSQL credentials come from the admitted links claim.
+Production operations enter from the Plazia root aggregate.
+
+WHEN
+Use for the selected owner operation.
+
+BOUNDARIES
+No deployment or external provider mutation.
+
+EVIDENCE
+Shared tooling reports the selected operation and its result.
+
+EXAMPLES
+  [verify] make smoke help RELEASE_ENV=dev
+  [static] make smoke RELEASE_ENV=dev

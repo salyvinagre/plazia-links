@@ -3,19 +3,21 @@
 import json
 import logging
 import time
+from contextlib import nullcontext
 from dataclasses import replace
 from unittest.mock import AsyncMock
 
 import pytest
 from redis.exceptions import RedisError
 from shared_identity import OrganizationId
+from shared_kernel import RequestContext
 
 from app.contexts.access.adapters.authorization import OpenFgaOrganizationAuthority
 from app.contexts.access.adapters.redis_state import RedisState
 from app.contexts.access.application.authorization import AuthorizationAttempt
 from app.contexts.access.contracts import AccessDeniedError, AccessUnavailableError, Principal
-from app.platform.settings import IdentitySettings, Settings
-from tests.identity_support import ORG_A
+from app.platform.settings import IdentitySettings, Settings, WorkerSettings
+from tests.identity_support import ORG_A, bearer
 
 
 @pytest.fixture
@@ -33,27 +35,34 @@ def principal():
 
 async def test_openfga_reader_manager_machine_and_denial(principal):
     authority = OpenFgaOrganizationAuthority("http://localhost:8080", "store", "model")
-    client = authority._client
-    authority._client = AsyncMock()
-    authority._client.check.return_value.allowed = True
-    await authority.require(AuthorizationAttempt(principal, "links:read", None))
-    assert authority._client.check.await_args.args[0].relation == "reader"
+    context = RequestContext.for_actor(
+        actor_id=principal.subject,
+        actor_type="user",
+        request_id="request",
+        source_channel="http",
+        traceparent="00-" + "1" * 32 + "-" + "2" * 16 + "-01",
+    )
+    authority._authorization._client = AsyncMock()
+    authority._authorization._client.check.return_value.allowed = True
+    await authority.require(AuthorizationAttempt(principal, "links:read", context))
+    assert authority._authorization._client.check.await_args.args[0].relation == "reader"
     await authority.require(
         AuthorizationAttempt(
-            replace(principal, subject="mch_0199a112345670008000000000000004"), "links:create", None
+            replace(principal, subject="mch_0199a112345670008000000000000004"),
+            "links:create",
+            context,
         )
     )
-    request = authority._client.check.await_args.args[0]
+    request = authority._authorization._client.check.await_args.args[0]
     assert request.relation == "manager" and request.user.startswith("machine:mch_")
     assert request.object == "organization:" + ORG_A
-    authority._client.check.return_value.allowed = False
+    authority._authorization._client.check.return_value.allowed = False
     with pytest.raises(AccessDeniedError):
-        await authority.require(AuthorizationAttempt(principal, "links:read", None))
-    authority._client.check.side_effect = OSError("private endpoint")
+        await authority.require(AuthorizationAttempt(principal, "links:read", context))
+    authority._authorization._client.check.side_effect = OSError("private endpoint")
     with pytest.raises(AccessUnavailableError):
-        await authority.require(AuthorizationAttempt(principal, "links:read", None))
+        await authority.require(AuthorizationAttempt(principal, "links:read", context))
     await authority.close()
-    await client.close()
 
 
 def test_missing_authority_configuration_is_rejected():
@@ -98,26 +107,26 @@ async def test_redis_keys_are_hashed_and_state_is_consumed_atomically():
     assert redis.set.await_args.kwargs == {"nx": True, "ex": 60}
 
 
-def test_plzl_secret_file_toml_precedence_and_guard(monkeypatch, tmp_path):
+def test_plzk_secret_file_toml_precedence_and_guard(monkeypatch, tmp_path):
     from shared_settings.secrets import SettingsError
 
     config = tmp_path / "runtime.toml"
-    config.write_text("[app]\nworker_interval=9\n[identity]\nsession_ttl=600\n")
+    config.write_text("[worker]\ninterval=9\n[identity]\nsession_ttl=600\n")
     config.chmod(0o600)
-    monkeypatch.setenv("PLZL_CONFIG_FILE", str(config))
-    assert Settings().worker_interval == 9 and IdentitySettings().session_ttl == 600
-    monkeypatch.setenv("PLZL_WORKER_INTERVAL", "7")
-    assert Settings().worker_interval == 7 and Settings(worker_interval=3).worker_interval == 3
+    monkeypatch.setenv("PLZK_CONFIG_FILE", str(config))
+    assert WorkerSettings().interval == 9 and IdentitySettings().session_ttl == 600
+    monkeypatch.setenv("PLZK_WORKER_INTERVAL", "7")
+    assert WorkerSettings().interval == 7 and WorkerSettings(interval=3).interval == 3
     secret = tmp_path / "database-url"
     secret.write_text("postgresql://links_app@db/links")
     secret.chmod(0o600)
-    monkeypatch.setenv("PLZL_DATABASE_URL_FILE", str(secret))
+    monkeypatch.setenv("PLZK_DATABASE_URL_FILE", str(secret))
     assert Settings().database_url.get_secret_value() == "postgresql://links_app@db/links"
-    monkeypatch.setenv("PLZL_DATABASE_URL", "postgresql://other")
+    monkeypatch.setenv("PLZK_DATABASE_URL", "postgresql://other")
     with pytest.raises(SettingsError):
         Settings()
-    monkeypatch.delenv("PLZL_DATABASE_URL")
-    monkeypatch.delenv("PLZL_DATABASE_URL_FILE")
+    monkeypatch.delenv("PLZK_DATABASE_URL")
+    monkeypatch.delenv("PLZK_DATABASE_URL_FILE")
     config.write_text('[app]\ndatabase_url="postgresql://secret"\n')
     with pytest.raises(SettingsError):
         Settings()
@@ -198,7 +207,8 @@ def test_logging_preserves_safe_request_id():
     assert payload["request_id"] == "operation-1" and payload["msg"] == "safe message"
 
 
-async def test_startup_composes_readonly_schema_and_closes_runtime(monkeypatch, issuer):
+@pytest.mark.parametrize("failure", [None, "startup", "flush", "database"])
+async def test_startup_composes_readonly_schema_and_closes_runtime(monkeypatch, issuer, failure):
     from app import main
     from app.platform.access import AccessRuntime
     from tests.identity_support import MemoryState
@@ -208,29 +218,54 @@ async def test_startup_composes_readonly_schema_and_closes_runtime(monkeypatch, 
     db.close = AsyncMock()
     authority = FixtureAuthority()
     authority.close = AsyncMock()
-    schema = AsyncMock()
     from unittest.mock import Mock
 
     schema = Mock()
+    telemetry = Mock()
+    if failure == "flush":
+        telemetry.force_flush.side_effect = RuntimeError()
+    elif failure == "database":
+        db.close.side_effect = RuntimeError()
+    monkeypatch.setattr(main, "build_telemetry", lambda *args: telemetry)
     monkeypatch.setattr(main, "SchemaAuthority", lambda *args: schema)
     monkeypatch.setattr(main, "PostgresDatabase", lambda *args, **kwargs: db)
     monkeypatch.setattr(main, "PostgresUowFactory", MemoryUowFactory)
     monkeypatch.setattr(main, "OpenFgaOrganizationAuthority", lambda *args: authority)
     monkeypatch.setattr(main, "IdentitySettings", issuer.config)
-    monkeypatch.setattr(main, "get_redis", AsyncMock(return_value=AsyncMock()))
+    monkeypatch.setattr(
+        main,
+        "get_redis",
+        AsyncMock(
+            return_value=AsyncMock(), side_effect=RuntimeError() if failure == "startup" else None
+        ),
+    )
     monkeypatch.setattr(main, "close_redis", AsyncMock())
     builder = Mock(return_value=AccessRuntime.build(issuer.config(), MemoryState()))
     monkeypatch.setattr(main.AccessRuntime, "build", builder)
-    application = main.create_app(config=Settings(rate_limit_enabled=False))
-    async with application.router.lifespan_context(application):
-        schema.check.assert_called_once()
-        assert application.state.commands.handles(
-            __import__(
-                "app.contexts.links.contracts", fromlist=["ReservePoolCommand"]
-            ).ReservePoolCommand
-        )
+    application = main.create_app(
+        config=Settings(database_url="postgresql://links_app@db/links", rate_limit_enabled=False)
+    )
+    transport = None
+    with pytest.raises(RuntimeError) if failure else nullcontext():
+        async with application.router.lifespan_context(application):
+            await application.state.access.tokens.access_token(
+                bearer(issuer)["Authorization"].split()[1]
+            )
+            transport = application.state.access.tokens._http_client._client
+            assert transport is not None and not transport.is_closed
+            schema.check.assert_called_once()
+            assert application.state.commands.handles(
+                __import__(
+                    "app.contexts.links.contracts", fromlist=["ReservePoolCommand"]
+                ).ReservePoolCommand
+            )
     db.close.assert_awaited_once()
     authority.close.assert_awaited_once()
+    main.close_redis.assert_awaited_once()
+    telemetry.force_flush.assert_called_once_with()
+    telemetry.shutdown.assert_called_once_with()
+    if transport is not None:
+        assert transport.is_closed
 
 
 def test_domain_validation_rejects_private_ambiguous_and_reserved_inputs():
@@ -263,3 +298,75 @@ def test_domain_validation_rejects_private_ambiguous_and_reserved_inputs():
         LinkPatch(frozenset({"is_active"}), is_active="yes")
     assert isinstance(CanonicalIds.parse(str(LinkId.new())), LinkId)
     assert isinstance(CanonicalIds.parse(str(PoolId.new())), PoolId)
+
+
+@pytest.mark.parametrize(
+    ("model", "database_selector", "unrelated"),
+    [
+        (Settings, "PLZK_DATABASE_URL", ("PLZK_WORKER_DATABASE_URL", "PLZK_SCHEMA_DATABASE_URL")),
+        (
+            WorkerSettings,
+            "PLZK_WORKER_DATABASE_URL",
+            ("PLZK_DATABASE_URL", "PLZK_IDENTITY_CLIENT_SECRET"),
+        ),
+    ],
+)
+def test_runtime_settings_do_not_open_another_process_secret_files(
+    monkeypatch, tmp_path, model, database_selector, unrelated
+):
+    for selector in unrelated:
+        monkeypatch.setenv(selector + "_FILE", str(tmp_path / "unrelated-secret"))
+    secret = tmp_path / "database"
+    secret.write_text("postgresql://fixture@db/links")
+    secret.chmod(0o600)
+    monkeypatch.setenv(database_selector + "_FILE", str(secret))
+    settings = model()
+    settings.validate_runtime()
+    assert settings.database_url.get_secret_value() == "postgresql://fixture@db/links"
+    assert "database_url" not in settings.model_dump()
+    assert "fixture@db" not in repr(settings)
+
+
+def test_owner_and_public_settings_do_not_load_runtime_credentials(monkeypatch, tmp_path):
+    from app.platform.settings import OwnerSettings, PublicSettings
+
+    for selector in (
+        "PLZK_DATABASE_URL",
+        "PLZK_WORKER_DATABASE_URL",
+        "PLZK_IDENTITY_CLIENT_SECRET",
+    ):
+        monkeypatch.setenv(selector + "_FILE", str(tmp_path / "unrelated-secret"))
+    monkeypatch.setenv("PLZK_SCHEMA_DATABASE_URL", "postgresql://owner@db/links")
+    assert OwnerSettings().database_url.get_secret_value() == "postgresql://owner@db/links"
+    assert PublicSettings().public_base_url == "http://localhost:8000"
+
+
+@pytest.mark.parametrize("model", [Settings, WorkerSettings])
+def test_runtime_database_is_required_even_without_provider_configuration(model):
+    with pytest.raises(ValueError, match="PostgreSQL runtime URL is required"):
+        model(database_url="").validate_runtime()
+
+
+@pytest.mark.parametrize(
+    "section,field",
+    [
+        ("app", "database_url"),
+        ("worker", "smtp_password"),
+        ("owner", "database_url"),
+        ("identity", "client_secret"),
+    ],
+)
+def test_every_process_rejects_secrets_in_other_toml_sections(
+    monkeypatch, tmp_path, section, field
+):
+    from shared_settings.secrets import SettingsError
+
+    from app.platform.settings import OwnerSettings, PublicSettings
+
+    config = tmp_path / "runtime.toml"
+    config.write_text(f'[{section}]\n{field}="private"\n')
+    config.chmod(0o600)
+    monkeypatch.setenv("PLZK_CONFIG_FILE", str(config))
+    for model in (Settings, WorkerSettings, OwnerSettings, PublicSettings):
+        with pytest.raises(SettingsError, match="cannot be loaded from TOML"):
+            model()

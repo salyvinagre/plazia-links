@@ -1,0 +1,8 @@
+[app]
+environment = "development"
+
+[worker]
+environment = "development"
+
+[identity]
+allow_insecure_loopback = true

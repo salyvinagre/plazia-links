@@ -121,7 +121,7 @@ async def test_pool_authority_and_organization_isolation(identity_client, issuer
         await identity_client.patch(path, headers=foreign, json={"name": "Foreign"})
     ).status_code == 404
     assert (await identity_client.delete(path, headers=foreign)).status_code == 404
-    reader = bearer(issuer, scopes="links:read")
+    reader = bearer(issuer, scope="links:read")
     assert (
         await identity_client.patch(path, headers=reader, json={"name": "Denied"})
     ).status_code == 403

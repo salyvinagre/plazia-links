@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from uuid6 import uuid7
@@ -8,7 +8,7 @@ from uuid6 import uuid7
 from app.contexts.links.adapters.repositories.sql.notifications import PostgresDeliveryQueue
 from app.contexts.links.application.dto.notification import EmailJobDto
 from app.contexts.links.application.workflows.notifications import ActivationEmailsWorkflow
-from worker.run import transport
+from worker.run import WorkerRuntime
 
 
 class Lease:
@@ -105,45 +105,35 @@ async def test_queue_maps_private_driver_rows_and_updates_only_claimed_job(monke
 
 
 def test_smtp_security_modes_are_mutually_exclusive():
-    from app.platform.settings import Settings
+    from app.platform.settings import WorkerSettings
 
     for security in ("tls", "starttls", "plain"):
-        config = transport(Settings(smtp_security=security))._configuration
+        config = WorkerRuntime.transport(WorkerSettings(smtp_security=security))._configuration
         assert config.use_ssl == (security == "tls")
         assert config.starttls == (security == "starttls")
 
 
-async def test_worker_failures_retry_without_exposing_recipient(monkeypatch, caplog):
+@pytest.mark.parametrize("flush_failure", [False, True])
+async def test_worker_failures_retry_without_exposing_recipient(monkeypatch, caplog, flush_failure):
     import worker.run as worker
 
-    configured = worker.Settings(worker_database_url="postgresql://worker")
-    monkeypatch.setattr(worker, "Settings", lambda: configured)
-    monkeypatch.setattr(
-        worker,
-        "IdentitySettings",
-        lambda: type(
-            "Origin",
-            (),
-            {
-                "public_base_url": "https://links.example",
-                "validate_public_origin": lambda *args, **kwargs: None,
-            },
-        )(),
-    )
-    monkeypatch.setattr(
-        worker,
-        "SchemaAuthority",
-        lambda *args: type("Schema", (), {"check": lambda self, **kwargs: None})(),
-    )
+    configured = worker.WorkerSettings(database_url="postgresql://worker")
+    public = worker.PublicSettings(public_base_url="https://links.example")
+    monkeypatch.setattr(worker, "SchemaAuthority", Mock())
     workflow = AsyncMock()
     workflow.run_once.side_effect = [OSError("subscriber@example.com"), False]
     monkeypatch.setattr(worker, "ActivationEmailsWorkflow", lambda *args: workflow)
+    telemetry = Mock()
+    if flush_failure:
+        telemetry.force_flush.side_effect = OSError()
+    monkeypatch.setattr(worker, "build_telemetry", lambda *args: telemetry)
     monkeypatch.setattr(worker, "PostgresDeliveryQueue", lambda *args: AsyncMock())
-
-    async def stop(delay):
-        raise asyncio.CancelledError
-
-    monkeypatch.setattr(worker.asyncio, "sleep", stop)
-    with pytest.raises(asyncio.CancelledError):
-        await worker.run()
+    monkeypatch.setattr(
+        worker.asyncio, "sleep", AsyncMock(side_effect=[None, asyncio.CancelledError])
+    )
+    with pytest.raises(OSError if flush_failure else asyncio.CancelledError):
+        await worker.WorkerRuntime(configured, public).run()
+    assert workflow.run_once.await_count == 2
+    telemetry.force_flush.assert_called_once_with()
+    telemetry.shutdown.assert_called_once_with()
     assert "subscriber@example.com" not in caplog.text

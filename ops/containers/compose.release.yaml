@@ -1,0 +1,27 @@
+services:
+  schema-prepare:
+    networks: [postgres]
+  schema-migrate:
+    networks: [postgres]
+  schema-finish:
+    networks: [postgres]
+  api:
+    networks: [postgres, plazia-edge, plazia-services]
+  worker:
+    networks: [postgres, plazia-services]
+    environment:
+      PLZK_WORKER_SMTP_HOST: ${PLZK_WORKER_SMTP_HOST:?Select the SMTP endpoint}
+      PLZK_WORKER_SMTP_FROM: ${PLZK_WORKER_SMTP_FROM:?Select the sender address}
+      PLZK_WORKER_SMTP_USER:
+      PLZK_WORKER_SMTP_PORT:
+      PLZK_WORKER_SMTP_SECURITY:
+networks:
+  postgres:
+    name: ${PLZ_POSTGRES_NETWORK:?Select the admitted PostgreSQL network}
+    external: true
+  plazia-edge:
+    name: ${PLZ_EDGE_NETWORK:?Select the shared ingress network}
+    external: true
+  plazia-services:
+    name: ${PLAZIA_SERVICES_NETWORK:?Select the shared services network}
+    external: true

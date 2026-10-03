@@ -18,7 +18,7 @@ from shared_kernel import RequestContext
 from app.contexts.access.contracts import BindOrganizationCommand, DisableOrganizationCommand
 from app.platform.composition import operator_commands
 from app.platform.persistence.schema import SchemaAuthority, SchemaError
-from app.platform.settings import IdentitySettings, Settings
+from app.platform.settings import OwnerSettings, PublicSettings
 
 Action = Literal[
     "schema-prepare", "schema-finish", "schema-check", "bind-organization", "disable-organization"
@@ -36,6 +36,15 @@ _HELP: dict[Action, str] = {
 class OperatorCli:
     action: Action
 
+    @classmethod
+    def router(cls) -> Router:
+        return Router.create(
+            prog="plazia-links",
+            description="Owner schema and organization operations.",
+            groups=(),
+            routes=(Route((action,), help, cls(action).define()) for action, help in _HELP.items()),
+        )
+
     def define(self) -> CommandDefinition:
         organization = self.action in {"bind-organization", "disable-organization"}
         return CommandDefinition(
@@ -52,7 +61,7 @@ class OperatorCli:
     async def _invoke(self, invocation: CommandInvocation) -> int:
         try:
             if self.action.startswith("schema-"):
-                authority = SchemaAuthority(Settings().database_url.get_secret_value())
+                authority = SchemaAuthority(OwnerSettings().database_url.get_secret_value())
                 method = {
                     "schema-prepare": authority.prepare,
                     "schema-finish": authority.finish,
@@ -61,9 +70,9 @@ class OperatorCli:
                 method()
                 print("Schema authority verified.")
             else:
-                identity = IdentitySettings()
+                identity = PublicSettings()
                 if not identity.issuer:
-                    raise CommandError("PLZL_IDENTITY_ISSUER is required")
+                    raise CommandError("PLZK_IDENTITY_ISSUER is required")
                 org = OrganizationId(invocation.str("organization"))
                 command = (
                     BindOrganizationCommand(identity.issuer, org, invocation.str("name"))
@@ -92,16 +101,5 @@ class OperatorCli:
         return 0
 
 
-def router() -> Router:
-    return Router.create(
-        prog="plazia-links",
-        description="Owner schema and organization operations.",
-        groups=(),
-        routes=(
-            Route((action,), help, OperatorCli(action).define()) for action, help in _HELP.items()
-        ),
-    )
-
-
 def main(argv: Sequence[str] | None = None) -> int:
-    return router().run(argv)
+    return OperatorCli.router().run(argv)

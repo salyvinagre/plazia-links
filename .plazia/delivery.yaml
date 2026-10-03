@@ -1,20 +1,232 @@
 delivery:
-  stack: {}
+  stack:
+    machine_env: PLZK_PODMAN_MACHINE
+    compose_dir: ops/containers
+    label: Links owner stack
+    image_builds:
+      links:
+        selectors:
+        - PLZK_IMAGE
+        image: plazia-links:local
+        containerfile: ops/containers/Containerfile
+        base_images:
+          PLZ_UV_IMAGE: ${PLZ_UV_IMAGE:-}
+          PLZ_PYTHON_IMAGE: ${PLZ_PYTHON_IMAGE:-}
+        copy:
+        - source: pyproject.toml
+          target: plazia-links/pyproject.toml
+        - source: uv.lock
+          target: plazia-links/uv.lock
+        - source: app
+          target: plazia-links/app
+        - source: worker
+          target: plazia-links/worker
+        - source: ../plazia/packages/plazia-authlib/pyproject.toml
+          target: plazia/packages/plazia-authlib/pyproject.toml
+        - source: ../plazia/packages/plazia-authlib/src
+          target: plazia/packages/plazia-authlib/src
+        - source: ../plazia/packages/plazia-cli/pyproject.toml
+          target: plazia/packages/plazia-cli/pyproject.toml
+        - source: ../plazia/packages/plazia-cli/src
+          target: plazia/packages/plazia-cli/src
+        - source: ../plazia/packages/plazia-contracts/pyproject.toml
+          target: plazia/packages/plazia-contracts/pyproject.toml
+        - source: ../plazia/packages/plazia-contracts/src
+          target: plazia/packages/plazia-contracts/src
+        - source: ../plazia/packages/plazia-feature/pyproject.toml
+          target: plazia/packages/plazia-feature/pyproject.toml
+        - source: ../plazia/packages/plazia-feature/src
+          target: plazia/packages/plazia-feature/src
+        - source: ../plazia/packages/plazia-http/pyproject.toml
+          target: plazia/packages/plazia-http/pyproject.toml
+        - source: ../plazia/packages/plazia-http/src
+          target: plazia/packages/plazia-http/src
+        - source: ../plazia/packages/plazia-kernel/pyproject.toml
+          target: plazia/packages/plazia-kernel/pyproject.toml
+        - source: ../plazia/packages/plazia-kernel/src
+          target: plazia/packages/plazia-kernel/src
+        - source: ../plazia/packages/plazia-messaging/pyproject.toml
+          target: plazia/packages/plazia-messaging/pyproject.toml
+        - source: ../plazia/packages/plazia-messaging/src
+          target: plazia/packages/plazia-messaging/src
+        - source: ../plazia/packages/plazia-notifications/pyproject.toml
+          target: plazia/packages/plazia-notifications/pyproject.toml
+        - source: ../plazia/packages/plazia-notifications/src
+          target: plazia/packages/plazia-notifications/src
+        - source: ../plazia/packages/plazia-observability/pyproject.toml
+          target: plazia/packages/plazia-observability/pyproject.toml
+        - source: ../plazia/packages/plazia-observability/src
+          target: plazia/packages/plazia-observability/src
+        - source: ../plazia/packages/plazia-persistence/pyproject.toml
+          target: plazia/packages/plazia-persistence/pyproject.toml
+        - source: ../plazia/packages/plazia-persistence/src
+          target: plazia/packages/plazia-persistence/src
+        - source: ../plazia/packages/plazia-settings/pyproject.toml
+          target: plazia/packages/plazia-settings/pyproject.toml
+        - source: ../plazia/packages/plazia-settings/src
+          target: plazia/packages/plazia-settings/src
+        - source: ../plazia/packages/plazia-tooling/pyproject.toml
+          target: plazia/packages/plazia-tooling/pyproject.toml
+        - source: ../plazia/packages/plazia-tooling/src
+          target: plazia/packages/plazia-tooling/src
   releases:
     repository: salyvinagre/plazia-links
+    root_repository: salyvinagre/plazia
+    domain: liberalia.net
+    subdomain: links
     registry_provider: tools.environment:build_registry
     common:
       enabled: false
+      dependencies: [plazia-postgres-links]
+      profile:
+        scope: runtime
       execution:
         local: local
         remote: remote
+      destinations:
+        remote:
+          stack:
+            env:
+              PLZK_FLYWAY_PROJECT: ./flyway
+      images:
+        links:
+          services:
+          - schema-prepare
+          - schema-finish
+          - api
+          - worker
+          env_name: PLZK_IMAGE
+        flyway:
+          services:
+          - schema-migrate
+          catalog: flyway
+      artifacts:
+      - source: app/platform/persistence/sql
+        target: flyway
+        kind: directory
+      configuration:
+      - selector: PLZK_CONFIG
+        services:
+        - api
+        - worker
+        - schema-prepare
+        - schema-finish
+        sources:
+        - ops/containers/config/runtime.toml
+        - ops/containers/config/preview.toml
+      secret_attachments:
+        schema-migrate:
+        - PLZK_FLYWAY_USER_TOML
+        schema-prepare:
+        - PLZK_SCHEMA_DATABASE_URL
+        schema-finish:
+        - PLZK_SCHEMA_DATABASE_URL
+        api:
+        - PLZK_DATABASE_URL
+        - PLZK_REDIS_URL
+        - PLZK_OPENFGA_STORE_ID
+        - PLZK_OPENFGA_MODEL_ID
+        - PLZK_IDENTITY_CLIENT_SECRET
+        worker:
+        - PLZK_WORKER_DATABASE_URL
+        - PLZK_WORKER_SMTP_PASSWORD
+      optional_secrets:
+      - PLZK_WORKER_SMTP_PASSWORD
+      required_env:
+      - PLZK_IDENTITY_ISSUER
+      - PLZK_IDENTITY_CLIENT_ID
+      - PLZK_OPENFGA_URL
+      - PLZK_WORKER_SMTP_HOST
+      - PLZK_WORKER_SMTP_FROM
+      stack:
+        overlays: [release]
+        networks:
+        - ${PLZ_EDGE_NETWORK}
+        - ${PLAZIA_SERVICES_NETWORK}
+        - ${PLZ_POSTGRES_NETWORK}
+        env:
+          PLZK_IDENTITY_PUBLIC_BASE_URL: https://${PLZ_RELEASE_HOSTNAME}
+          PLZK_IDENTITY_AUDIENCE: https://${PLZ_RELEASE_HOSTNAME}/api/v1
+        services: &runtime_services
+        - schema-prepare
+        - schema-migrate
+        - schema-finish
+        - api
+        - worker
+        units:
+          runtime: *runtime_services
+        up:
+          steps:
+          - kind: secrets_ensure
+          - kind: compose
+            args:
+            - up
+            - '{up_options}'
+            - '{detach_options}'
+            - '{services}'
+      preflight:
+        compose_health: true
+      smoke:
+        base_url: https://${PLZ_RELEASE_HOSTNAME}
+        checks:
+        - name: api-ready
+          path: /health
+          status: 200
+      requires_shared_extensions:
+      - salyvinagre/plazia:routestate
+      resources:
+        web:
+          contract: plazia.links.web.v1
+          routing:
+            cookie:
+              name: plz_route
+          public:
+            mode: static
+            routes:
+            - id: links
+              hosts: ['${PLZ_RELEASE_HOSTNAME}']
+              path_prefixes: [/]
+          ingress:
+            service: api
+            scheme: http
+            port: 8000
+            readiness:
+              path: /health
+              status: 200
+    environments:
+      production:
+        policy: production
     policies:
       preview:
         kind: preview
+      production:
+        kind: production
+        configuration:
+        - selector: PLZK_CONFIG
+          services: [api, worker, schema-prepare, schema-finish]
+          sources:
+          - ops/containers/config/runtime.toml
+          - ops/containers/config/production.toml
     targets:
       local:
         kind: local-compose
+        backend_network: plazia-edge
       remote:
         kind: remote-compose
-  dependencies: {}
+        backend_network: plazia-edge
+        deploy_dir: /var/tmp/plazia-links
+  dependencies:
+    plazia-postgres-links:
+      phase: before
+      infrastructure:
+        repository: ../plazia
+        capability: postgres
+        claims: [links]
+      secret_outputs:
+        PLZK_SCHEMA_DATABASE_URL: PLZ_POSTGRES_LINKS_SCHEMA_URL
+        PLZK_DATABASE_URL: PLZ_POSTGRES_LINKS_API_URL
+        PLZK_WORKER_DATABASE_URL: PLZ_POSTGRES_LINKS_WORKER_URL
+        PLZK_FLYWAY_USER_TOML: PLZK_FLYWAY_USER_TOML
+      outputs:
+        PLZ_POSTGRES_NETWORK: PLZ_POSTGRES_NETWORK
   tunnels: {}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Generator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import fields
@@ -230,6 +231,12 @@ class _Catalog:
         self.history = history
         self.rls_enabled = rls
         self.history_exists = bool(history) if history_exists is None else history_exists
+        self.marker = {
+            "provider": "plazia-postgres-v1",
+            "owner": "salyvinagre/plazia-links",
+            "environment": "fixture",
+            "roles": {"links_app": "links_app", "links_worker": "links_worker"},
+        }
 
     def __enter__(self) -> _Catalog:
         return self
@@ -242,6 +249,8 @@ class _Catalog:
 
     def execute(self, query: str, params: tuple[object, ...] = ()) -> _CatalogResult:
         _ = params
+        if "shobj_description" in query:
+            return _CatalogResult([(json.dumps(self.marker),)])
         if "AS owner_drift" in query or "AS private_access" in query:
             return _CatalogResult([(False,)])
         if "AS pool_management" in query:
@@ -262,7 +271,7 @@ class _Catalog:
                 ]
             )
         if "pg_catalog.pg_policy" in query:
-            policies = SchemaAuthority("postgresql://db/links")._policies()
+            policies = SchemaAuthority._policies(self.marker["roles"]["links_worker"])
             return _CatalogResult(
                 [(table, name, *value) for (table, name), value in policies.items()]
             )
@@ -276,8 +285,8 @@ class _Catalog:
         if "pg_catalog.pg_roles" in query:
             return _CatalogResult(
                 [
-                    ("links_app", True, False, False),
-                    ("links_worker", True, False, False),
+                    (role, True, False, False, False, False, False, False)
+                    for role in self.marker["roles"].values()
                 ]
             )
         if "to_regclass" in query:
@@ -388,6 +397,28 @@ def test_schema_authority_admits_v1_for_upgrade_but_not_runtime(monkeypatch):
         authority.check()
 
 
+def test_schema_authority_keeps_role_bindings_with_each_transaction(monkeypatch):
+    outer = _Catalog(history=_CURRENT_HISTORY)
+    inner = _Catalog(history=_CURRENT_HISTORY)
+    inner.marker["roles"] = {
+        "links_app": "scoped_links_app",
+        "links_worker": "scoped_links_worker",
+    }
+    connections = iter((outer, inner))
+    monkeypatch.setattr(schema_module.psycopg, "connect", lambda *_a, **_k: next(connections))
+    authority = SchemaAuthority("postgresql://db.example/links")
+    execute = outer.execute
+
+    def overlapping_check(query, params=()):
+        if "FROM pg_catalog.pg_roles" in query:
+            assert authority.finish().revision == "2"
+        return execute(query, params)
+
+    monkeypatch.setattr(outer, "execute", overlapping_check)
+
+    assert authority.finish().revision == "2"
+
+
 @pytest.mark.parametrize(
     ("history", "rls"),
     [
@@ -407,9 +438,23 @@ def test_schema_authority_rejects_unexpected_history_and_missing_rls(
         SchemaAuthority("postgresql://db.example/links").check()
 
 
-def test_schema_authority_rejects_malformed_runtime_role_names():
-    with pytest.raises(ValueError, match="database roles"):
-        SchemaAuthority("postgresql://db.example/links", app_role="postgres")
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"owner": "example/other"},
+        {"provider": "other"},
+        {"environment": ""},
+        {"roles": {"links_app": "bad;role", "links_worker": "worker"}},
+        {"roles": {"links_app": "same", "links_worker": "same"}},
+        {"roles": {"links_app": "app"}},
+    ],
+)
+def test_schema_authority_rejects_invalid_provider_binding(monkeypatch, changes):
+    catalog = _Catalog()
+    catalog.marker.update(changes)
+    _catalog(monkeypatch, catalog)
+    with pytest.raises(SchemaError, match="role binding"):
+        SchemaAuthority("postgresql://db.example/links").prepare()
 
 
 @pytest.mark.asyncio

@@ -5,13 +5,17 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from tests.identity_support import ORG_B
+from tests.identity_support import ORG_B, bearer
 
 
 async def test_every_mutation_replays_original_result_and_audit_once(
     identity_client, issuer, identity_db
 ):
-    headers = {"Authorization": "Bearer " + issuer.access(), "Idempotency-Key": "pool-1"}
+    headers = {
+        "Authorization": "Bearer "
+        + issuer.authority.issue_human_session(issuer.identity.user, issuer.identity.client),
+        "Idempotency-Key": "pool-1",
+    }
     first = await identity_client.post("/api/v1/pools", headers=headers, json={"size": 2})
     second = await identity_client.post("/api/v1/pools", headers=headers, json={"size": 2})
     assert first.status_code == second.status_code == 201 and first.json() == second.json()
@@ -50,7 +54,11 @@ async def test_every_mutation_replays_original_result_and_audit_once(
 async def test_replay_rolls_back_with_failed_commit_and_rechecks_authority(
     identity_client, issuer, database, identity_db, authority
 ):
-    headers = {"Authorization": "Bearer " + issuer.access(), "Idempotency-Key": "recover-1"}
+    headers = {
+        "Authorization": "Bearer "
+        + issuer.authority.issue_human_session(issuer.identity.user, issuer.identity.client),
+        "Idempotency-Key": "recover-1",
+    }
     database.commit_failure = True
     assert (
         await identity_client.post("/api/v1/pools", headers=headers, json={"size": 1})
@@ -65,7 +73,9 @@ async def test_replay_rolls_back_with_failed_commit_and_rechecks_authority(
         await identity_client.post("/api/v1/pools", headers=headers, json={"size": 1})
     ).status_code == 403
     authority.allowed = True
-    headers["Authorization"] = "Bearer " + issuer.access(org=ORG_B)
+    headers["Authorization"] = "Bearer " + issuer.authority.issue_human_session(
+        issuer.identity.user, issuer.identity.client, claim_overrides={"org": ORG_B}
+    )
     another = await identity_client.post("/api/v1/pools", headers=headers, json={"size": 1})
     assert another.status_code == 201 and another.headers["Idempotency-Replayed"] == "false"
 
@@ -75,7 +85,7 @@ async def test_missing_or_invalid_key_is_a_context_error(application, issuer):
         transport=httpx.ASGITransport(app=application), base_url="http://127.0.0.1:8000"
     ) as client:
         for value in (None, "with space", "a" * 129):
-            headers = {"Authorization": "Bearer " + issuer.access()}
+            headers = bearer(issuer)
             if value is not None:
                 headers["Idempotency-Key"] = value
             response = await client.post("/api/v1/pools", headers=headers, json={"size": 1})

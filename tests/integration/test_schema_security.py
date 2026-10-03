@@ -2,6 +2,7 @@
 
 import pytest
 from psycopg import Connection, sql
+from shared_persistence.roles import PostgresRoles
 
 from app.platform.persistence.schema import SchemaAuthority, SchemaError
 from tests.integration.test_postgres_links import postgres_urls as postgres_urls
@@ -11,6 +12,18 @@ from tests.integration.test_postgres_links import postgres_urls as postgres_urls
 @pytest.mark.parametrize(
     ("change", "restore", "runtime", "reason"),
     [
+        (
+            "ALTER ROLE links_app CREATEDB",
+            "ALTER ROLE links_app NOCREATEDB",
+            "app",
+            "privileges",
+        ),
+        (
+            "ALTER ROLE links_worker INHERIT",
+            "ALTER ROLE links_worker NOINHERIT",
+            "worker",
+            "inheritance",
+        ),
         (
             "GRANT SELECT ON platform.command_receipts TO links_worker",
             "REVOKE SELECT ON platform.command_receipts FROM links_worker",
@@ -142,6 +155,10 @@ def test_runtime_rejects_security_drift(postgres_urls, change, restore, runtime,
     authority = SchemaAuthority(url)
     assert authority.check(runtime=runtime).revision == "2"
     with Connection.connect(postgres_urls.owner, autocommit=True) as owner:
+        roles = PostgresRoles.read(owner, owner="salyvinagre/plazia-links")
+        for key in ("links_app", "links_worker"):
+            change = change.replace(key, roles.names[key])
+            restore = restore.replace(key, roles.names[key])
         name = owner.execute(
             "SELECT pg_catalog.pg_get_userbyid(nspowner) FROM pg_catalog.pg_namespace "
             "WHERE nspname='links'"

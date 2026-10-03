@@ -22,8 +22,7 @@ venv/
 
 # Keep the example
 !.env.example
-!infrastructure/.env.example
-!infrastructure/.env.vercel.example
+!ops/**/env/*.env.example
 
 # Testing
 .pytest_cache/
@@ -69,3 +68,5 @@ output/
 .cache/ui/
 
 .plazia/local/
+
+.plazia/release/

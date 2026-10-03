@@ -2,7 +2,7 @@
 Status: implemented and locally validated. Independent review and external gates are recorded in validation.md.
 
 ## Scope
-The user authorized implementation and testing, organization-level ownership, a fresh Flyway schema with no customer migration, clean replacement of SQLAlchemy/Alembic, shared canonical UUIDv7 identifiers, CQRS/hexagonal boundaries and shared field normalizers. Environment prefix is PLZL_.
+The user authorized implementation and testing, organization-level ownership, a fresh Flyway schema with no customer migration, clean replacement of SQLAlchemy/Alembic, shared canonical UUIDv7 identifiers, CQRS/hexagonal boundaries and shared field normalizers. Environment prefix is PLZK_.
 
 ## Stories
 - LINKS-1: An authorized organization reserves 1–100 globally unique short links in one pool; no link has a destination.
@@ -24,4 +24,5 @@ bulk deletion and whole-pool deletion in both runtime modes. A Flyway V2
 migration preserves applied V1 and enables the new lifecycle.
 
 ## Boundaries
-No live account provisioning, deployment or external recipient email is performed. The local issuer, disposable services and SMTP capture provide local acceptance evidence. The shared authz registry lacks a Links fragment; the organization-level adapter consumes existing reader/manager relations. No sibling production files are modified.
+No live account provisioning, deployment or external recipient email is performed. The local issuer, disposable services and SMTP capture provide local acceptance evidence. The shared authz registry lacks a Links fragment; the organization-level adapter consumes existing reader/manager relations. Deployment alignment updates the shared PostgreSQL claim and its Flyway projection.
+Production activation and worker qualification remain deferred until Identity deploys.

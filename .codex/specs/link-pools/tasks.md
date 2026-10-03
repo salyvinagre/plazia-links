@@ -13,3 +13,7 @@
 - [x] Existing independent Luna reviewer: terminal Cycle 3 second-pass review; PASS with no critical/warning findings.
 - [x] Root: pool overflow menu, on-demand rename and cancellable link selection; existing primitives and justified source-line budget.
 - [x] Root: identical action triggers and collection-wide selection through the canonical bulk DELETE command; cross-page, tenant, audit and replay proof.
+
+- [x] Root: current Delivery scope/policy/source-graph alignment, selected PostgreSQL claim, scoped role admission and shared native/release Flyway credentials.
+- [x] Root: stable public origin, shared ingress, remote SQL artifact path and worker-only SMTP configuration.
+- [ ] Root: after Identity deploy succeeds, implement worker qualification/fencing and admit Links into the root production suite.

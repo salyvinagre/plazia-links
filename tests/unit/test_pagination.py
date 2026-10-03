@@ -4,11 +4,11 @@ import pytest
 from shared_http import PageTokenCodec, PageTokenError
 
 from app.interfaces.api.schemas.links import Pagination
-from tests.identity_support import ORG_B
+from tests.identity_support import ORG_B, bearer
 
 
 async def test_forward_navigation_is_bounded_and_scope_bound(identity_client, issuer):
-    headers = {"Authorization": "Bearer " + issuer.access()}
+    headers = bearer(issuer)
     for name in ("First", "Second", "Third"):
         assert (
             await identity_client.post(
@@ -25,7 +25,8 @@ async def test_forward_navigation_is_bounded_and_scope_bound(identity_client, is
     assert not {item["id"] for item in first["items"]} & {item["id"] for item in last["items"]}
     assert (
         await identity_client.get(
-            next_url, headers={"Authorization": "Bearer " + issuer.access(org=ORG_B)}
+            next_url,
+            headers=bearer(issuer, **{"org": ORG_B}),
         )
     ).status_code == 422
     assert (

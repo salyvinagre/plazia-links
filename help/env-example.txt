@@ -1,0 +1,23 @@
+ENV-EXAMPLE
+
+PURPOSE
+Regenerate the root environment example from the composed shared EnvRegistry.
+
+USAGE
+  [verify] make env-example help
+
+VARIABLES
+Builds use the selected native Podman engine. Environment examples read declarations only.
+
+WHEN
+Use for the selected owner operation.
+
+BOUNDARIES
+Updates .env.example only after successful declaration composition.
+
+EVIDENCE
+Shared tooling reports the selected operation and its result.
+
+EXAMPLES
+  [verify] make env-example help
+  [static] make env-example
