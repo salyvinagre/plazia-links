@@ -248,16 +248,15 @@ class _Catalog:
 
     def execute(self, query: str, params: tuple[object, ...] = ()) -> _CatalogResult:
         _ = params
+        revision = next((row[0] for row in reversed(self.history) if row[3] != "SCHEMA"), "1")
+        statistics = int(revision) >= 3
         if "shobj_description" in query:
             return _CatalogResult([(json.dumps(self.marker),)])
         if "AS owner_drift" in query or "AS private_access" in query:
             return _CatalogResult([(False,)])
-        if "AS pool_management" in query:
+        if "AS pool_management" in query or "AS statistics_ready" in query:
             return _CatalogResult([(True,)])
         if "FROM pg_catalog.pg_constraint" in query:
-            revision = next(
-                (record[0] for record in reversed(self.history) if record[3] != "SCHEMA"), "1"
-            )
             return _CatalogResult(
                 [
                     (
@@ -267,10 +266,13 @@ class _Catalog:
                         True,
                     )
                     for name, value in schema_module._DELETION_FKS.items()
+                    if statistics or name != "fk_statistics_link_organization"
                 ]
             )
         if "pg_catalog.pg_policy" in query:
-            policies = SchemaAuthority._policies(self.marker["roles"]["links_worker"])
+            policies = SchemaAuthority._policies(
+                self.marker["roles"]["links_worker"], statistics=statistics
+            )
             return _CatalogResult(
                 [(table, name, *value) for (table, name), value in policies.items()]
             )
@@ -279,6 +281,7 @@ class _Catalog:
                 [
                     (schema, name, *value)
                     for (schema, name), value in schema_module._FUNCTION_SECURITY.items()
+                    if statistics or name != "record_visit"
                 ]
             )
         if "pg_catalog.pg_roles" in query:
@@ -323,7 +326,11 @@ class _Catalog:
                     "platform.command_receipts",
                 )
                 return _CatalogResult(
-                    [(name,) for name in names if self.rls_enabled or name != "links.links"]
+                    [
+                        (name,)
+                        for name in (*names, *(["links.statistics"] if statistics else []))
+                        if self.rls_enabled or name != "links.links"
+                    ]
                 )
             names = (
                 "access.organizations",
@@ -335,7 +342,12 @@ class _Catalog:
                 "platform.command_receipts",
                 "links_migrations.flyway_schema_history",
             )
-            return _CatalogResult([(name,) for name in names])
+            return _CatalogResult(
+                [
+                    (name,)
+                    for name in (*names, *(schema_module._STATISTICS_TABLES if statistics else []))
+                ]
+            )
         if "pg_catalog.pg_proc" in query:
             return _CatalogResult(
                 [
@@ -384,12 +396,13 @@ def test_schema_authority_admits_empty_target_and_current_flyway_schema(monkeypa
     _catalog(monkeypatch, current)
     status = authority.finish()
 
-    assert status.revision == "2"
+    assert status.revision == "4"
     assert "links_migrations.flyway_schema_history" in status.tables
 
 
-def test_schema_authority_admits_v1_for_upgrade_but_not_runtime(monkeypatch):
-    _catalog(monkeypatch, _Catalog(history=(_VERSION_ONE,)))
+@pytest.mark.parametrize("revision", (1, 2, 3))
+def test_schema_authority_admits_packaged_prefix_for_upgrade_but_not_runtime(monkeypatch, revision):
+    _catalog(monkeypatch, _Catalog(history=_CURRENT_HISTORY[:revision]))
     authority = SchemaAuthority("postgresql://db.example/links")
     authority.prepare()
     with pytest.raises(SchemaError, match="history"):
@@ -410,12 +423,12 @@ def test_schema_authority_keeps_role_bindings_with_each_transaction(monkeypatch)
 
     def overlapping_check(query, params=()):
         if "FROM pg_catalog.pg_roles" in query:
-            assert authority.finish().revision == "2"
+            assert authority.finish().revision == "4"
         return execute(query, params)
 
     monkeypatch.setattr(outer, "execute", overlapping_check)
 
-    assert authority.finish().revision == "2"
+    assert authority.finish().revision == "4"
 
 
 @pytest.mark.parametrize(
@@ -586,7 +599,7 @@ def test_runtime_admission_rejects_owner_credentials_and_inherited_bypass(
     _catalog(monkeypatch, Catalog(history=_CURRENT_HISTORY))
     authority = SchemaAuthority("postgresql://db/links")
     if allowed:
-        assert authority.check(runtime=runtime).revision == "2"
+        assert authority.check(runtime=runtime).revision == "4"
     else:
         with pytest.raises(SchemaError, match="dedicated role"):
             authority.check(runtime=runtime)

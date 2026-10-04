@@ -12,11 +12,19 @@ from app.contexts.links.application.dto.links import (
     PoolDto,
     PublicLinkDto,
 )
+from app.contexts.links.application.dto.statistics import StatisticsDto, VisitOutcome
 from app.contexts.links.domain.link import LinkDraft, LinkPatch
 from app.kernel.ids import LinkId, PoolId
 
 
 class LinkRepository(Protocol):
+    async def record_visit(self, link_id: LinkId, code: str, outcome: VisitOutcome) -> None: ...
+    async def statistics(
+        self,
+        organization_id: OrganizationId,
+        ids: tuple[OrganizationId | LinkId | PoolId, ...],
+    ) -> dict[OrganizationId | LinkId | PoolId, StatisticsDto]: ...
+
     async def replay(
         self, actor: Principal, action: str, key: str, fingerprint: str
     ) -> CommandResultDto | None: ...

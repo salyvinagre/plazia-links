@@ -18,8 +18,11 @@ from app.contexts.links.contracts import (
     LinkDraft,
     LinkDto,
     LinkPatch,
+    LinkReadDto,
     PoolDto,
+    PoolReadDto,
     PublicCode,
+    StatisticsDto,
 )
 from app.kernel.ids import LinkId, PoolId
 
@@ -209,6 +212,54 @@ class PoolResponse(ApiResponse):
     @classmethod
     def from_application(cls, pool: PoolDto) -> PoolResponse:
         return cls(id=str(pool.id), name=pool.name, size=pool.size, created_at=pool.created_at)
+
+
+class StatisticsResponse(ApiResponse):
+    """Best-effort GET request counts for currently retained links, including bots and repeats."""
+
+    redirects: int = Field(ge=0, description="Recorded GET requests resolved to a destination.")
+    waiting_views: int = Field(ge=0, description="Recorded GET requests showing the waiting page.")
+    subscribers: int = Field(
+        ge=0,
+        description="Retained subscriptions, including delivered recipients until cleanup.",
+    )
+    last_visited_at: AwareDatetime | None = Field(
+        description="Latest recorded request in UTC; null before any visits."
+    )
+    tracked_from: AwareDatetime = Field(
+        description="Collection start in UTC; earlier traffic is unknown."
+    )
+    as_of: AwareDatetime = Field(description="Statistics read time in UTC.")
+
+    @classmethod
+    def from_application(cls, statistics: StatisticsDto) -> StatisticsResponse:
+        return cls.model_validate(statistics, from_attributes=True)
+
+
+class LinkReadResponse(LinkResponse):
+    """A retained link with its recorded public request statistics."""
+
+    statistics: StatisticsResponse = Field(description="Counts for this retained link.")
+
+    @classmethod
+    def from_read(cls, link: LinkReadDto, public_base: str) -> LinkReadResponse:
+        return cls(
+            **LinkResponse.from_application(link, public_base).model_dump(exclude_none=False),
+            statistics=StatisticsResponse.from_application(link.statistics),
+        )
+
+
+class PoolReadResponse(PoolResponse):
+    """A pool with request statistics across all its retained links."""
+
+    statistics: StatisticsResponse = Field(description="Counts across all retained pool links.")
+
+    @classmethod
+    def from_read(cls, pool: PoolReadDto) -> PoolReadResponse:
+        return cls(
+            **PoolResponse.from_application(pool).model_dump(exclude_none=False),
+            statistics=StatisticsResponse.from_application(pool.statistics),
+        )
 
 
 class PageResponse[T](ApiResponse):

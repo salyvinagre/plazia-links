@@ -62,6 +62,7 @@ Company brand book, edition 1.3; see `app/static/brand/README.md` for asset prov
 | POST /api/v1/pools | links:create |
 | GET /api/v1/pools | links:read |
 | GET /api/v1/pools/{pool_id} | links:read |
+| GET /api/v1/statistics | links:read |
 | PATCH /api/v1/pools/{pool_id} | links:update |
 | DELETE /api/v1/pools/{pool_id} | links:delete |
 | GET /api/v1/links?pool_id=lpl_… | links:read |
@@ -87,6 +88,29 @@ selections return 422; changed idempotency payloads return 409. Generated
 Every protected POST, PATCH and DELETE requires an `Idempotency-Key` of 1–128 ASCII letters, digits or `-_.:`. Retry the same operation with the same key and payload to receive its original result, with `Idempotency-Replayed: true`. A changed payload conflicts with 409. Receipts, state, audit and activation jobs commit together; failed commands leave no receipt. Authority and the active organization binding are checked again on replay. Browser forms carry their own hidden keys.
 
 Collections accept `limit` (1–100), an opaque `token` and the optional link `pool_id` filter. Follow their shared HAL `self`, `first` and `next` links. Tokens bind the caller, organization, issuer, filter and limit. Navigation uses bounded offsets; concurrent inserts/deletes can move page contents. The OAuth resource audience is the canonical HTTPS `/api/v1` base.
+
+Management GETs for links and pools include a `statistics` object. The new
+`GET /api/v1/statistics` returns the organization's aggregate across all retained
+links and all pages. Each object contains `redirects`, `waiting_views`, `subscribers`, nullable
+`last_visited_at`, `tracked_from` and `as_of` (UTC timestamps). Pool totals cover
+all its links; per-link totals appear on each listed or individually read link.
+`subscribers` counts current retained subscriptions, including delivered subscribers
+until the existing retention cleanup removes them. The dashboard presents these
+figures in the Statistics menu.
+Mutation and idempotency replay
+responses keep their original representation without statistics.
+
+These are successful public GET request counts: repeated and automated
+requests count, while HEAD, missing/disabled links, subscription POSTs and
+management reads do not. Redirects do not prove that the destination loaded.
+Collection starts with Flyway V3; earlier traffic is unknown. Capture gets a
+250 ms attempt and fails open, so counts may be incomplete. This statistics
+model retains no IP address, user agent, referrer, visitor identifier or individual
+visit record. Subscriber counts expose no recipient identities.
+Deleting a link or pool deletes its aggregates and reduces the retained totals.
+Unavailable statistics return 503 with `statistics_unavailable`, rather than
+inventing zeros. Statistics reads require the same organization authority and
+`links:read` scope as other management reads; no caller-supplied tenant is accepted.
 
 This is a fresh-schema cutover: no customer-data upgrade is supported. Removed inherited marketing/authentication/workspace routes have no compatibility mode. See [architecture](docs/ARCHITECTURE.md), [configuration and deployment](docs/DEPLOYMENT.md), [Identity contract](docs/IDENTITY.md), [implementation packet](.codex/specs/link-pools/spec.md), and [validation evidence](.codex/specs/link-pools/validation.md).
 

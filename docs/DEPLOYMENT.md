@@ -64,13 +64,27 @@ make migrate runs read-only admission, literal Flyway migrate (with validation o
 
 Operator commands use the shared plazia-cli parser; `uv run --locked plazia-links --help` works without runtime secrets or network access. Owner CQRS assembly and database lifetime live in platform composition. Only an owner credential can bind/disable organizations. Supply PLZK_IDENTITY_ISSUER and PLZK_SCHEMA_DATABASE_URL to the operator command; never run the API with that credential. disable-organization revokes existing management sessions on their next request without affecting public destinations.
 
-Pool management requires Flyway V2. Run the same owner-scoped `make migrate`
-before starting this application revision against a V1 database. Admission
-accepts verified V1 history for upgrade; runtime refuses an unmigrated V1
-database. V2 adds pool UPDATE/DELETE privileges for the API role and cascades
+Request statistics and subscriber counts require Flyway V4. Run the same
+owner-scoped `make migrate` before starting this application revision against a
+V1/V2/V3 database. Admission accepts verified packaged history prefixes for
+upgrade; runtime requires V4.
+V2 adds pool UPDATE/DELETE privileges for the API role and cascades
 pool deletion to links. The worker retains no pool-management access. No
 conversion from inherited ORM storage is provided.
-Admission verifies all four deletion-chain foreign keys, including their tables,
+V3 adds per-link request aggregates, their tenant policy and deletion cascade,
+a collection-start marker, and a narrow anonymous recording function. The API
+can read aggregates and invoke that function, but cannot write the tables
+directly; the worker cannot read aggregates or execute the function. Counts
+start when V3 is installed and cover currently retained links. Recording failure
+is passive: a public response proceeds after a bounded capture attempt, and a
+private-free failure counter signals gaps. No worker or broker is introduced.
+V4 lets the API count retained subscriptions by granting SELECT on only their
+organization/link IDs. Tenant RLS remains enforced; subscriber email stays private.
+Applied V1/V2/V3 SQL remains unchanged. Schema admission does not establish
+mixed-version rollout, binary compatibility or recovery safety; stateful owner
+qualification remains pending successful Identity deployment.
+
+Admission verifies all five deletion-chain foreign keys, including their tables,
 ordered tenant columns, cascade actions and validation state, so dropped or
 altered constraints cannot silently leave subscriptions or queued mail behind.
 

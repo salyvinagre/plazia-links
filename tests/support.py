@@ -17,6 +17,7 @@ from app.contexts.links.application.dto.links import (
     PoolDto,
     PublicLinkDto,
 )
+from app.contexts.links.application.dto.statistics import StatisticsDto
 from app.contexts.links.domain.link import LinkConflictError, LinkDraft, LinkNotFoundError
 from app.kernel.ids import LinkId, PoolId
 from app.platform.database import Scope
@@ -38,6 +39,47 @@ class MemoryRepository:
         self.audits = []
         self.public_locked = False
         self.receipts = {}
+        self.visits = {}
+        self.tracked_from = datetime.now(UTC)
+
+    async def record_visit(self, link_id, code, outcome):
+        row = self.links.get(link_id)
+        if row is None or row.short_code != code or not row.is_active:
+            return
+        if (row.destination_url is not None) != (outcome == "redirect"):
+            return
+        redirects, waiting, _ = self.visits.get(link_id, (0, 0, None))
+        self.visits[link_id] = (
+            redirects + (outcome == "redirect"),
+            waiting + (outcome == "waiting"),
+            datetime.now(UTC),
+        )
+
+    async def statistics(self, organization_id, ids):
+        result = {}
+        for id in ids:
+            selected = {
+                row.id
+                for row in self.links.values()
+                if self.owners[row.id] == organization_id
+                and (
+                    row.id == id
+                    if isinstance(id, LinkId)
+                    else row.pool_id == id
+                    if isinstance(id, PoolId)
+                    else organization_id == id
+                )
+            }
+            rows = [self.visits[id] for id in selected if id in self.visits]
+            result[id] = StatisticsDto(
+                sum(row[0] for row in rows),
+                sum(row[1] for row in rows),
+                sum(link_id in selected for link_id, _ in self.subscriptions),
+                max((row[2] for row in rows), default=None),
+                self.tracked_from,
+                datetime.now(UTC),
+            )
+        return result
 
     async def replay(self, actor, action, key, fingerprint):
         from app.contexts.links.domain.link import IdempotencyConflictError
@@ -110,6 +152,7 @@ class MemoryRepository:
     async def delete(self, organization_id, link_id):
         await self.get(organization_id, link_id)
         del self.links[link_id], self.owners[link_id]
+        self.visits.pop(link_id, None)
         self.subscriptions = {pair for pair in self.subscriptions if pair[0] != link_id}
         self.jobs = {pair for pair in self.jobs if pair[0] != link_id}
 

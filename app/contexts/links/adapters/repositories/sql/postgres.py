@@ -7,6 +7,7 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Any, cast
 
+from psycopg import Error
 from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
 from shared_identity.canonical_ids import OrganizationId
@@ -22,6 +23,8 @@ from app.contexts.links.application.dto.links import (
     PoolDto,
     PublicLinkDto,
 )
+from app.contexts.links.application.dto.statistics import StatisticsDto, VisitOutcome
+from app.contexts.links.application.errors.statistics import StatisticsUnavailableError
 from app.contexts.links.domain.link import (
     IdempotencyConflictError,
     LinkConflictError,
@@ -41,6 +44,59 @@ _POOL_ID_CONSTRAINT = "pools_pkey"
 class PostgresLinkRepository:
     def __init__(self, connection: AsyncPostgresRuntimeConnection) -> None:
         self._connection = connection
+
+    async def record_visit(self, link_id: LinkId, code: str, outcome: VisitOutcome) -> None:
+        await self._connection.execute(
+            "SELECT links.record_visit(%s,%s,%s)", (link_id.uuid, code, outcome)
+        )
+
+    async def statistics(
+        self,
+        organization_id: OrganizationId,
+        ids: tuple[OrganizationId | LinkId | PoolId, ...],
+    ) -> dict[OrganizationId | LinkId | PoolId, StatisticsDto]:
+        if not ids:
+            return {}
+        kinds = [
+            "link"
+            if isinstance(id, LinkId)
+            else "pool"
+            if isinstance(id, PoolId)
+            else "organization"
+            for id in ids
+        ]
+        try:
+            cursor = await self._connection.execute(
+                """WITH targets AS (
+                SELECT * FROM unnest(%s::uuid[], %s::text[]) WITH ORDINALITY AS t(id,kind,position)
+            ), selected AS (
+                SELECT t.position,l.organization_id,l.id FROM targets t
+                JOIN links.links l ON l.organization_id = %s AND (
+                    (t.kind='link' AND l.id=t.id) OR
+                    (t.kind='pool' AND l.pool_id=t.id) OR
+                    (t.kind='organization' AND l.organization_id=t.id))
+            ), subscribers AS (
+                SELECT link_id, count(*) AS total FROM links.subscriptions
+                WHERE organization_id=%s AND link_id IN (SELECT id FROM selected)
+                GROUP BY link_id
+            )
+            SELECT t.position, coalesce(sum(s.redirects),0)::bigint,
+                   coalesce(sum(s.waiting_views),0)::bigint,
+                   coalesce(sum(u.total),0)::bigint, max(s.last_visited_at),
+                   c.started_at, clock_timestamp()
+            FROM targets t CROSS JOIN links.statistics_coverage c
+            LEFT JOIN selected l ON l.position=t.position
+            LEFT JOIN links.statistics s ON s.organization_id=l.organization_id AND s.link_id=l.id
+            LEFT JOIN subscribers u ON u.link_id=l.id
+            GROUP BY t.position,c.started_at""",
+                ([id.uuid for id in ids], kinds, organization_id.uuid, organization_id.uuid),
+            )
+            result = {ids[row[0] - 1]: StatisticsDto(*row[1:]) for row in await cursor.fetchall()}
+        except (Error, ValueError) as error:
+            raise StatisticsUnavailableError from error
+        if len(result) != len(ids):
+            raise StatisticsUnavailableError
+        return result
 
     async def replay(
         self, actor: Principal, action: str, key: str, fingerprint: str

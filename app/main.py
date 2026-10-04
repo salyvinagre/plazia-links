@@ -14,7 +14,11 @@ from shared_http.fastapi.telemetry import FastApiHttpTelemetry
 
 from app.contexts.access.adapters.authorization import OpenFgaOrganizationAuthority
 from app.contexts.access.contracts import AccessDeniedError, AccessUnavailableError
-from app.contexts.links.contracts import LinkConflictError, LinkNotFoundError
+from app.contexts.links.contracts import (
+    LinkConflictError,
+    LinkNotFoundError,
+    StatisticsUnavailableError,
+)
 from app.contexts.links.domain.link import IdempotencyConflictError, LinkDisabledError
 from app.interfaces.api.links import router as api_router
 from app.interfaces.browser import router as browser_router
@@ -23,7 +27,7 @@ from app.interfaces.middleware.request_id import RequestIDMiddleware
 from app.interfaces.middleware.security_headers import SecurityHeadersMiddleware
 from app.interfaces.public import router as public_router
 from app.platform.access import AccessRuntime
-from app.platform.composition import build_buses
+from app.platform.composition import Container
 from app.platform.database import PostgresDatabase, PostgresUowFactory
 from app.platform.logging import get_logger, setup_logging
 from app.platform.persistence.schema import SchemaAuthority
@@ -50,6 +54,8 @@ async def error_response(request: Request, exc: Exception) -> JSONResponse:
         status, code = 403, "access_denied"
     elif isinstance(exc, AccessUnavailableError):
         status, code = 503, "authority_unavailable"
+    elif isinstance(exc, StatisticsUnavailableError):
+        status, code = 503, "statistics_unavailable"
     elif isinstance(exc, LinkNotFoundError):
         status, code = 404, "link_not_found"
     elif isinstance(exc, LinkDisabledError):
@@ -128,7 +134,7 @@ def create_app(
                     config.openfga_model_id.get_secret_value(),
                 )
                 cleanup.push_async_callback(application.state.authority.close)
-                application.state.commands, application.state.queries = build_buses(
+                application.state.commands, application.state.queries = Container.buses(
                     application.state.database,
                     PostgresUowFactory(application.state.database),
                     application.state.authority,
@@ -157,7 +163,7 @@ def create_app(
     application.state.access = access
     application.state.identity_config = identity
     if database is not None:
-        application.state.commands, application.state.queries = build_buses(
+        application.state.commands, application.state.queries = Container.buses(
             database, uow_factory, authority
         )
     for kind in (
@@ -165,6 +171,7 @@ def create_app(
         RequestValidationError,
         AccessDeniedError,
         AccessUnavailableError,
+        StatisticsUnavailableError,
         LinkNotFoundError,
         LinkDisabledError,
         LinkConflictError,

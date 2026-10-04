@@ -16,7 +16,7 @@ from app.contexts.links.contracts import (
     UpdateLinkCommand,
 )
 from app.contexts.links.domain.link import IdempotencyConflictError, LinkNotFoundError, LinkPatch
-from app.platform.composition import build_buses
+from app.platform.composition import Container
 from app.platform.database import PostgresDatabase, PostgresUowFactory
 from tests.integration.test_postgres_links import _bind_organization, _cleanup, _ready_emails
 from tests.integration.test_postgres_links import postgres_urls as postgres_urls
@@ -36,7 +36,7 @@ async def test_same_key_concurrency_produces_one_pool_and_original_result(postgr
     )
     try:
         await _bind_organization(postgres_urls.owner, issuer, org)
-        bus, _ = build_buses(database, PostgresUowFactory(database), FixtureAuthority())
+        bus, _ = Container.buses(database, PostgresUowFactory(database), FixtureAuthority())
         command = ReservePoolCommand(actor, 3, "Launch")
         first, second = await asyncio.wait_for(
             asyncio.gather(
@@ -83,7 +83,7 @@ async def test_pool_management_and_bulk_delete_are_tenant_scoped_and_durable(pos
     try:
         for id in (org, foreign):
             await _bind_organization(postgres_urls.owner, issuer, id)
-        bus, _ = build_buses(database, PostgresUowFactory(database), FixtureAuthority())
+        bus, _ = Container.buses(database, PostgresUowFactory(database), FixtureAuthority())
         pool = (
             await bus.dispatch(ReservePoolCommand(actor, 100, "Launch"), context=context("reserve"))
         ).value

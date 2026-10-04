@@ -14,18 +14,18 @@
 <body class="flex min-h-screen flex-col bg-base-200 text-base-content">
   <a class="absolute -top-24 left-6 z-10 bg-base-100 p-3 focus:top-3" href="#main">Skip to content</a>
   <header class="border-b border-base-300 bg-base-100">
-    <div class="shell flex flex-wrap items-center justify-between gap-4 py-3 sm:flex-nowrap sm:gap-8">
+    <div class="shell flex items-center justify-between gap-4 py-3 sm:gap-8">
       {% block brand %}
       <a class="brand" href="/dashboard/links" aria-label="Plazia Links home">
         <img src="/static/brand/links-color.svg" alt="Plazia Links" width="179" height="98">
       </a>
       {% endblock %}
       {% if session %}
-      <div class="flex min-w-[100px] flex-col items-end gap-2 text-right sm:flex-row sm:items-center sm:gap-6">
+      <div class="flex min-w-0 flex-1 flex-col items-end gap-2 text-right sm:flex-row sm:items-center sm:justify-end sm:gap-6">
         {% if organization_name %}
-        <span class="text-xs break-words text-muted sm:text-sm">{{ organization_name }}</span>
+        <span class="min-w-0 text-xs [overflow-wrap:anywhere] text-muted sm:text-sm">{{ organization_name }}</span>
         {% endif %}
-        <form hx-disabled-elt="find button" method="post" action="/logout">
+        <form class="shrink-0" hx-disabled-elt="find button" method="post" action="/logout">
           <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
           <button class="btn btn-ghost border border-base-300 hover:border-primary/20 hover:bg-primary/10 hover:text-primary" type="submit">Sign out</button>
         </form>

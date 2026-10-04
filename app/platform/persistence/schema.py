@@ -67,7 +67,16 @@ _RLS_TABLES: Final = frozenset(
         "platform.command_receipts",
     }
 )
+_STATISTICS_TABLES: Final = frozenset({"links.statistics", "links.statistics_coverage"})
 _DELETION_FKS: Final = {
+    "fk_statistics_link_organization": (
+        "links.statistics",
+        "links.links",
+        ("organization_id", "link_id"),
+        ("organization_id", "id"),
+        "c",
+        True,
+    ),
     "fk_links_pool_organization": (
         "links.links",
         "links.pools",
@@ -223,6 +232,7 @@ class SchemaAuthority:
         if not history or history != expected:
             raise SchemaError("Links Flyway history is missing or incompatible")
         revision = str(history[-1][0])
+        statistics = int(revision) >= 3
         schemas = self._owned_schemas(connection)
         if schemas != frozenset((*_OWNED_SCHEMAS, _MIGRATION_SCHEMA)):
             raise SchemaError("Links PostgreSQL schemas are incomplete")
@@ -239,7 +249,7 @@ class SchemaAuthority:
                 ([*_OWNED_SCHEMAS, _MIGRATION_SCHEMA],),
             ).fetchall()
         )
-        if tables != _EXPECTED_TABLES:
+        if tables != (_EXPECTED_TABLES | _STATISTICS_TABLES if statistics else _EXPECTED_TABLES):
             raise SchemaError("Links table catalog differs from the packaged migrations")
 
         rls = frozenset(
@@ -254,7 +264,7 @@ class SchemaAuthority:
                 ([*_OWNED_SCHEMAS],),
             ).fetchall()
         )
-        if rls != _RLS_TABLES:
+        if rls != (_RLS_TABLES | {"links.statistics"} if statistics else _RLS_TABLES):
             raise SchemaError("Links row-level security differs from the packaged migrations")
 
         functions = {
@@ -266,12 +276,23 @@ class SchemaAuthority:
                 (list(_OWNED_SCHEMAS),),
             ).fetchall()
         }
-        if functions != _FUNCTION_SECURITY:
+        expected_functions = {
+            key: value
+            for key, value in _FUNCTION_SECURITY.items()
+            if statistics or key != ("links", "record_visit")
+        }
+        if functions != expected_functions:
             raise SchemaError("Links security functions differ from the packaged migration")
         owner_drift = connection.execute(
             """SELECT EXISTS (
                 SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n
-                ON n.oid=c.relnamespace WHERE n.nspname=ANY(%s) AND c.relowner <> n.nspowner
+                ON n.oid=c.relnamespace WHERE n.nspname=ANY(%s) AND (
+                    c.relowner <> n.nspowner OR EXISTS (
+                        SELECT 1 FROM pg_catalog.aclexplode(c.relacl) a WHERE a.grantee=0
+                    ) OR EXISTS (
+                        SELECT 1 FROM pg_catalog.pg_attribute t,
+                            LATERAL pg_catalog.aclexplode(t.attacl) a
+                        WHERE t.attrelid=c.oid AND a.grantee=0))
             ) OR EXISTS (
                 SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n
                 ON n.oid=p.pronamespace WHERE n.nspname=ANY(%s) AND p.proowner <> n.nspowner
@@ -284,7 +305,9 @@ class SchemaAuthority:
             (list(_OWNED_SCHEMAS), list(_OWNED_SCHEMAS), list(_OWNED_SCHEMAS)),
         ).fetchone()
         if owner_drift is None or owner_drift[0]:
-            raise SchemaError("Links object ownership differs from schema authority")
+            raise SchemaError(
+                "Links object ownership or public grants differ from schema authority"
+            )
         policies = {
             (row[0], row[1]): (row[2], row[3], tuple(row[4]), row[5], row[6])
             for row in connection.execute(
@@ -300,47 +323,56 @@ class SchemaAuthority:
                 (list(_OWNED_SCHEMAS),),
             ).fetchall()
         }
-        if policies != self._policies(worker):
+        if policies != self._policies(worker, statistics=statistics):
             raise SchemaError("Links tenant policies differ from the packaged migration")
         private_access = connection.execute(
             """SELECT bool_or(CASE
                 WHEN n.nspname='links' AND c.relname='subscriptions'
-                    THEN has_any_column_privilege(%s,c.oid,'SELECT')
+                    THEN has_any_column_privilege(%(app)s,c.oid,'INSERT,UPDATE')
+                        OR has_table_privilege(%(app)s,c.oid,'DELETE')
+                        OR has_any_column_privilege(%(worker)s,c.oid,'INSERT,UPDATE')
+                        OR EXISTS (
+                        SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid=c.oid
+                        AND a.attnum>0 AND NOT a.attisdropped
+                        AND (%(revision)s < 4 OR a.attname NOT IN ('organization_id','link_id'))
+                        AND has_column_privilege(%(app)s,c.oid,a.attnum,'SELECT'))
                 WHEN n.nspname='platform' AND c.relname='activation_emails'
-                    THEN has_any_column_privilege(%s,c.oid,'SELECT')
+                    THEN has_any_column_privilege(%(app)s,c.oid,'SELECT')
                 WHEN n.nspname='access' AND c.relname='organizations'
-                    THEN has_table_privilege(%s,c.oid,'INSERT,UPDATE,DELETE')
+                    THEN has_any_column_privilege(%(app)s,c.oid,'INSERT,UPDATE')
+                        OR has_table_privilege(%(app)s,c.oid,'DELETE')
                 WHEN n.nspname='links' AND c.relname='links'
-                    THEN has_table_privilege(%s,c.oid,'INSERT,UPDATE,DELETE')
+                    THEN has_any_column_privilege(%(worker)s,c.oid,'INSERT,UPDATE')
+                        OR has_table_privilege(%(worker)s,c.oid,'DELETE')
+                WHEN n.nspname='links' AND c.relname IN ('statistics','statistics_coverage')
+                    THEN has_any_column_privilege(%(app)s,c.oid,'INSERT,UPDATE')
+                        OR has_table_privilege(%(app)s,c.oid,'DELETE')
                 ELSE false END
-                OR (%s AND n.nspname='links' AND c.relname='pools'
-                    AND has_table_privilege(%s,c.oid,'UPDATE,DELETE'))
-                OR (n.nspname||'.'||c.relname = ANY(%s) AND (
-                    has_any_column_privilege(%s,c.oid,'SELECT,INSERT,UPDATE')
-                    OR has_table_privilege(%s,c.oid,'DELETE')))
-                OR has_table_privilege(%s,c.oid,'TRUNCATE,REFERENCES,TRIGGER')
-                OR has_table_privilege(%s,c.oid,'TRUNCATE,REFERENCES,TRIGGER')) AS private_access
+                OR (%(revision)s = 1 AND n.nspname='links' AND c.relname='pools' AND (
+                    has_any_column_privilege(%(app)s,c.oid,'UPDATE')
+                    OR has_table_privilege(%(app)s,c.oid,'DELETE')))
+                OR (n.nspname||'.'||c.relname = ANY(%(worker_private)s) AND (
+                    has_any_column_privilege(%(worker)s,c.oid,'SELECT,INSERT,UPDATE')
+                    OR has_table_privilege(%(worker)s,c.oid,'DELETE')))
+                OR has_table_privilege(%(app)s,c.oid,'TRUNCATE,REFERENCES,TRIGGER')
+                OR has_table_privilege(%(worker)s,c.oid,'TRUNCATE,REFERENCES,TRIGGER'))
+                AS private_access
             FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-            WHERE n.nspname=ANY(%s) AND c.relkind IN ('r','p')""",
-            (
-                app,
-                app,
-                app,
-                worker,
-                revision == "1",
-                app,
-                [
+            WHERE n.nspname=ANY(%(schemas)s) AND c.relkind IN ('r','p')""",
+            {
+                "app": app,
+                "worker": worker,
+                "revision": int(revision),
+                "worker_private": [
                     "access.organizations",
                     "links.pools",
                     "platform.audit_events",
                     "platform.command_receipts",
+                    "links.statistics",
+                    "links.statistics_coverage",
                 ],
-                worker,
-                worker,
-                app,
-                worker,
-                [*_OWNED_SCHEMAS, _MIGRATION_SCHEMA],
-            ),
+                "schemas": [*_OWNED_SCHEMAS, _MIGRATION_SCHEMA],
+            },
         ).fetchone()
         if private_access is None or private_access[0]:
             raise SchemaError("Links runtime grants violate role separation")
@@ -352,6 +384,21 @@ class SchemaAuthority:
             ).fetchone()
             if grants is None or not grants[0]:
                 raise SchemaError("Links pool management differs from the packaged migrations")
+        if statistics:
+            grants = connection.execute(
+                """SELECT has_table_privilege(%s,'links.statistics','SELECT')
+                    AND has_table_privilege(%s,'links.statistics_coverage','SELECT')
+                    AND has_function_privilege(%s,'links.record_visit(uuid,text,text)','EXECUTE')
+                    AND NOT has_function_privilege(
+                        %s,'links.record_visit(uuid,text,text)','EXECUTE')
+                    AND (%s OR (
+                        has_column_privilege(%s,'links.subscriptions','organization_id','SELECT')
+                        AND has_column_privilege(%s,'links.subscriptions','link_id','SELECT')))
+                    AS statistics_ready""",
+                (app, app, app, worker, int(revision) < 4, app, app),
+            ).fetchone()
+            if grants is None or not grants[0]:
+                raise SchemaError("Links statistics grants are invalid")
         deletion = {
             row[0]: (row[1], row[2], tuple(row[3]), tuple(row[4]), row[5], row[6])
             for row in connection.execute(
@@ -379,6 +426,7 @@ class SchemaAuthority:
                 True,
             )
             for name, value in _DELETION_FKS.items()
+            if statistics or name != "fk_statistics_link_organization"
         }
         if deletion != expected_deletion:
             raise SchemaError("Links deletion constraints differ from the packaged migrations")
@@ -425,7 +473,7 @@ class SchemaAuthority:
         return frozenset(row[0] for row in names)
 
     @staticmethod
-    def _policies(worker: str) -> dict[tuple[str, str], tuple[object, ...]]:
+    def _policies(worker: str, *, statistics: bool) -> dict[tuple[str, str], tuple[object, ...]]:
         tenant = "(organization_id = platform.current_organization_id())"
         values: dict[tuple[str, str], tuple[object, ...]] = {
             (table, name): ("*", True, ("public",), tenant, tenant)
@@ -438,6 +486,14 @@ class SchemaAuthority:
                 ("platform.command_receipts", "command_receipts_tenant_scope"),
             )
         }
+        if statistics:
+            values["links.statistics", "statistics_tenant_scope"] = (
+                "*",
+                True,
+                ("public",),
+                tenant,
+                tenant,
+            )
         role = (worker,)
         values.update(
             {

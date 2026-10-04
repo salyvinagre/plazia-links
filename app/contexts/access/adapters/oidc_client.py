@@ -3,9 +3,10 @@
 from dataclasses import replace
 from urllib.parse import urlencode
 
-from plazia_authlib.authn.client import PlaziaIdentity
+from plazia_authlib.authn.client import IdentityTokenClient
 from plazia_authlib.authn.errors import IdentityApiError, IdentityTransportError
 from plazia_authlib.authn.oauth import OAuthAuthorizationArtifacts
+from plazia_authlib.authn.transport import IdentityHttpTransport
 from pydantic import ValidationError
 from shared_http import HttpRequest, HttpResponse
 from shared_http.httpx import HttpxClient
@@ -47,8 +48,10 @@ class OidcCodeClient:
     async def redeem(self, code: str, verifier: str) -> TokenPairDto:
         try:
             async with HttpxClient(follow_redirects=False) as http:
-                identity = PlaziaIdentity(base_url=self._issuer, http_client=http, timeout=5)
-                tokens = await identity.tokens.authorization_code(
+                identity = IdentityTokenClient(
+                    IdentityHttpTransport(base_url=self._issuer, client=http, timeout=5)
+                )
+                tokens = await identity.authorization_code(
                     client_id=self._client_id,
                     client_secret=self._client_secret,
                     code=code,

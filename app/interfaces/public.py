@@ -1,5 +1,6 @@
 """Anonymous waiting page and public redirects use the same link identity."""
 
+import asyncio
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -9,10 +10,17 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from shared_kernel.contacts import NormalizedEmail
 
-from app.contexts.links.contracts import Destination, ResolveLinkQuery, SubscribeLinkCommand
+from app.contexts.links.contracts import (
+    VISIT_FAILURE,
+    Destination,
+    RecordVisitCommand,
+    ResolveLinkQuery,
+    SubscribeLinkCommand,
+)
 from app.interfaces.api.schemas.links import SubscriptionForm
 from app.interfaces.authentication import runtime
 from app.interfaces.dispatch import commands, queries, request_context
+from app.platform.logging import get_logger
 
 router = APIRouter(include_in_schema=False)
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
@@ -31,17 +39,38 @@ async def resolve(short_code: str, request: Request) -> Response:
     )
     if not link.is_active:
         raise HTTPException(410, "link_disabled")
-    if link.destination_url is None:
-        return templates.TemplateResponse(
+    if link.destination_url is not None:
+        Destination(link.destination_url)
+    response = (
+        templates.TemplateResponse(
             request,
             "public/waiting.html",
             {"short_code": short_code, "result": None, "error": None},
             headers={"Cache-Control": "no-store"},
         )
-    Destination(link.destination_url)
-    return RedirectResponse(
-        link.destination_url, status_code=307, headers={"Cache-Control": "no-store"}
+        if link.destination_url is None
+        else RedirectResponse(
+            link.destination_url, status_code=307, headers={"Cache-Control": "no-store"}
+        )
     )
+    try:
+        async with asyncio.timeout(0.25):
+            await commands(request).dispatch(
+                RecordVisitCommand(
+                    link.id,
+                    short_code,
+                    "waiting" if link.destination_url is None else "redirect",
+                ),
+                context=request_context(request),
+            )
+    except Exception as error:
+        get_logger(__name__).warning(
+            "Visit recording failed", extra={"error_type": type(error).__name__}
+        )
+        telemetry = getattr(request.app.state, "telemetry", None)
+        if telemetry is not None:
+            telemetry.metrics.emit(VISIT_FAILURE, value=1)
+    return response
 
 
 @router.post("/{short_code}/subscriptions")

@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 
+from app.contexts.links.application.dto.statistics import StatisticsDto
 from app.kernel.ids import LinkId, PoolId
 
 
@@ -30,6 +31,41 @@ class PoolDto:
     name: str | None
     size: int
     created_at: datetime
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LinkReadDto(LinkDto):
+    statistics: StatisticsDto
+
+    @classmethod
+    def from_application(cls, link: LinkDto, statistics: StatisticsDto) -> Self:
+        return cls(
+            id=link.id,
+            short_code=link.short_code,
+            destination_url=link.destination_url,
+            title=link.title,
+            notes=link.notes,
+            is_active=link.is_active,
+            created_at=link.created_at,
+            updated_at=link.updated_at,
+            pool_id=link.pool_id,
+            statistics=statistics,
+        )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PoolReadDto(PoolDto):
+    statistics: StatisticsDto
+
+    @classmethod
+    def from_application(cls, pool: PoolDto, statistics: StatisticsDto) -> Self:
+        return cls(
+            id=pool.id,
+            name=pool.name,
+            size=pool.size,
+            created_at=pool.created_at,
+            statistics=statistics,
+        )
 
 
 @dataclass(frozen=True, slots=True)

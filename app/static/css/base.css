@@ -9,7 +9,7 @@
 @layer base {
   body {
     font-synthesis: none;
-    line-height: 1.6;
+    line-height: 1.5;
   }
 
   a {
@@ -54,6 +54,12 @@
     font-weight: 400;
   }
 
+  .hint {
+    margin: .5rem 0 0;
+    color: var(--color-muted);
+    font-size: .75rem;
+  }
+
   :focus-visible {
     outline: 3px solid var(--color-primary);
     outline-offset: 3px;
@@ -81,7 +87,7 @@
   }
 
   .brand img {
-    width: 179px;
+    width: clamp(140px, 24vw, 179px);
     height: auto;
   }
 
@@ -92,12 +98,6 @@
     font-weight: 600;
     letter-spacing: .1em;
     text-transform: uppercase;
-  }
-
-  .hint {
-    margin: .5rem 0 0;
-    color: var(--color-muted);
-    font-size: .8125rem;
   }
 
   .htmx-request {

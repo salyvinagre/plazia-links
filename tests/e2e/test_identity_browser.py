@@ -146,9 +146,14 @@ def test_reserve_subscribe_activate_and_delivery(live_application):
     visitor.get_by_label("Email address").fill("subscriber@example.com")
     visitor.get_by_role("button", name="Notify me").click()
     expect(visitor.get_by_role("heading", name="You’re on the list")).to_be_visible()
-    rows.first.locator("summary").click()
+    rows.first.locator("summary[aria-label]").click()
     link.click()
     page.get_by_label("Destination URL").fill("https://example.com/ready")
+    for width in (320, 390, 768):
+        page.set_viewport_size({"width": width, "height": 844})
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        page.screenshot(path=str(screenshot / f"activation-{mode}-{width}.png"), full_page=True)
+    page.set_viewport_size({"width": 1280, "height": 900})
     page.get_by_role("button", name="Save changes").click()
     expect(page.get_by_role("heading", name="Links", exact=True)).to_be_visible()
     assert (
@@ -188,10 +193,28 @@ def test_reserve_subscribe_activate_and_delivery(live_application):
         ]
         for message in matching
     )
-    page.set_viewport_size({"width": 390, "height": 844})
-    page.goto(base + "/dashboard/links")
-    page.screenshot(path=str(screenshot / f"pool-{mode}-mobile.png"), full_page=True)
-    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    for width in (320, 390, 768):
+        page.set_viewport_size({"width": width, "height": 844})
+        page.goto(base + "/dashboard/links")
+        visited = page.get_by_role("row").filter(
+            has=page.get_by_role("link", name="/" + code, exact=True)
+        )
+        counts = visited.locator("dl")
+        expect(counts).not_to_be_visible()
+        visited.locator("summary").first.click()
+        visited.get_by_text("Statistics", exact=True).click()
+        expect(counts).to_be_visible()
+        assert counts.locator("dd").all_text_contents()[:3] == ["1", "1", "1"]
+        page.keyboard.press("Escape")
+        assert (
+            visited.locator("[data-status]:visible").bounding_box()["y"]
+            < (visited.get_by_role("link", name="/" + code, exact=True).bounding_box()["y"])
+        )
+        page.screenshot(path=str(screenshot / f"pool-{mode}-{width}.png"), full_page=True)
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        for name in ("Sign out", "Reserve links"):
+            bounds = page.get_by_role("button", name=name, exact=True).bounding_box()
+            assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= width
     assert visitor.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     assert context.request.get(base + "/api/v1/links").status == 401
     page.get_by_role("button", name="Sign out").click()

@@ -36,6 +36,13 @@ def test_context_core_contains_no_framework_or_storage_imports():
                     ), path
                     for name in names:
                         parts = name.split(".")
+                        if "ports" in path.parts:
+                            assert not name.startswith(
+                                (
+                                    f"app.contexts.{root.name}.application.commands.",
+                                    f"app.contexts.{root.name}.application.queries.",
+                                )
+                            ), path
                         if parts[:2] == ["app", "contexts"] and parts[2] != root.name:
                             assert parts[3:] == ["contracts"], path
 

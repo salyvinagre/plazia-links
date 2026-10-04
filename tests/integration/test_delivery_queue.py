@@ -18,8 +18,8 @@ from tests.integration.test_postgres_links import postgres_urls as postgres_urls
 @pytest.mark.slow
 async def test_claims_recovery_bounded_retries_and_runtime_roles(postgres_urls):
     urls = postgres_urls
-    assert SchemaAuthority(urls.app).check(runtime="app").revision == "2"
-    assert SchemaAuthority(urls.worker).check(runtime="worker").revision == "2"
+    assert SchemaAuthority(urls.app).check(runtime="app").revision == "4"
+    assert SchemaAuthority(urls.worker).check(runtime="worker").revision == "4"
     with pytest.raises(SchemaError, match="dedicated role"):
         SchemaAuthority(urls.owner).check(runtime="app")
     org = OrganizationId.new()

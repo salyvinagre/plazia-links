@@ -8,8 +8,18 @@
   </svg>
 </summary>
 {% endmacro %}
+{% macro statistics_item(value) %}
+<li><details>
+  <summary class="min-h-11 content-center justify-between hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary">Statistics</summary>
+  <dl class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-3 pb-3 text-sm whitespace-normal">
+    <dt class="text-muted">Redirects</dt><dd class="text-right">{{ value.redirects }}</dd>
+    <dt class="text-muted">Subscribers</dt><dd class="text-right">{{ value.subscribers }}</dd>
+    <dt class="text-muted">Waiting views</dt><dd class="text-right">{{ value.waiting_views }}</dd>
+    <dt class="text-muted">Last view</dt><dd class="max-w-28 text-right">{{ value.last_visited_at.strftime('%d %b %Y, %H:%M UTC') if value.last_visited_at else '—' }}</dd>
+  </dl>
+</details></li>
+{% endmacro %}
 {% macro library_actions() %}
-{% if (pool and 'links:update' in session.principal.scopes) or ('links:delete' in session.principal.scopes and (pool or links.items)) %}
 <details class="dropdown dropdown-end shrink-0" name="resource-actions" data-library-actions>
   {{ action_trigger('Pool actions' if pool else 'Link actions') }}
   {% if pool and 'links:delete' in session.principal.scopes %}
@@ -19,22 +29,22 @@
     <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
   </form>
   {% endif %}
-  <ul class="dropdown-content menu menu-md z-20 w-48 rounded-box border border-base-300 bg-base-100 shadow-lg">
+  <ul class="dropdown-content menu menu-md z-20 w-64 rounded-box border border-base-300 bg-base-100 shadow-lg">
     {% if pool and 'links:update' in session.principal.scopes %}
-    <li><button class="min-h-11" type="button" aria-controls="rename-pool-panel" data-rename-pool>Rename pool</button></li>
+    <li><button class="min-h-11 content-center justify-between hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary" type="button" aria-controls="rename-pool-panel" data-rename-pool>Rename pool</button></li>
     {% endif %}
     {% if links.items and 'links:delete' in session.principal.scopes %}
-    <li><button class="min-h-11" type="button" aria-controls="delete-selection" data-select-links>Delete links</button></li>
+    <li><button class="min-h-11 content-center justify-between hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary" type="button" aria-controls="delete-selection" data-select-links>Delete links</button></li>
     {% endif %}
+    {{ statistics_item(statistics) }}
     {% if pool and 'links:delete' in session.principal.scopes %}
     <li class="mt-1 border-t border-base-300 pt-1">
-      <button class="min-h-11 text-danger hover:bg-danger/10 focus:bg-danger/10" type="submit"
+      <button class="min-h-11 content-center justify-between text-danger hover:bg-danger/10 focus:bg-danger/10" type="submit"
               id="delete-pool-action" form="delete-pool-form">Delete pool</button>
     </li>
     {% endif %}
   </ul>
 </details>
-{% endif %}
 {% endmacro %}
 {% block content %}
 <div class="mb-6 flex flex-col items-start justify-between gap-5 sm:mb-8 sm:flex-row sm:items-center sm:gap-6">
@@ -88,7 +98,7 @@
     {% for pool in pools.items %}
     <a class="tab h-auto min-h-11 max-w-full gap-2 whitespace-normal{% if pool_id == pool.id|string %} tab-active{% endif %}"
        href="?pool_id={{ pool.id }}{% if pools.page > 1 %}&amp;pool_page={{ pools.page }}{% endif %}" {% if pool_id == pool.id|string %}aria-current="page"{% endif %}>
-      <span class="min-w-0 [overflow-wrap:anywhere]">{{ pool.name or 'Untitled pool' }}</span><span class="text-xs">{{ pool.size }}</span>
+      <span class="min-w-0 line-clamp-2 [overflow-wrap:anywhere] lg:line-clamp-none" title="{{ pool.name or 'Untitled pool' }}">{{ pool.name or 'Untitled pool' }}</span><span class="text-xs">{{ pool.size }}</span>
     </a>
     {% endfor %}
   </nav>
@@ -107,7 +117,7 @@
   <section class="card mb-5 gap-4 border border-base-300 bg-base-100 p-5 sm:p-6" aria-labelledby="pool-heading">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <h3 id="pool-heading" class="break-words">{{ pool.name or 'Untitled pool' }}</h3>
+        <h3 id="pool-heading" class="break-words font-semibold">{{ pool.name or 'Untitled pool' }}</h3>
         <p class="mb-0 text-sm text-muted">{{ pool.size }} link{{ '' if pool.size == 1 else 's' }} in this pool</p>
       </div>
       {{ library_actions() }}
@@ -172,17 +182,17 @@
                      aria-label="Select {{ link.short_code }}">
               {% endif %}
               <div class="min-w-0">
-                <strong class="mb-1 block">{{ link.title or link.short_code }}</strong>
-                <a class="text-[13px] underline" href="{{ public_base }}/{{ link.short_code }}"
+                {% if link.title %}<span class="mb-1 line-clamp-2 text-sm text-muted lg:line-clamp-none" title="{{ link.title }}">{{ link.title }}</span>{% endif %}
+                <a class="underline text-base font-semibold lg:text-sm" href="{{ public_base }}/{{ link.short_code }}"
                    target="_blank" rel="noopener noreferrer">/{{ link.short_code }}</a>
               </div>
             </div>
           </td>
-          <td class="text-muted" role="cell" data-label="Destination">
-            {{ link.destination_url or 'Awaiting destination' }}
+          <td class="text-muted{% if not link.destination_url %} hidden lg:table-cell{% endif %}" role="cell" data-label="Destination">
+            <span class="line-clamp-2 lg:line-clamp-none" title="{{ link.destination_url or 'Awaiting destination' }}">{{ link.destination_url or 'Awaiting destination' }}</span>
           </td>
-          <td role="cell" data-label="Status">
-            <span class="badge badge-ghost h-7 gap-1.5 rounded-full border border-base-300 bg-base-200 px-2.5 text-xs"
+          <td class="self-center" role="cell" data-label="Status">
+            <span class="badge badge-ghost badge-sm gap-1.5 rounded-full border border-base-300 bg-base-200 px-2.5"
                   data-status="{{ link.status }}">
               <svg class="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none"
                    stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -198,7 +208,6 @@
             </span>
           </td>
           <td role="cell" data-label="Actions">
-            {% if 'links:update' in session.principal.scopes or 'links:delete' in session.principal.scopes %}
             <div class="flex justify-end">
               <details class="dropdown dropdown-end{% if loop.last and not loop.first %} dropdown-top{% endif %}" name="resource-actions">
                 {{ action_trigger('Actions for ' ~ (link.title or link.short_code)) }}
@@ -209,7 +218,7 @@
                   <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
                 </form>
                 {% endif %}
-                <ul class="dropdown-content menu menu-md z-20 w-44 rounded-box border border-base-300 bg-base-100 shadow-lg">
+                <ul class="dropdown-content menu menu-md z-20 w-64 rounded-box border border-base-300 bg-base-100 shadow-lg">
                   {% if 'links:update' in session.principal.scopes %}
                   <li>
                     <a class="min-h-11 content-center justify-between hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary"
@@ -226,6 +235,7 @@
                     </a>
                   </li>
                   {% endif %}
+                  {{ statistics_item(link.statistics) }}
                   {% if 'links:delete' in session.principal.scopes %}
                   <li class="{% if 'links:update' in session.principal.scopes %}mt-1 border-t border-base-300 pt-1{% endif %}">
                     <button class="min-h-11 content-center justify-between text-danger hover:bg-danger/10 hover:text-danger focus:bg-danger/10 focus:text-danger"
@@ -241,7 +251,6 @@
                 </ul>
               </details>
             </div>
-            {% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -254,7 +263,7 @@
     <p class="text-muted">Reserve a pool or create a link to get started.</p>
   </div>
   {% endif %}
-  <nav class="flex items-center justify-center gap-6 pt-6 text-[13px] text-muted" aria-label="Pagination">
+  <nav class="flex items-center justify-center gap-6 pt-6 text-sm text-muted" aria-label="Pagination">
     {% if links.page > 1 %}
     <a class="inline-flex min-h-11 items-center" href="?page={{ links.page - 1 }}{% if pool_id %}&amp;pool_id={{ pool_id }}{% endif %}{% if pools.page > 1 %}&amp;pool_page={{ pools.page }}{% endif %}">Previous</a>
     {% endif %}

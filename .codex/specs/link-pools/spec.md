@@ -13,6 +13,7 @@ The user authorized implementation and testing, organization-level ownership, a 
 - LINKS-6: Administrators use browser forms with CSRF, and operators control active organization bindings.
 - LINKS-7: An authorized organization can rename a pool or delete it with all its links, subscriptions and queued notifications. Other pools remain intact.
 - LINKS-8: Users inspect a pool, select several links or the current page, and delete the explicit selection atomically. Empty, duplicate, oversized, stale, foreign and wrong-pool selections fail without partial deletion. The pool filter remains selected after success.
+- LINKS-9: Successful public GET resolution records redirects or waiting-page views in Links-owned aggregates. Authorized organization reads expose per-link, whole-pool and whole-organization retained totals, current subscriber counts, the last recorded request, collection start and read time. Capture is bounded and fail-open; counts include repeats and bots and do not identify visitors or subscribers. Reads never record visits. Delete cascades remove aggregates, and command replay responses stay unchanged. The dashboard presents figures on demand in aligned Statistics menu rows.
 
 ## Acceptance
 Gherkin in tests/acceptance/features/link_pools.feature binds pool/subscription/activation behavior. Additional fast API/security tests and real PG18/Redis/OpenFGA/SMTP/Chromium tests verify concurrency, RLS, commit-before-response, worker recovery and responsive forms.

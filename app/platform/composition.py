@@ -45,6 +45,8 @@ from app.contexts.links.application.commands.delete_links.command import DeleteL
 from app.contexts.links.application.commands.delete_links.handler import DeleteLinksHandler
 from app.contexts.links.application.commands.delete_pool.command import DeletePoolCommand
 from app.contexts.links.application.commands.delete_pool.handler import DeletePoolHandler
+from app.contexts.links.application.commands.record_visit.command import RecordVisitCommand
+from app.contexts.links.application.commands.record_visit.handler import RecordVisitHandler
 from app.contexts.links.application.commands.rename_pool.command import RenamePoolCommand
 from app.contexts.links.application.commands.rename_pool.handler import RenamePoolHandler
 from app.contexts.links.application.commands.reserve_pool.command import ReservePoolCommand
@@ -58,6 +60,8 @@ from app.contexts.links.application.queries.get_link.handler import GetLinkHandl
 from app.contexts.links.application.queries.get_link.query import GetLinkQuery
 from app.contexts.links.application.queries.get_pool.handler import GetPoolHandler
 from app.contexts.links.application.queries.get_pool.query import GetPoolQuery
+from app.contexts.links.application.queries.get_statistics.handler import GetStatisticsHandler
+from app.contexts.links.application.queries.get_statistics.query import GetStatisticsQuery
 from app.contexts.links.application.queries.list_links.handler import ListLinksHandler
 from app.contexts.links.application.queries.list_links.query import ListLinksQuery
 from app.contexts.links.application.queries.list_pools.handler import ListPoolsHandler
@@ -68,26 +72,6 @@ from app.platform.database import PostgresDatabase, PostgresUowFactory, Scope
 from app.platform.settings import OwnerSettings
 
 
-@asynccontextmanager
-async def operator_commands() -> AsyncIterator[InProcessCommandBus[Any]]:
-    """Owner-only dispatch and resource lifetime; never part of API composition."""
-    database = PostgresDatabase(OwnerSettings().database_url.get_secret_value(), pooled=False)
-    try:
-        yield InProcessCommandBus(
-            handlers={
-                BindOrganizationCommand: lambda uow: BindOrganizationHandler(
-                    uow.scope.organizations
-                ),
-                DisableOrganizationCommand: lambda uow: DisableOrganizationHandler(
-                    uow.scope.organizations
-                ),
-            },
-            unit_of_work_factory=PostgresUowFactory(database),
-        )
-    finally:
-        await database.close()
-
-
 class Database(Protocol):
     def scope(
         self, organization_id: OrganizationId | None = None, *, readonly: bool = True
@@ -95,6 +79,7 @@ class Database(Protocol):
 
 
 COMMANDS = {
+    RecordVisitCommand: RecordVisitHandler,
     CreateLinkCommand: CreateLinkHandler,
     UpdateLinkCommand: UpdateLinkHandler,
     DeleteLinkCommand: DeleteLinkHandler,
@@ -105,6 +90,7 @@ COMMANDS = {
     SubscribeLinkCommand: SubscribeLinkHandler,
 }
 QUERIES = {
+    GetStatisticsQuery: GetStatisticsHandler,
     GetLinkQuery: GetLinkHandler,
     GetPoolQuery: GetPoolHandler,
     ListLinksQuery: ListLinksHandler,
@@ -113,6 +99,7 @@ QUERIES = {
     ResolveOrganizationQuery: ResolveOrganizationHandler,
 }
 PERMISSIONS = {
+    GetStatisticsQuery: "links:read",
     CreateLinkCommand: "links:create",
     UpdateLinkCommand: "links:update",
     DeleteLinkCommand: "links:delete",
@@ -128,16 +115,6 @@ PERMISSIONS = {
 }
 
 
-def handler(kind: type[Any], scope: Scope, telemetry: TelemetryService | None = None) -> Any:
-    if kind is ResolveOrganizationHandler:
-        return kind(scope.access)
-    if kind in {SubscribeLinkHandler, ResolveLinkHandler}:
-        return kind(scope.links)
-    if kind is UpdateLinkHandler:
-        return kind(scope.links, scope.access, telemetry)
-    return kind(scope.links, scope.access)
-
-
 @dataclass(frozen=True, slots=True)
 class ScopedQueryHandler:
     database: Database
@@ -148,7 +125,7 @@ class ScopedQueryHandler:
         async with self.database.scope(
             actor.organization_id if isinstance(actor, Principal) else None
         ) as scope:
-            return await handler(self.kind, scope).execute(query, context=context)
+            return await Container.handler(self.kind, scope).execute(query, context=context)
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,7 +155,7 @@ class ScopedCommandHandler:
         saved = await self.scope.links.replay(command.actor, action, key, fingerprint)
         if saved is not None:
             return saved
-        result = await handler(self.kind, self.scope, self.telemetry).execute(
+        result = await Container.handler(self.kind, self.scope, self.telemetry).execute(
             command, context=context
         )
         await self.scope.links.remember(command.actor, action, key, result)
@@ -190,44 +167,75 @@ class Container(containers.DeclarativeContainer):
     uow_factory: providers.Dependency[CommandUnitOfWorkFactory] = providers.Dependency()
     authority: providers.Dependency[OrganizationAuthority] = providers.Dependency()
 
+    @staticmethod
+    def handler(kind: type[Any], scope: Scope, telemetry: TelemetryService | None = None) -> Any:
+        if kind is ResolveOrganizationHandler:
+            return kind(scope.access)
+        if kind in {SubscribeLinkHandler, ResolveLinkHandler, RecordVisitHandler}:
+            return kind(scope.links)
+        if kind is UpdateLinkHandler:
+            return kind(scope.links, scope.access, telemetry)
+        return kind(scope.links, scope.access)
 
-def build_buses(
-    database: Database,
-    uow_factory: CommandUnitOfWorkFactory,
-    authority: OrganizationAuthority,
-    telemetry: TelemetryService | None = None,
-) -> tuple[InProcessCommandBus[Any], InProcessQueryBus]:
-    container = Container(database=database, uow_factory=uow_factory, authority=authority)
-
-    async def authorize(envelope: CommandEnvelope | QueryEnvelope[Any]) -> None:
-        intent = envelope.command if isinstance(envelope, CommandEnvelope) else envelope.query
-        await container.authority().require(
-            AuthorizationAttempt(
-                getattr(intent, "actor"), cast(Any, PERMISSIONS[type(intent)]), envelope.context
+    @staticmethod
+    @asynccontextmanager
+    async def operator() -> AsyncIterator[InProcessCommandBus[Any]]:
+        """Owner-only dispatch and resource lifetime; never part of API composition."""
+        database = PostgresDatabase(OwnerSettings().database_url.get_secret_value(), pooled=False)
+        try:
+            yield InProcessCommandBus(
+                handlers={
+                    BindOrganizationCommand: lambda uow: BindOrganizationHandler(
+                        uow.scope.organizations
+                    ),
+                    DisableOrganizationCommand: lambda uow: DisableOrganizationHandler(
+                        uow.scope.organizations
+                    ),
+                },
+                unit_of_work_factory=PostgresUowFactory(database),
             )
+        finally:
+            await database.close()
+
+    @classmethod
+    def buses(
+        cls,
+        database: Database,
+        uow_factory: CommandUnitOfWorkFactory,
+        authority: OrganizationAuthority,
+        telemetry: TelemetryService | None = None,
+    ) -> tuple[InProcessCommandBus[Any], InProcessQueryBus]:
+        container = cls(database=database, uow_factory=uow_factory, authority=authority)
+
+        async def authorize(envelope: CommandEnvelope | QueryEnvelope[Any]) -> None:
+            intent = envelope.command if isinstance(envelope, CommandEnvelope) else envelope.query
+            await container.authority().require(
+                AuthorizationAttempt(
+                    getattr(intent, "actor"), cast(Any, PERMISSIONS[type(intent)]), envelope.context
+                )
+            )
+
+        def command_resolver(intent: type[Any], kind: type[Any]) -> CommandHandlerResolver:
+            return lambda uow: (
+                ScopedCommandHandler(kind, cast(Scope, uow.scope), telemetry)
+                if intent in PERMISSIONS
+                else cls.handler(kind, cast(Scope, uow.scope))
+            )
+
+        command_bus: InProcessCommandBus[Any] = InProcessCommandBus(
+            handlers={intent: command_resolver(intent, kind) for intent, kind in COMMANDS.items()},
+            unit_of_work_factory=container.uow_factory(),
+            authorizers={intent: authorize for intent in COMMANDS if intent in PERMISSIONS},
         )
 
-    def command_resolver(intent: type[Any], kind: type[Any]) -> CommandHandlerResolver:
-        return lambda uow: (
-            ScopedCommandHandler(kind, cast(Scope, uow.scope), telemetry)
-            if intent in PERMISSIONS
-            else handler(kind, cast(Scope, uow.scope))
+        def query_resolver(kind: type[Any]) -> Callable[[QueryEnvelope[Any]], ScopedQueryHandler]:
+            def resolve(envelope: QueryEnvelope[Any]) -> ScopedQueryHandler:
+                return ScopedQueryHandler(container.database(), kind)
+
+            return resolve
+
+        query_bus = InProcessQueryBus(
+            handlers={intent: query_resolver(kind) for intent, kind in QUERIES.items()},
+            authorizers={intent: authorize for intent in QUERIES if intent in PERMISSIONS},
         )
-
-    command_bus: InProcessCommandBus[Any] = InProcessCommandBus(
-        handlers={intent: command_resolver(intent, kind) for intent, kind in COMMANDS.items()},
-        unit_of_work_factory=container.uow_factory(),
-        authorizers={intent: authorize for intent in COMMANDS if intent in PERMISSIONS},
-    )
-
-    def query_resolver(kind: type[Any]) -> Callable[[QueryEnvelope[Any]], ScopedQueryHandler]:
-        def resolve(envelope: QueryEnvelope[Any]) -> ScopedQueryHandler:
-            return ScopedQueryHandler(container.database(), kind)
-
-        return resolve
-
-    query_bus = InProcessQueryBus(
-        handlers={intent: query_resolver(kind) for intent, kind in QUERIES.items()},
-        authorizers={intent: authorize for intent in QUERIES if intent in PERMISSIONS},
-    )
-    return command_bus, query_bus
+        return command_bus, query_bus

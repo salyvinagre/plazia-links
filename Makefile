@@ -116,7 +116,7 @@ image:
 image-plan:
 	@$(PLAZIA_TOOLS) build links --dry-run
 image-smoke:
-	@$(CONTAINER) run --rm plazia-links:local python -c 'import os, sys; from pathlib import Path; import app, app.main, worker.run; from app.interfaces import cli; assert sys.version_info[:2] == (3, 14); assert os.getuid() == 10001; root=Path(app.__file__).parent; assert (root/"templates/public/waiting.html").is_file(); assert (root/"platform/persistence/sql/migrations/V1__link_pools.sql").is_file(); assert (root/"platform/persistence/sql/migrations/V2__pool_management.sql").is_file(); assert cli.main(["--help"]) == 0'
+	@$(CONTAINER) run --rm plazia-links:local python -c 'import os, sys; from pathlib import Path; import app, app.main, worker.run; from app.interfaces import cli; assert sys.version_info[:2] == (3, 14); assert os.getuid() == 10001; root=Path(app.__file__).parent; assert (root/"templates/public/waiting.html").is_file(); assert (root/"platform/persistence/sql/migrations/V1__link_pools.sql").is_file(); assert (root/"platform/persistence/sql/migrations/V2__pool_management.sql").is_file(); assert (root/"platform/persistence/sql/migrations/V3__request_statistics.sql").is_file(); assert (root/"platform/persistence/sql/migrations/V4__subscriber_counts.sql").is_file(); assert cli.main(["--help"]) == 0'
 env-example:
 	@$(PLAZIA_TOOLS) env example --write
 plan:

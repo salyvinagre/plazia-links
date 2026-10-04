@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 import pytest
 from psycopg import AsyncConnection
+from psycopg.errors import InsufficientPrivilege, ReadOnlySqlTransaction
 from shared_identity.canonical_ids import OrganizationId
 from shared_kernel.actor_context import ActorContext
 from shared_kernel.contacts import NormalizedEmail
@@ -66,8 +67,108 @@ def postgres_urls() -> _DatabaseUrls:
             "must point to the isolated Flyway-migrated PostgreSQL 18 database"
         )
     urls = _DatabaseUrls(app=values[0], worker=values[1], owner=values[2])  # type: ignore[arg-type]
-    assert SchemaAuthority(urls.owner).check().revision == "2"
+    assert SchemaAuthority(urls.owner).check().revision == "4"
     return urls
+
+
+@pytest.mark.slow
+async def test_statistics_are_atomic_private_readonly_and_removed_with_links(postgres_urls):
+    database = PostgresDatabase(postgres_urls.app)
+    organization, other = OrganizationId.new(), OrganizationId.new()
+    code = PublicCode.generate()
+    try:
+        await _bind_organization(postgres_urls.owner, "https://identity.example.test", organization)
+        await _bind_organization(postgres_urls.owner, "https://identity.example.test", other)
+        async with database.scope(organization, readonly=False) as scope:
+            pool = await scope.links.reserve(
+                organization, "Statistics", (code, PublicCode.generate())
+            )
+            link, unvisited = (await scope.links.list(organization, 1, 20, pool.id)).items
+            code = link.short_code
+
+        async def record():
+            async with database.scope(None, readonly=False) as scope:
+                await scope.links.record_visit(link.id, code, "waiting")
+
+        await asyncio.gather(*(record() for _ in range(24)))
+        with pytest.raises(_AbortWriteError):
+            async with database.scope(None, readonly=False) as scope:
+                await scope.links.record_visit(link.id, code, "waiting")
+                raise _AbortWriteError
+        async with database.scope(None, readonly=False) as scope:
+            await scope.links.record_visit(link.id, PublicCode.generate(), "waiting")
+            await scope.links.record_visit(link.id, code, "redirect")
+            for _ in range(2):
+                await scope.links.subscribe(link.id, NormalizedEmail("subscriber@example.test"))
+            await scope.links.subscribe(link.id, NormalizedEmail("second@example.test"))
+            await scope.links.subscribe(unvisited.id, NormalizedEmail("subscriber@example.test"))
+        async with database.scope(organization) as scope:
+            stats = await scope.links.statistics(organization, (organization, pool.id, link.id))
+            for value in stats.values():
+                assert (value.redirects, value.waiting_views) == (0, 24)
+                assert value.subscribers == (2 if value is stats[link.id] else 3)
+                assert value.tracked_from <= value.last_visited_at <= value.as_of
+            value = (await scope.links.statistics(organization, (unvisited.id,)))[unvisited.id]
+            assert (value.waiting_views, value.subscribers, value.last_visited_at) == (0, 1, None)
+        async with database.scope(other) as scope:
+            value = (await scope.links.statistics(other, (other, link.id)))[link.id]
+            assert (value.waiting_views, value.subscribers) == (0, 0)
+        with pytest.raises(ReadOnlySqlTransaction):
+            async with database.scope(None) as scope:
+                await scope.links.record_visit(link.id, code, "waiting")
+
+        async with await AsyncConnection.connect(postgres_urls.app) as connection:
+            await configure_postgres_transaction(
+                connection, organization_id=str(other), configuration=_SESSION_CONFIGURATION
+            )
+            assert (
+                await (
+                    await connection.execute(
+                        "SELECT (SELECT count(*) FROM links.statistics), "
+                        "(SELECT count(*) FROM links.subscriptions)"
+                    )
+                ).fetchone()
+            ) == (0, 0)
+        for url, statement in (
+            (postgres_urls.app, "DELETE FROM links.statistics"),
+            (postgres_urls.app, "UPDATE links.statistics SET redirects=9000"),
+            (postgres_urls.app, "SELECT email FROM links.subscriptions"),
+            (postgres_urls.worker, "SELECT * FROM links.statistics"),
+            (postgres_urls.worker, "SELECT links.record_visit(%s,%s,'waiting')"),
+        ):
+            with pytest.raises(InsufficientPrivilege):
+                async with await AsyncConnection.connect(url) as connection:
+                    await connection.execute(
+                        statement, (link.id.uuid, code) if "%s" in statement else None
+                    )
+
+        # A cancelled, row-blocked update must release the connection and not count.
+        async with await AsyncConnection.connect(postgres_urls.owner) as owner:
+            await owner.execute("SELECT * FROM links.statistics FOR UPDATE")
+            with pytest.raises(TimeoutError):
+                async with asyncio.timeout(0.25):
+                    await record()
+        await record()
+        async with database.scope(organization, readonly=False) as scope:
+            assert (await scope.links.statistics(organization, (link.id,)))[
+                link.id
+            ].waiting_views == 25
+            await scope.links.delete_pool(organization, pool.id)
+        async with database.scope(organization) as scope:
+            value = (await scope.links.statistics(organization, (organization,)))[organization]
+            assert (value.waiting_views, value.subscribers) == (0, 0)
+        async with await AsyncConnection.connect(postgres_urls.owner) as owner:
+            assert (
+                await (
+                    await owner.execute(
+                        "SELECT count(*) FROM links.statistics WHERE organization_id=%s",
+                        (organization.uuid,),
+                    )
+                ).fetchone()
+            )[0] == 0
+    finally:
+        await database.close()
+        await _cleanup(postgres_urls.owner, (organization, other))
 
 
 @pytest.mark.slow

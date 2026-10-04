@@ -219,3 +219,54 @@ solely to accommodate tests, and no aliases or alternate loaders are added.
 Against `12a8fa3`, all current app/worker code is down 106 SLOC (102 physical
 lines); the authentication consolidation remains down 206 SLOC (213 physical
 lines). This preserves its zero-or-negative source balance.
+
+### Request-statistics source justification - 2026-10-04
+
+This feature is measured against `9c789bd`, after the concurrent shared HTTP
+consumer commit. SLOC counts nonblank lines excluding full-line comments;
+Python docstrings remain counted, consistently with the earlier budgets.
+The per-file calculation is in ignored `output/statistics-sloc.json`.
+
+| Owner | Net SLOC | Need |
+| --- | ---: | --- |
+| Public adapter, recording intent/handler and failure signal | +52 | Keep public resolution pure; record through the existing command UoW with a bounded fail-open attempt and a private-free failure signal. |
+| Existing repository, read handlers, DTOs, port and published contracts | +165 | One batched SQL projection serves link, pool and organization reads, including current subscribers. Read-specific DTOs keep changing counts out of immutable command receipts. Shared field normalizers validate the new payloads. |
+| HTTP schemas/routes, dashboard query and stable error mapping | +63 | Expose and describe the typed read contract under the existing version, read capability and tenant boundary; distinguish unavailable statistics from real zeros. |
+| Composition | +11 | Register both intents and put bus, handler and operator construction on the existing Container; remove the superseded free functions and update all callers without aliases. |
+| Schema admission | +56 | Accept verified V1/V2/V3 prefixes while requiring V4 at startup; check tenant policy, narrow function, grants and deletion cascade. Permit SELECT only on subscription organization/link IDs; reject email access, unauthorized table/column writes and PUBLIC grants. |
+| Forward SQL | +51 | V3 adds a singleton collection marker and one lazily created row per visited link; atomic counters and FK cleanup, with no visitor/event store. V4 is one column-scoped grant to count existing subscriptions without exposing recipients. |
+| Dashboard template | +9 | Reuse the action menus and one shared Statistics item with aligned label/value rows. Remove default counters and explanatory text; keep one status badge, uniform short-URL typography and a quieter optional title. |
+| Mobile card styles | -3 | Reuse the existing grid with badge/actions in normal flow, full-width content and a scrollable pool strip. Remove forced card height and redundant destination labels. Header/form constraints replace existing styles. |
+| Tests | +455 | Cover scope/pagination, retained subscribers, replay stability, failures, cancellation, concurrent increments, RLS, restricted column grants, subscription/organization/link column-write and PUBLIC grant drift, port dependency direction and cascade cleanup. Extend the existing browser flow at 320/390/768px with real counts, badge ordering and button bounds. |
+| Native acceptance harness | +31 | Prove a fresh V4 installation and a populated V1-to-V4 upgrade through the existing owner/Flyway lane. |
+
+Production Python totals +347 SLOC (+388 physical lines); SQL adds 51 SLOC
+(56 physical lines), and HTML adds 9 lines. Empty package markers cost zero
+SLOC. Flyway's existing target becomes V4. The generated CSS is rebuilt from
+existing sources. The image asset probe extends its existing rule to require V4,
+at zero net SLOC. No new UI JavaScript is introduced.
+
+The subscriber addition reuses the subscription table, batch query, DTO, HTTP
+schema and admission checks: no new table, endpoint, port method or function.
+Its source cost is the normalized count, read contract, aggregate join and exact
+column-privilege verification. Delivered subscriptions count until the existing
+retention cleanup removes them. The typography correction replaces the
+conditional classes without adding source lines. Concurrent shared HTTP
+maintenance and temporary ignored preview helpers are outside this feature budget.
+
+The review adds 10 production SLOC: three close schema admission gaps, four move
+construction onto the existing Container, and three scope subscription aggregation
+to the requested links. The visit outcome vocabulary moves from the recording
+intent to the existing statistics DTO module; ports no longer depend on command
+packages. DTO factory names use `from_application` and `Self`, without compatibility
+aliases. Inlining the single-use status badge removes three template lines.
+Seven native regressions reproduced unauthorized grants before the fix. Named
+SQL parameters replace repeated positional role bindings, keeping the expanded
+checks smaller and easier to audit. The policy builder requires its revision
+selection explicitly rather than defaulting to the newest schema.
+
+The reviewed shared authlib consumer update separately adds three Python SLOC
+(three physical lines) to construct the existing token client with its explicit
+HTTP transport. All current app/worker Python changes therefore total +350 SLOC
+(+391 physical lines). This removes the superseded Identity facade at the caller
+without adding a local wrapper or alternate authorization path.

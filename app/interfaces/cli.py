@@ -16,7 +16,7 @@ from shared_identity import OrganizationId
 from shared_kernel import RequestContext
 
 from app.contexts.access.contracts import BindOrganizationCommand, DisableOrganizationCommand
-from app.platform.composition import operator_commands
+from app.platform.composition import Container
 from app.platform.persistence.schema import SchemaAuthority, SchemaError
 from app.platform.settings import OwnerSettings, PublicSettings
 
@@ -79,7 +79,7 @@ class OperatorCli:
                     if self.action == "bind-organization"
                     else DisableOrganizationCommand(identity.issuer, org)
                 )
-                async with operator_commands() as bus:
+                async with Container.operator() as bus:
                     await bus.dispatch(
                         command,
                         context=RequestContext.for_actor(

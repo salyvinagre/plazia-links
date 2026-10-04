@@ -307,3 +307,117 @@ provider-installed evidence, production rollout/restore and inbox delivery remai
 external work. No deployment, commit or push occurred. The current
 [source justification](decisions.md) separates deployment behavior from concurrent
 authlib work and formatter-only line changes.
+
+## Request statistics and responsive cards - 2026-10-04
+
+Links owns persisted request aggregates from Flyway V3. Successful public GETs
+record redirects or waiting-page views through a separate bounded command;
+resolution and management queries remain read-only. Recording failure preserves
+the prepared public response. Counts include automated and repeated requests;
+they are not unique visitors or confirmation that a destination loaded.
+
+GET `/api/v1/statistics` returns the verified organization's retained-link totals.
+Existing link and pool GET representations include statistics across all pages.
+V4 adds counts of existing retained subscriptions without exposing email: the API
+receives SELECT on organization/link IDs only, with tenant RLS and startup checks
+of subscription column access. Delivered subscriptions count until the existing cleanup removes them.
+Read-specific DTOs leave command receipts unchanged. Existing read capability,
+OpenFGA authority, tenant context, canonical IDs, normalizers, HAL pagination and
+UoW own these boundaries. Missing statistics return a stable 503 rather than
+fabricated zeros. Deletion cascades the aggregates and subscriptions.
+
+| Lane | Result | Evidence |
+| --- | --- | --- |
+| Fast regression | 211 passed before the two additional prefix cases; expanded prefix lane: 14 passed, 151 deselected | output/mobile-cards-tests.log; output/mobile-cards-schema-tests.log |
+| Native PostgreSQL and browser | 41 passed, 213 deselected; owned resources removed with empty residue | output/mobile-cards-acceptance.log |
+| Formatting and shared checks | Ruff, mypy, normalizers, Actions/help and Markdown pass; environment findings remain advisory | output/mobile-cards-final-checks.log |
+| OpenAPI | Zero errors, 139 style warnings, no exclusions | output/mobile-cards-checks.log |
+| Frontend | Pinned Tailwind/DaisyUI asset build passes | output/mobile-cards-build.log |
+| Distribution and image | Wheel/sdist and installed runtime asset probe pass, including V4 | output/mobile-cards-package.log |
+
+Native tests cover fresh V4 installation, populated V1-to-V4 preservation,
+concurrent increments, cancellation/rollback, tenant isolation, subscriber
+counting/deduplication, column-restricted access, schema tampering and cascade
+cleanup. Both runtime modes exercise subscription, activation, persisted counts
+and real SMTP capture. Management reads, replay, HEAD, disabled/missing links and
+subscription POSTs do not record visits.
+
+At 320/390/768px, the browser verifies on-demand Statistics rows, real counts,
+badge placement above the link, root width and Sign out/Reserve links button bounds.
+The current `output/playwright/pool-container-390.png` capture was visually
+inspected: active and reserved short URLs share their size/weight, the badge and
+menu sit at the top, and cards omit repeated empty destinations and inline counts.
+Statistics uses one shared label/value definition list: Redirects, Subscribers,
+Waiting views and Last view, with no collection disclaimer. Library and card
+menus use the same item alignment, size and green hover/focus utilities. The fresh
+Codex preview also confirms named active and reserved URLs are both Inter 600
+at 16px on mobile and 14px on desktop; each Statistics label/value is 14px.
+Current proof is in `output/local-runtime/cards-typography-final.png`,
+`statistics-menu-final.png` and `library-menu-final.png` in the same directory.
+The restored fixture preview runs at `http://127.0.0.1:58530`; Mailpit is on 44949.
+
+The reported Codex preview crop remains open. In the formerly selected tab,
+requested and effective widths differed (390 requested versus 433 CSS pixels;
+a subsequent user reset still reported roughly 436 CSS pixels). Page elements
+were inside their reported DOM viewport, which does not establish that the outer
+Codex phone frame shows them. The available browser interface exposes the page,
+not Codex's enclosing preview controls. Native Chromium evidence is not closure
+of that host-preview issue. The original preview containers and tab subsequently
+became unavailable; any replacement preview is fresh fixture evidence.
+
+Typography reuses Inter and DaisyUI components: small badges, 14px controls and
+statistics, uniform 16px mobile short URLs and quieter 14px optional titles.
+Cards use the existing grid in normal flow without forced height. The pool strip
+scrolls within its bounds, and the header account can shrink. There is no new UI
+JavaScript. The complete feature [source budget](decisions.md) records +347
+production Python, +51 SQL, +9 HTML, −3 source CSS, +455 tests and +31 harness SLOC.
+
+This is local evidence using a signed fixture issuer and native services; it does
+not establish deployed Identity, collector ingestion or production qualification.
+CRAP remains deferred. No deployment or push was performed.
+
+## Primary-agent code review - 2026-10-04
+
+The review checked the combined pending source against current Plazia architecture,
+Python, persistence, telemetry and API principles. It found schema admission
+accepted API subscription INSERT/UPDATE/DELETE, worker subscription UPDATE and
+PUBLIC SELECT on the otherwise permitted link-ID column. Seven native regressions
+failed with missing rejection before the fixes (`output/review-grants-before.log`
+and `output/review-column-grants-before.log`); these also cover organization and
+link column-level writes missed by table-only checks.
+Admission now checks prohibited table/column writes and PUBLIC table/column ACLs.
+Named query parameters remove positional-role duplication; policy selection is
+explicit for each admitted revision.
+The existing batched projection restricts subscriber aggregation to selected links;
+native coverage includes overlapping scopes and an unvisited subscribed link.
+
+The existing Container owns handler, bus and operator construction. All callers
+use it directly; former free functions have no compatibility aliases. Read DTOs
+use `from_application`/`Self`, and shared visit outcome vocabulary lives outside
+intent packages. The architecture ratchet rejects intent imports from ports.
+The single-use badge macro is inlined without changing its rendered controls.
+
+| Lane | Result | Evidence |
+| --- | --- | --- |
+| Fast regression | 213 passed, 46 deselected | output/review-fast.log |
+| Native services and browser | 48 passed, 213 deselected; owned residue empty | output/review-acceptance-final.log |
+| Formatting/shared checks | Ruff/format, strict types, normalizers, Actions/help, Markdown and env audit pass; env findings remain advisory | output/review-check-final.log |
+| Final schema regression | 21 passed, 240 deselected | output/review-schema-fast.log |
+| Focused regression after template simplification | 8 passed, 251 deselected | output/review-ui-fast.log |
+| OpenAPI/distribution | Zero contract errors, 139 style warnings; wheel/sdist built | output/review-package.log |
+| Installed runtime | Shared image build and image-smoke pass | output/review-package-final.log |
+
+The browser review refreshed the existing fixture preview and visually inspected
+active/reserved typography, spacing and the expanded Statistics menu. The capture
+is `output/local-runtime/review-statistics-menu.png`. Native 320/390/768px proof
+uses the current application source; the retained preview process predates this
+backend-only review. This does not close the Codex outer-frame crop reported above.
+
+Review and fixes were performed by the primary agent. No new independent-review
+claim, CRAP/coverage run, production qualification, deployment or push is implied.
+The updated source budget includes the separate authlib consumer adjustment.
+
+The OpenAPI style warnings include the deliberate difference between changing
+read projections and immutable mutation/replay representations. No validator
+exclusions or compatibility response branches were introduced. The review does
+not claim a general exact diff of every catalog property or ACL.

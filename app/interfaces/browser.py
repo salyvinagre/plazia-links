@@ -24,6 +24,7 @@ from app.contexts.links.contracts import (
     DeletePoolCommand,
     GetLinkQuery,
     GetPoolQuery,
+    GetStatisticsQuery,
     LinkConflictError,
     ListLinksQuery,
     ListPoolsQuery,
@@ -217,6 +218,9 @@ async def _links_page(
             "pools": pools,
             "pool_id": pool_id,
             "pool": pool,
+            "statistics": pool.statistics
+            if pool
+            else await queries(request).ask(GetStatisticsQuery(session.principal), context=context),
             "pool_error": pool_error,
             "pool_name": pool_name,
             "public_base": runtime(request).config.public_base_url.rstrip("/"),

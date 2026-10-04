@@ -12,6 +12,7 @@ from app.contexts.links.contracts import (
     DeletePoolCommand,
     GetLinkQuery,
     GetPoolQuery,
+    GetStatisticsQuery,
     ListLinksQuery,
     ListPoolsQuery,
     RenamePoolCommand,
@@ -23,13 +24,16 @@ from app.interfaces.api.schemas.links import (
     DeleteLinksParams,
     LinkFilter,
     LinkIdText,
+    LinkReadResponse,
     LinkResponse,
     PageResponse,
     Pagination,
     PoolIdText,
+    PoolReadResponse,
     PoolResponse,
     RenamePoolRequest,
     ReservePoolRequest,
+    StatisticsResponse,
     UpdateLinkRequest,
 )
 from app.interfaces.authentication import api_principal, runtime
@@ -63,7 +67,7 @@ Deleter = Annotated[Principal, Security(api_principal, scopes=["links:delete"])]
 @linked(format="hal")
 async def list_links(
     request: Request, actor: Reader, filters: Annotated[LinkFilter, Query()]
-) -> LinkedResponse[PageResponse[LinkResponse]]:
+) -> LinkedResponse[PageResponse[LinkReadResponse]]:
     """List the current organization’s links with bounded forward navigation."""
     result = await queries(request).ask(
         ListLinksQuery(
@@ -75,9 +79,9 @@ async def list_links(
         context=request_context(request, actor),
     )
     return LinkedResponse(
-        PageResponse[LinkResponse](
+        PageResponse[LinkReadResponse](
             items=[
-                LinkResponse.from_application(link, runtime(request).config.public_base_url)
+                LinkReadResponse.from_read(link, runtime(request).config.public_base_url)
                 for link in result.items
             ],
             total=result.total,
@@ -113,17 +117,17 @@ async def delete_links(
     await mutate(request, filters.command(actor), actor)
 
 
-@router.get("/links/{link_id}", response_model=LinkResponse, operation_id="get_link")
+@router.get("/links/{link_id}", response_model=LinkReadResponse, operation_id="get_link")
 async def get_link(
     link_id: Annotated[LinkIdText, Path(description="Canonical link identifier.")],
     request: Request,
     actor: Reader,
-) -> LinkResponse:
+) -> LinkReadResponse:
     """Read one link belonging to the current organization."""
     result = await queries(request).ask(
         GetLinkQuery(actor, LinkId(link_id)), context=request_context(request, actor)
     )
-    return LinkResponse.from_application(result, runtime(request).config.public_base_url)
+    return LinkReadResponse.from_read(result, runtime(request).config.public_base_url)
 
 
 @router.patch("/links/{link_id}", response_model=LinkResponse, operation_id="update_link")
@@ -168,15 +172,15 @@ async def reserve_pool(
 @linked(format="hal")
 async def list_pools(
     request: Request, actor: Reader, pagination: Annotated[Pagination, Query()]
-) -> LinkedResponse[PageResponse[PoolResponse]]:
+) -> LinkedResponse[PageResponse[PoolReadResponse]]:
     """List the current organization’s pools with bounded forward navigation."""
     result = await queries(request).ask(
         ListPoolsQuery(actor, pagination.page(actor, "pools"), pagination.limit),
         context=request_context(request, actor),
     )
     return LinkedResponse(
-        PageResponse[PoolResponse](
-            items=[PoolResponse.from_application(pool) for pool in result.items],
+        PageResponse[PoolReadResponse](
+            items=[PoolReadResponse.from_read(pool) for pool in result.items],
             total=result.total,
         ),
         NavigationFacts(
@@ -185,17 +189,26 @@ async def list_pools(
     )
 
 
-@router.get("/pools/{pool_id}", response_model=PoolResponse, operation_id="get_pool")
+@router.get("/pools/{pool_id}", response_model=PoolReadResponse, operation_id="get_pool")
 async def get_pool(
     pool_id: Annotated[PoolIdText, Path(description="Canonical pool identifier.")],
     request: Request,
     actor: Reader,
-) -> PoolResponse:
+) -> PoolReadResponse:
     """Read one pool and its current number of links in the verified organization."""
     pool = await queries(request).ask(
         GetPoolQuery(actor, PoolId(pool_id)), context=request_context(request, actor)
     )
-    return PoolResponse.from_application(pool)
+    return PoolReadResponse.from_read(pool)
+
+
+@router.get("/statistics", response_model=StatisticsResponse, operation_id="get_statistics")
+async def get_statistics(request: Request, actor: Reader) -> StatisticsResponse:
+    """Read request totals across all current organization links, independent of pagination."""
+    statistics = await queries(request).ask(
+        GetStatisticsQuery(actor), context=request_context(request, actor)
+    )
+    return StatisticsResponse.from_application(statistics)
 
 
 @router.patch("/pools/{pool_id}", response_model=PoolResponse, operation_id="rename_pool")

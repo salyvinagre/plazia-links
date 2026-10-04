@@ -6,7 +6,7 @@
 <section class="mx-auto max-w-[640px]">
   <a class="mb-4 inline-flex min-h-11 items-center text-sm no-underline hover:underline sm:mb-5" href="/dashboard/links">← All links</a>
   <h1>{{ heading }}</h1>
-  <p class="mb-7 text-muted">
+  <p class="mb-5 text-sm text-muted sm:mb-7 sm:text-base">
     {% if activating %}Add a destination to make this link ready. Subscribers will receive an activation email.
     {% elif link_id %}Update the destination and details for this link.
     {% else %}Create a short link with a destination, ready to share.{% endif %}
@@ -14,11 +14,11 @@
   {% if error %}
   <p class="alert mb-4 border border-base-300 bg-base-100 text-sm" role="alert">{{ error }}</p>
   {% endif %}
-  <form class="card border border-base-300 bg-base-100 p-5 sm:p-7" hx-disabled-elt="find button"
+  <form class="card border border-base-300 bg-base-100 p-4 sm:p-7" hx-disabled-elt="find button"
         method="post" action="/dashboard/links{% if link_id %}/{{ link_id }}{% endif %}">
     <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
     <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
-    <div class="space-y-5 sm:space-y-6">
+    <div class="space-y-4 sm:space-y-6">
       <div>
         <label for="destination">Destination URL</label>
         <input class="input w-full placeholder:text-muted placeholder:opacity-100" id="destination" name="destination_url" type="url"
@@ -52,7 +52,7 @@
       </label>
       {% endif %}
     </div>
-    <div class="mt-7 flex items-center gap-6 text-sm">
+    <div class="mt-5 flex items-center gap-3 text-sm sm:mt-7 sm:gap-6">
       <button class="btn btn-primary" type="submit">{{ 'Save changes' if link_id else 'Create link' }}</button>
       <a class="inline-flex min-h-11 items-center" href="/dashboard/links" hx-disabled-elt="unset">Cancel</a>
     </div>

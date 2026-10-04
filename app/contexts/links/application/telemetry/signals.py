@@ -19,3 +19,4 @@ PENDING = MetricDefinition("links.activation.pending", TelemetryMetricKind.gauge
 DEAD = MetricDefinition("links.activation.dead", TelemetryMetricKind.gauge)
 OLDEST = MetricDefinition("links.activation.oldest_eligible", TelemetryMetricKind.gauge, "s")
 LEASES = MetricDefinition("links.activation.leases", TelemetryMetricKind.gauge)
+VISIT_FAILURE = MetricDefinition("links.visits.recording_failure", TelemetryMetricKind.counter)

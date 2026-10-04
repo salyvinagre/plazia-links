@@ -162,6 +162,32 @@ def run():
             "FLYWAY_NETWORK_ARGS": "--network " + NAME,
             "CONTAINER": ENGINE,
         }
+        # Verify a direct fresh install separately from the populated upgrade.
+        with psycopg.connect(owner, autocommit=True) as connection:
+            connection.execute(
+                sql.SQL("CREATE DATABASE links_fresh OWNER {}").format(
+                    sql.Identifier(claim.owner_role)
+                )
+            )
+            marker = connection.execute(
+                "SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname='links'"
+            ).fetchone()[0]
+            connection.execute(
+                sql.SQL("COMMENT ON DATABASE links_fresh IS {}").format(sql.Literal(marker))
+            )
+        fresh = Path(credentials.name) / "flyway-fresh.toml"
+        PrivateFile(fresh).write(flyway.read_text().replace("/links", "/links_fresh"))
+        subprocess.run(
+            ["make", "migrate", "schema-check"],
+            cwd=ROOT,
+            check=True,
+            env=env
+            | {
+                "PLZK_SCHEMA_DATABASE_URL": env["PLZK_SCHEMA_DATABASE_URL"] + "_fresh",
+                "PLZK_FLYWAY_USER_TOML_FILE": str(fresh),
+            },
+        )
+        print("Fresh V4 installation and admission verified.", flush=True)
         # Exercise admission of a real, populated V1 target through the same
         # pinned Flyway invocation as the normal guarded migration.
         subprocess.run(
@@ -203,6 +229,12 @@ def run():
                 "VALUES (%s,%s,%s)",
                 (organization.uuid, link, subscription),
             )
+        subprocess.run(
+            ["make", "flyway-migrate"],
+            cwd=ROOT,
+            env=env | {"FLYWAY_NETWORK_ARGS": "--network " + NAME + " -e FLYWAY_TARGET=2"},
+            check=True,
+        )
         subprocess.run(["make", "migrate"], cwd=ROOT, env=env, check=True)
         with psycopg.connect(owner) as connection:
             assert connection.execute(
@@ -223,7 +255,7 @@ def run():
             connection.execute(
                 "DELETE FROM access.organizations WHERE organization_id=%s", (organization.uuid,)
             )
-        print("Populated V1 -> V2 upgrade and deletion-chain cleanup verified.", flush=True)
+        print("Populated V1 to V4 upgrade and deletion-chain cleanup verified.", flush=True)
         fga = f"http://127.0.0.1:{port(NAME + '-openfga', 8080)}"
         wait_http(fga + "/healthz")
         store = httpx2.post(fga + "/stores", json={"name": NAME})

@@ -67,6 +67,16 @@
   }
 
   @media (width < 64rem) {
+    .pool-nav {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+    }
+
+    .pool-nav .tab {
+      flex-shrink: 0;
+      max-width: 14rem;
+    }
+
     .links-table,
     .links-table tbody {
       display: block;
@@ -89,48 +99,36 @@
       position: relative;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: .75rem;
-      min-height: 10rem;
-      padding: 1.25rem;
+      gap: .5rem;
+      padding: 1rem;
       background: var(--color-base-100);
       border: 1px solid var(--color-base-300);
       border-radius: var(--radius-box);
     }
 
     .links-table td {
-      display: block;
       padding: 0;
       border: 0;
     }
 
     .links-table td:first-child {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+
+    .links-table td[data-label="Destination"] {
+      grid-column: 1 / -1;
+      grid-row: 3;
+    }
+
+    .links-table td[data-label="Status"] {
       grid-column: 1;
       grid-row: 1;
     }
 
-    .links-table td[data-label="Destination"] {
-      grid-column: 1;
-      grid-row: 2;
-    }
-
-    .links-table td[data-label="Destination"]::before {
-      content: attr(data-label);
-      display: block;
-      margin-bottom: .25rem;
-      font-size: .75rem;
-    }
-
-    .links-table td[data-label="Status"] {
-      grid-column: 2;
-      grid-row: 1 / span 2;
-      justify-self: end;
-      align-self: center;
-    }
-
     .links-table td[data-label="Actions"] {
-      position: absolute;
-      top: 1.25rem;
-      right: 1.25rem;
+      grid-column: 2;
+      grid-row: 1;
     }
   }
 }
