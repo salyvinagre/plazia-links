@@ -12,9 +12,10 @@ from app.contexts.links.application.dto.links import (
     PoolDto,
     PublicLinkDto,
 )
+from app.contexts.links.application.dto.pixels import PixelDto
 from app.contexts.links.application.dto.statistics import StatisticsDto, VisitOutcome
 from app.contexts.links.domain.link import LinkDraft, LinkPatch
-from app.kernel.ids import LinkId, PoolId
+from app.kernel.ids import LinkId, PixelId, PoolId
 
 
 class LinkRepository(Protocol):
@@ -30,7 +31,7 @@ class LinkRepository(Protocol):
     ) -> CommandResultDto | None: ...
 
     async def remember(
-        self, actor: Principal, action: str, key: str, result: LinkDto | PoolDto | None
+        self, actor: Principal, action: str, key: str, result: LinkDto | PoolDto | PixelDto | None
     ) -> None: ...
 
     async def list(
@@ -76,6 +77,6 @@ class LinkRepository(Protocol):
         self,
         organization_id: OrganizationId,
         action: str,
-        resource_ids: tuple[LinkId | PoolId, ...],
+        resource_ids: tuple[LinkId | PoolId | PixelId, ...],
         context: Invocation,
     ) -> None: ...

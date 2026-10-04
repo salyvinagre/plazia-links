@@ -193,3 +193,67 @@ async def test_pool_management_and_bulk_delete_are_tenant_scoped_and_durable(pos
     finally:
         await database.close()
         await _cleanup(postgres_urls.owner, (org, foreign))
+
+
+@pytest.mark.slow
+async def test_pixel_replay_survives_capture_and_deletion(postgres_urls):
+    from app.contexts.links.contracts import CreatePixelCommand, DeletePixelCommand, PixelDraft
+
+    org = OrganizationId.new()
+    issuer = "https://identity.example.test"
+    database = PostgresDatabase(postgres_urls.app)
+    actor = Principal(
+        issuer,
+        "subject",
+        "client",
+        org,
+        frozenset({"links:create", "links:delete"}),
+        9999999999,
+        "jwt-id",
+    )
+
+    def context(key):
+        return RequestContext(
+            ActorContext("subject", "user"), OperationContext("pixel-request", idempotency_key=key)
+        )
+
+    try:
+        await _bind_organization(postgres_urls.owner, issuer, org)
+        bus, _ = Container.buses(database, PostgresUowFactory(database), FixtureAuthority())
+        create = CreatePixelCommand(actor, PixelDraft("delivery-1842"))
+        results = await asyncio.wait_for(
+            asyncio.gather(
+                bus.dispatch(create, context=context("pixel-create")),
+                bus.dispatch(create, context=context("pixel-create")),
+            ),
+            timeout=5,
+        )
+        assert results[0].value == results[1].value and results[0].replayed != results[1].replayed
+        pixel = results[0].value
+        async with database.scope(readonly=False) as scope:
+            await scope.pixels.record(pixel.id, pixel.code)
+        async with database.scope(org) as scope:
+            assert (await scope.pixels.list(org, 1, 20)).total == 1
+            assert (await scope.pixels.get(org, pixel.id)).statistics.requests == 1
+        replay = await bus.dispatch(create, context=context("pixel-create"))
+        assert replay.value == pixel and replay.replayed
+        delete = DeletePixelCommand(actor, pixel.id)
+        await bus.dispatch(delete, context=context("pixel-delete"))
+        assert (await bus.dispatch(delete, context=context("pixel-delete"))).replayed
+        assert (await bus.dispatch(create, context=context("pixel-create"))).value == pixel
+        async with database.scope(org) as scope:
+            assert (await scope.pixels.list(org, 1, 20)).total == 0
+        from psycopg import AsyncConnection
+
+        async with await AsyncConnection.connect(postgres_urls.owner) as connection:
+            counts = await (
+                await connection.execute(
+                    "SELECT action,count(*) FROM platform.audit_events "
+                    "WHERE organization_id=%s AND resource_type='pixel' GROUP BY action",
+                    (org.uuid,),
+                )
+            ).fetchall()
+            assert dict(counts) == {"create": 1, "delete": 1}
+    finally:
+        await database.close()
+        await _cleanup(postgres_urls.owner, (org,))

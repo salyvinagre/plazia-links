@@ -340,6 +340,14 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
     expect(page.get_by_text("2 links in this pool", exact=True)).to_be_visible()
     expect(page.locator("#delete-selection")).to_be_hidden()
     expect(items.first).to_be_hidden()
+    row = page.locator("tbody tr").first
+    row.locator("summary").first.click()
+    page.once("dialog", lambda dialog: dialog.dismiss())
+    row.get_by_role("button", name="Delete", exact=True).click()
+    expect(items).to_have_count(2)
+    page.once("dialog", lambda dialog: dialog.accept())
+    row.get_by_role("button", name="Delete", exact=True).click()
+    expect(items).to_have_count(1)
     actions.click()
     page.once("dialog", lambda dialog: dialog.accept())
     page.get_by_role("button", name="Delete pool", exact=True).click()
@@ -435,4 +443,158 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
     finally:
         with psycopg.connect(os.environ["POSTGRES_OWNER_TEST_URL"]) as connection:
             connection.execute("DELETE FROM links.pools WHERE id = ANY(%s)", (ids,))
+        context.close()
+
+
+def test_pixel_create_embed_capture_and_revoke(live_application):
+    from playwright.sync_api import expect
+
+    base, _, browser, mode = live_application
+    context = browser.new_context(
+        viewport={"width": 1280, "height": 900}, permissions=["clipboard-read", "clipboard-write"]
+    )
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(base + "/login")
+    page.wait_for_url(base + "/dashboard/links")
+    page.get_by_role("link", name="Pixels", exact=True).click()
+    expect(page.get_by_role("heading", name="Pixels", exact=True)).to_be_visible()
+    assert page.evaluate("document.fonts.ready.then(() => document.fonts.check('600 14px Inter'))")
+    page.get_by_label("Delivery reference").evaluate("element => element.maxLength = 300")
+    page.get_by_label("Delivery reference").fill("x" * 201)
+    page.get_by_role("button", name="Create pixel", exact=True).click()
+    expect(page.get_by_role("alert").filter(has_text="Use a delivery reference")).to_be_visible()
+    expect(page.get_by_label("Delivery reference")).to_be_focused()
+    reference = f"delivery-{mode}"
+    page.get_by_label("Delivery reference").fill(reference)
+    page.get_by_role("button", name="Create pixel", exact=True).click()
+    card = page.get_by_role("article").filter(
+        has=page.get_by_role("heading", name=reference, exact=True)
+    )
+    expect(card).to_have_count(1)
+    expect(card.locator("dd").first).to_have_text("0")
+    embed = card.locator("textarea").input_value()
+    image_url = embed.split('src="', 1)[1].split('"', 1)[0]
+    assert image_url.startswith(base + "/pixels/")
+    assert 'width="1" height="1" alt=""' in embed
+    # Simulate an external sender using real SMTP, then render its captured HTML.
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    from shared_notifications import SentEmailNotification
+    from shared_notifications.email_smtp import SmtpEmailTransport, SmtpEmailTransportConfiguration
+
+    smtp = SmtpEmailTransport(
+        configuration=SmtpEmailTransportConfiguration(
+            host="127.0.0.1",
+            port=int(os.environ["SMTP_TEST_PORT"]),
+            from_address="sender@example.com",
+        )
+    )
+    notification = SentEmailNotification(
+        recipient="recipient@example.com",
+        subject=reference,
+        template="pixel.fixture",
+        variables={},
+        text_body="Tracking fixture",
+        html_body=embed,
+    )
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        executor.submit(asyncio.run, smtp.send(notification)).result(timeout=10)
+    mail = os.environ["MAILPIT_TEST_URL"]
+    messages = httpx2.get(mail + "/api/v1/messages").json()["messages"]
+    captured = next(message for message in messages if message["Subject"] == reference)
+    html = httpx2.get(mail + "/api/v1/message/" + captured["ID"]).json()["HTML"]
+    assert embed in html
+    # Dashboard HTML contains text only, so listing and copying never count as opens.
+    assert page.locator('img[src*="/pixels/"]').count() == 0
+    actions = card.locator("summary[aria-label]")
+    card.get_by_text("Embed code", exact=True).click()
+    card.get_by_role("button", name="Copy embed code").click()
+    expect(card.get_by_role("status")).to_have_text("Copied")
+    assert page.evaluate("navigator.clipboard.readText()") == embed
+    page.evaluate(
+        "() => { navigator.clipboard.writeText = () => Promise.reject(new Error('denied')); }"
+    )
+    card.get_by_role("button", name="Copy embed code").click()
+    expect(card.get_by_role("status")).to_have_text("Select and copy the embed code.")
+    expect(card.locator("textarea")).to_be_focused()
+    assert card.locator("textarea").evaluate(
+        "element => element.selectionEnd - element.selectionStart"
+    ) == len(embed)
+    assert context.request.head(image_url).status == 200
+    page.reload()
+    expect(card.locator("dd").first).to_have_text("0")
+    # A real Chromium image decoder loads the same HTML that an external email embeds.
+    viewer = context.new_page()
+    viewer.set_content(html)
+    image = viewer.locator("img")
+    expect(image).to_have_js_property("naturalWidth", 1)
+    expect(image).to_have_js_property("naturalHeight", 1)
+    page.reload()
+    expect(card.locator("dd").first).to_have_text("1")
+    expect(card.locator("dd").nth(1)).not_to_have_text("—")
+    expect(card.locator("dd").nth(2)).not_to_have_text("—")
+    page.get_by_role("button", name="Create pixel", exact=True).click()
+    unnamed = page.get_by_role("article").filter(has=page.get_by_role("heading", name="Pixel "))
+    expect(unnamed).to_have_count(1)
+    assert unnamed.get_by_role("heading").text_content() != "Tracking pixel"
+    unnamed.locator("summary[aria-label]").click()
+    page.once("dialog", lambda dialog: dialog.accept())
+    unnamed.get_by_role("button", name="Delete pixel").click()
+    expect(unnamed).to_have_count(0)
+    for width in (1280, 320, 390, 768):
+        page.set_viewport_size({"width": width, "height": 844})
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        for button in (
+            page.get_by_role("button", name="Sign out"),
+            page.get_by_role("button", name="Create pixel"),
+        ):
+            bounds = button.bounding_box()
+            assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= width
+        page.screenshot(path=f"output/playwright/pixels-{mode}-{width}.png", full_page=True)
+        if width >= 640:
+            field = page.get_by_label("Delivery reference").bounding_box()
+            action = page.get_by_role("button", name="Create pixel", exact=True).bounding_box()
+            assert field and action and abs(field["y"] - action["y"]) < 1
+        card.get_by_text("Embed code", exact=True).click()
+        page.screenshot(path=f"output/playwright/pixel-embed-{mode}-{width}.png", full_page=True)
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        card.get_by_text("Embed code", exact=True).click()
+        actions.click()
+        expect(card.get_by_role("button", name="Delete pixel")).to_be_visible()
+        page.screenshot(path=f"output/playwright/pixel-menu-{mode}-{width}.png", full_page=True)
+        page.keyboard.press("Escape")
+        expect(actions).to_be_focused()
+    import psycopg
+    from shared_identity import OrganizationId
+
+    from app.contexts.links.contracts import PixelCode
+
+    codes = [PixelCode.generate() for _ in range(20)]
+    with psycopg.connect(os.environ["POSTGRES_OWNER_TEST_URL"]) as connection:
+        connection.cursor().executemany(
+            "INSERT INTO links.pixels (organization_id,code,reference) VALUES (%s,%s,%s)",
+            [(OrganizationId(ORG_A).uuid, code, "Pagination fixture") for code in codes],
+        )
+    try:
+        page.reload()
+        page.get_by_role("link", name="Next", exact=True).click()
+        expect(card).to_have_count(1)
+        expect(page.get_by_text("Page 2", exact=True)).to_be_visible()
+        actions.click()
+        page.once("dialog", lambda dialog: dialog.dismiss())
+        card.get_by_role("button", name="Delete pixel").click()
+        expect(card).to_have_count(1)
+        page.once("dialog", lambda dialog: dialog.accept())
+        card.get_by_role("button", name="Delete pixel").click()
+        expect(card).to_have_count(0)
+        page.wait_for_url(base + "/dashboard/pixels")
+        expect(page.get_by_role("article")).to_have_count(20)
+        assert context.request.get(image_url).status == 404
+        assert errors == []
+    finally:
+        with psycopg.connect(os.environ["POSTGRES_OWNER_TEST_URL"]) as connection:
+            connection.execute("DELETE FROM links.pixels WHERE code = ANY(%s)", (codes,))
         context.close()

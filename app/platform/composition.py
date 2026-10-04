@@ -39,12 +39,22 @@ from app.contexts.access.contracts import (
 )
 from app.contexts.links.application.commands.create_link.command import CreateLinkCommand
 from app.contexts.links.application.commands.create_link.handler import CreateLinkHandler
+from app.contexts.links.application.commands.create_pixel.command import CreatePixelCommand
+from app.contexts.links.application.commands.create_pixel.handler import CreatePixelHandler
 from app.contexts.links.application.commands.delete_link.command import DeleteLinkCommand
 from app.contexts.links.application.commands.delete_link.handler import DeleteLinkHandler
 from app.contexts.links.application.commands.delete_links.command import DeleteLinksCommand
 from app.contexts.links.application.commands.delete_links.handler import DeleteLinksHandler
+from app.contexts.links.application.commands.delete_pixel.command import DeletePixelCommand
+from app.contexts.links.application.commands.delete_pixel.handler import DeletePixelHandler
 from app.contexts.links.application.commands.delete_pool.command import DeletePoolCommand
 from app.contexts.links.application.commands.delete_pool.handler import DeletePoolHandler
+from app.contexts.links.application.commands.record_pixel_request.command import (
+    RecordPixelRequestCommand,
+)
+from app.contexts.links.application.commands.record_pixel_request.handler import (
+    RecordPixelRequestHandler,
+)
 from app.contexts.links.application.commands.record_visit.command import RecordVisitCommand
 from app.contexts.links.application.commands.record_visit.handler import RecordVisitHandler
 from app.contexts.links.application.commands.rename_pool.command import RenamePoolCommand
@@ -58,16 +68,22 @@ from app.contexts.links.application.commands.update_link.handler import UpdateLi
 from app.contexts.links.application.dto.links import CommandResultDto
 from app.contexts.links.application.queries.get_link.handler import GetLinkHandler
 from app.contexts.links.application.queries.get_link.query import GetLinkQuery
+from app.contexts.links.application.queries.get_pixel.handler import GetPixelHandler
+from app.contexts.links.application.queries.get_pixel.query import GetPixelQuery
 from app.contexts.links.application.queries.get_pool.handler import GetPoolHandler
 from app.contexts.links.application.queries.get_pool.query import GetPoolQuery
 from app.contexts.links.application.queries.get_statistics.handler import GetStatisticsHandler
 from app.contexts.links.application.queries.get_statistics.query import GetStatisticsQuery
 from app.contexts.links.application.queries.list_links.handler import ListLinksHandler
 from app.contexts.links.application.queries.list_links.query import ListLinksQuery
+from app.contexts.links.application.queries.list_pixels.handler import ListPixelsHandler
+from app.contexts.links.application.queries.list_pixels.query import ListPixelsQuery
 from app.contexts.links.application.queries.list_pools.handler import ListPoolsHandler
 from app.contexts.links.application.queries.list_pools.query import ListPoolsQuery
 from app.contexts.links.application.queries.resolve_link.handler import ResolveLinkHandler
 from app.contexts.links.application.queries.resolve_link.query import ResolveLinkQuery
+from app.contexts.links.application.queries.resolve_pixel.handler import ResolvePixelHandler
+from app.contexts.links.application.queries.resolve_pixel.query import ResolvePixelQuery
 from app.platform.database import PostgresDatabase, PostgresUowFactory, Scope
 from app.platform.settings import OwnerSettings
 
@@ -79,6 +95,9 @@ class Database(Protocol):
 
 
 COMMANDS = {
+    CreatePixelCommand: CreatePixelHandler,
+    DeletePixelCommand: DeletePixelHandler,
+    RecordPixelRequestCommand: RecordPixelRequestHandler,
     RecordVisitCommand: RecordVisitHandler,
     CreateLinkCommand: CreateLinkHandler,
     UpdateLinkCommand: UpdateLinkHandler,
@@ -90,6 +109,9 @@ COMMANDS = {
     SubscribeLinkCommand: SubscribeLinkHandler,
 }
 QUERIES = {
+    GetPixelQuery: GetPixelHandler,
+    ListPixelsQuery: ListPixelsHandler,
+    ResolvePixelQuery: ResolvePixelHandler,
     GetStatisticsQuery: GetStatisticsHandler,
     GetLinkQuery: GetLinkHandler,
     GetPoolQuery: GetPoolHandler,
@@ -99,6 +121,10 @@ QUERIES = {
     ResolveOrganizationQuery: ResolveOrganizationHandler,
 }
 PERMISSIONS = {
+    CreatePixelCommand: "links:create",
+    DeletePixelCommand: "links:delete",
+    GetPixelQuery: "links:read",
+    ListPixelsQuery: "links:read",
     GetStatisticsQuery: "links:read",
     CreateLinkCommand: "links:create",
     UpdateLinkCommand: "links:update",
@@ -169,6 +195,12 @@ class Container(containers.DeclarativeContainer):
 
     @staticmethod
     def handler(kind: type[Any], scope: Scope, telemetry: TelemetryService | None = None) -> Any:
+        if kind in {ResolvePixelHandler, RecordPixelRequestHandler}:
+            return kind(scope.pixels)
+        if kind in {CreatePixelHandler, DeletePixelHandler}:
+            return kind(scope.pixels, scope.access, scope.links)
+        if kind in {GetPixelHandler, ListPixelsHandler}:
+            return kind(scope.pixels, scope.access)
         if kind is ResolveOrganizationHandler:
             return kind(scope.access)
         if kind in {SubscribeLinkHandler, ResolveLinkHandler, RecordVisitHandler}:

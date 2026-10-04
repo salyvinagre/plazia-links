@@ -15,4 +15,8 @@ class SubscriptionId(CanonicalId):
     _prefix = "lsb"
 
 
-CanonicalIds.register_many((LinkId, PoolId, SubscriptionId))
+class PixelId(CanonicalId):
+    _prefix = "lpx"
+
+
+CanonicalIds.register_many((LinkId, PoolId, SubscriptionId, PixelId))

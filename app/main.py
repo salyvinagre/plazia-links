@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from shared_http import PageTokenError
 from shared_http.fastapi import ApiErrorResponse, ApiResponse, install_linked
 from shared_http.fastapi.telemetry import FastApiHttpTelemetry
 
@@ -17,10 +18,13 @@ from app.contexts.access.contracts import AccessDeniedError, AccessUnavailableEr
 from app.contexts.links.contracts import (
     LinkConflictError,
     LinkNotFoundError,
+    PixelConflictError,
+    PixelNotFoundError,
     StatisticsUnavailableError,
 )
 from app.contexts.links.domain.link import IdempotencyConflictError, LinkDisabledError
 from app.interfaces.api.links import router as api_router
+from app.interfaces.api.pixels import router as pixels_api_router
 from app.interfaces.browser import router as browser_router
 from app.interfaces.middleware.rate_limiter import setup_rate_limiter
 from app.interfaces.middleware.request_id import RequestIDMiddleware
@@ -58,6 +62,12 @@ async def error_response(request: Request, exc: Exception) -> JSONResponse:
         status, code = 503, "statistics_unavailable"
     elif isinstance(exc, LinkNotFoundError):
         status, code = 404, "link_not_found"
+    elif isinstance(exc, PixelNotFoundError):
+        status, code = 404, "pixel_not_found"
+    elif isinstance(exc, PixelConflictError):
+        status, code = 409, "pixel_allocation_conflict"
+    elif isinstance(exc, PageTokenError):
+        status, code = 400, "invalid_page_token"
     elif isinstance(exc, LinkDisabledError):
         status, code = 410, "link_disabled"
     elif isinstance(exc, IdempotencyConflictError):
@@ -84,7 +94,7 @@ async def error_response(request: Request, exc: Exception) -> JSONResponse:
         400: "The request context is invalid.",
         401: "Authentication is required.",
         403: "This action is not permitted.",
-        404: "The link is unavailable.",
+        404: "The resource is unavailable.",
         409: "The request conflicts with existing state.",
         410: "The link is disabled.",
         422: "The request does not meet the contract.",
@@ -152,7 +162,13 @@ def create_app(
         version="0.2.0",
         description="Organization-owned link pools and activation.",
         servers=[{"url": "/", "description": "Current deployment"}],
-        openapi_tags=[{"name": "links", "description": "Manage organization links and pools."}],
+        openapi_tags=[
+            {"name": "links", "description": "Manage organization links and pools."},
+            {
+                "name": "pixels",
+                "description": "Manage email delivery pixels and image request statistics.",
+            },
+        ],
         lifespan=lifespan,
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",
@@ -173,6 +189,8 @@ def create_app(
         AccessUnavailableError,
         StatisticsUnavailableError,
         LinkNotFoundError,
+        PixelNotFoundError,
+        PixelConflictError,
         LinkDisabledError,
         LinkConflictError,
         IdempotencyConflictError,
@@ -201,6 +219,7 @@ def create_app(
         return RedirectResponse("/dashboard/links", status_code=303)
 
     application.include_router(api_router)
+    application.include_router(pixels_api_router)
     application.include_router(browser_router)
     application.include_router(public_router)
     install_linked(application)

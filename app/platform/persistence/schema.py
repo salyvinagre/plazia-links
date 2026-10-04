@@ -233,6 +233,7 @@ class SchemaAuthority:
             raise SchemaError("Links Flyway history is missing or incompatible")
         revision = str(history[-1][0])
         statistics = int(revision) >= 3
+        pixels = int(revision) >= 5
         schemas = self._owned_schemas(connection)
         if schemas != frozenset((*_OWNED_SCHEMAS, _MIGRATION_SCHEMA)):
             raise SchemaError("Links PostgreSQL schemas are incomplete")
@@ -249,7 +250,10 @@ class SchemaAuthority:
                 ([*_OWNED_SCHEMAS, _MIGRATION_SCHEMA],),
             ).fetchall()
         )
-        if tables != (_EXPECTED_TABLES | _STATISTICS_TABLES if statistics else _EXPECTED_TABLES):
+        expected_tables = _EXPECTED_TABLES | (_STATISTICS_TABLES if statistics else set())
+        if pixels:
+            expected_tables |= {"links.pixels"}
+        if tables != expected_tables:
             raise SchemaError("Links table catalog differs from the packaged migrations")
 
         rls = frozenset(
@@ -264,7 +268,10 @@ class SchemaAuthority:
                 ([*_OWNED_SCHEMAS],),
             ).fetchall()
         )
-        if rls != (_RLS_TABLES | {"links.statistics"} if statistics else _RLS_TABLES):
+        expected_rls = _RLS_TABLES | ({"links.statistics"} if statistics else set())
+        if pixels:
+            expected_rls |= {"links.pixels"}
+        if rls != expected_rls:
             raise SchemaError("Links row-level security differs from the packaged migrations")
 
         functions = {
@@ -280,6 +287,8 @@ class SchemaAuthority:
             key: value
             for key, value in _FUNCTION_SECURITY.items()
             if statistics or key != ("links", "record_visit")
+            if pixels
+            or key not in {("links", "resolve_public_pixel"), ("links", "record_pixel_request")}
         }
         if functions != expected_functions:
             raise SchemaError("Links security functions differ from the packaged migration")
@@ -323,7 +332,7 @@ class SchemaAuthority:
                 (list(_OWNED_SCHEMAS),),
             ).fetchall()
         }
-        if policies != self._policies(worker, statistics=statistics):
+        if policies != self._policies(worker, statistics=statistics, pixels=pixels):
             raise SchemaError("Links tenant policies differ from the packaged migration")
         private_access = connection.execute(
             """SELECT bool_or(CASE
@@ -347,6 +356,13 @@ class SchemaAuthority:
                 WHEN n.nspname='links' AND c.relname IN ('statistics','statistics_coverage')
                     THEN has_any_column_privilege(%(app)s,c.oid,'INSERT,UPDATE')
                         OR has_table_privilege(%(app)s,c.oid,'DELETE')
+                WHEN n.nspname='links' AND c.relname='pixels'
+                    THEN has_any_column_privilege(%(app)s,c.oid,'UPDATE')
+                        OR EXISTS (
+                            SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid=c.oid
+                            AND a.attnum>0 AND NOT a.attisdropped
+                            AND a.attname NOT IN ('organization_id','code','reference')
+                            AND has_column_privilege(%(app)s,c.oid,a.attnum,'INSERT'))
                 ELSE false END
                 OR (%(revision)s = 1 AND n.nspname='links' AND c.relname='pools' AND (
                     has_any_column_privilege(%(app)s,c.oid,'UPDATE')
@@ -370,6 +386,7 @@ class SchemaAuthority:
                     "platform.command_receipts",
                     "links.statistics",
                     "links.statistics_coverage",
+                    "links.pixels",
                 ],
                 "schemas": [*_OWNED_SCHEMAS, _MIGRATION_SCHEMA],
             },
@@ -399,6 +416,25 @@ class SchemaAuthority:
             ).fetchone()
             if grants is None or not grants[0]:
                 raise SchemaError("Links statistics grants are invalid")
+        if pixels:
+            grants = connection.execute(
+                """SELECT has_table_privilege(%(app)s,'links.pixels','SELECT')
+                    AND has_table_privilege(%(app)s,'links.pixels','DELETE')
+                    AND has_column_privilege(%(app)s,'links.pixels','organization_id','INSERT')
+                    AND has_column_privilege(%(app)s,'links.pixels','code','INSERT')
+                    AND has_column_privilege(%(app)s,'links.pixels','reference','INSERT')
+                    AND has_function_privilege(%(app)s,'links.resolve_public_pixel(text)','EXECUTE')
+                    AND has_function_privilege(
+                        %(app)s,'links.record_pixel_request(uuid,text)','EXECUTE')
+                    AND NOT has_function_privilege(
+                        %(worker)s,'links.resolve_public_pixel(text)','EXECUTE')
+                    AND NOT has_function_privilege(
+                        %(worker)s,'links.record_pixel_request(uuid,text)','EXECUTE')
+                    AS pixels_ready""",
+                {"app": app, "worker": worker},
+            ).fetchone()
+            if grants is None or not grants[0]:
+                raise SchemaError("Links pixel grants are invalid")
         deletion = {
             row[0]: (row[1], row[2], tuple(row[3]), tuple(row[4]), row[5], row[6])
             for row in connection.execute(
@@ -473,7 +509,9 @@ class SchemaAuthority:
         return frozenset(row[0] for row in names)
 
     @staticmethod
-    def _policies(worker: str, *, statistics: bool) -> dict[tuple[str, str], tuple[object, ...]]:
+    def _policies(
+        worker: str, *, statistics: bool, pixels: bool = False
+    ) -> dict[tuple[str, str], tuple[object, ...]]:
         tenant = "(organization_id = platform.current_organization_id())"
         values: dict[tuple[str, str], tuple[object, ...]] = {
             (table, name): ("*", True, ("public",), tenant, tenant)
@@ -494,6 +532,8 @@ class SchemaAuthority:
                 tenant,
                 tenant,
             )
+        if pixels:
+            values["links.pixels", "pixels_tenant_scope"] = ("*", True, ("public",), tenant, tenant)
         role = (worker,)
         values.update(
             {

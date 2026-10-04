@@ -28,17 +28,17 @@ async def test_forward_navigation_is_bounded_and_scope_bound(identity_client, is
             next_url,
             headers=bearer(issuer, **{"org": ORG_B}),
         )
-    ).status_code == 422
+    ).status_code == 400
     assert (
         await identity_client.get(next_url.replace("limit=2", "limit=3"), headers=headers)
-    ).status_code == 422
+    ).status_code == 400
     assert (
         await identity_client.get(next_url.replace("/pools", "/links"), headers=headers)
-    ).status_code == 422
+    ).status_code == 400
     for params in ({"token": "!!!"}, {"page": 1}, {"limit": 101}):
         assert (
             await identity_client.get("/api/v1/pools", params=params, headers=headers)
-        ).status_code == 422
+        ).status_code == (400 if "token" in params else 422)
     pool = first["items"][0]["id"]
     rows = (
         await identity_client.get(
@@ -51,7 +51,7 @@ async def test_forward_navigation_is_bounded_and_scope_bound(identity_client, is
         await identity_client.get(
             continuation.replace(pool, first["items"][1]["id"]), headers=headers
         )
-    ).status_code == 422
+    ).status_code == 400
 
 
 def test_invalid_shared_token_position_cannot_select_unbounded_offset(issuer):

@@ -67,7 +67,7 @@ def postgres_urls() -> _DatabaseUrls:
             "must point to the isolated Flyway-migrated PostgreSQL 18 database"
         )
     urls = _DatabaseUrls(app=values[0], worker=values[1], owner=values[2])  # type: ignore[arg-type]
-    assert SchemaAuthority(urls.owner).check().revision == "4"
+    assert SchemaAuthority(urls.owner).check().revision == "5"
     return urls
 
 
@@ -387,6 +387,9 @@ async def _cleanup(owner_url: str, organizations: tuple[OrganizationId, ...]) ->
             await connection.execute(
                 "DELETE FROM links.pools WHERE organization_id = ANY(%s)",
                 (ids,),
+            )
+            await connection.execute(
+                "DELETE FROM links.pixels WHERE organization_id = ANY(%s)", (ids,)
             )
             await connection.execute(
                 "DELETE FROM access.organizations WHERE organization_id = ANY(%s)",

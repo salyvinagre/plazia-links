@@ -187,7 +187,7 @@ def run():
                 "PLZK_FLYWAY_USER_TOML_FILE": str(fresh),
             },
         )
-        print("Fresh V4 installation and admission verified.", flush=True)
+        print("Fresh V5 installation and admission verified.", flush=True)
         # Exercise admission of a real, populated V1 target through the same
         # pinned Flyway invocation as the normal guarded migration.
         subprocess.run(
@@ -235,6 +235,14 @@ def run():
             env=env | {"FLYWAY_NETWORK_ARGS": "--network " + NAME + " -e FLYWAY_TARGET=2"},
             check=True,
         )
+        subprocess.run(
+            ["make", "flyway-migrate"],
+            cwd=ROOT,
+            env=env | {"FLYWAY_NETWORK_ARGS": "--network " + NAME + " -e FLYWAY_TARGET=4"},
+            check=True,
+        )
+        with psycopg.connect(owner) as connection:
+            connection.execute("SELECT links.record_visit(%s,'upgrade1','waiting')", (link,))
         subprocess.run(["make", "migrate"], cwd=ROOT, env=env, check=True)
         with psycopg.connect(owner) as connection:
             assert connection.execute(
@@ -243,6 +251,9 @@ def run():
             assert connection.execute(
                 "SELECT short_code FROM links.links WHERE id=%s", (link,)
             ).fetchone() == ("upgrade1",)
+            assert connection.execute(
+                "SELECT waiting_views FROM links.statistics WHERE link_id=%s", (link,)
+            ).fetchone() == (1,)
             connection.execute("DELETE FROM links.pools WHERE id=%s", (pool,))
             for table in ("links.links", "links.subscriptions", "platform.activation_emails"):
                 assert (
@@ -255,7 +266,9 @@ def run():
             connection.execute(
                 "DELETE FROM access.organizations WHERE organization_id=%s", (organization.uuid,)
             )
-        print("Populated V1 to V4 upgrade and deletion-chain cleanup verified.", flush=True)
+        print(
+            "Populated V1 → V4 → V5 upgrade preserves statistics and deletion chains.", flush=True
+        )
         fga = f"http://127.0.0.1:{port(NAME + '-openfga', 8080)}"
         wait_http(fga + "/healthz")
         store = httpx2.post(fga + "/stores", json={"name": NAME})

@@ -39,6 +39,14 @@
     <p id="request-error" class="alert mb-6 border border-base-300 bg-base-100 text-sm" role="alert" hidden>
       We couldn’t complete that request. Reload this page and try again.
     </p>
+    {% if session %}
+    <nav class="tabs tabs-box pool-nav mb-6 w-fit max-w-full bg-base-100" aria-label="Resources">
+      <a class="tab min-h-11{% if '/dashboard/links' in request.url.path %} tab-active{% endif %}"
+         href="/dashboard/links" {% if '/dashboard/links' in request.url.path %}aria-current="page"{% endif %}>Links</a>
+      <a class="tab min-h-11{% if '/dashboard/pixels' in request.url.path %} tab-active{% endif %}"
+         href="/dashboard/pixels" {% if '/dashboard/pixels' in request.url.path %}aria-current="page"{% endif %}>Pixels</a>
+    </nav>
+    {% endif %}
     {% block content %}{% endblock %}
   </main>
   <footer class="mt-4 border-t border-base-300">
