@@ -1384,6 +1384,45 @@ dev = [
 ]
 
 [[package]]
+name = "plazia-delivery"
+version = "0.2.0"
+source = { editable = "../plazia/packages/plazia-delivery" }
+dependencies = [
+    { name = "plazia-authlib", extra = ["authn"] },
+    { name = "plazia-cli" },
+    { name = "plazia-http", extra = ["fastapi", "httpx2"] },
+    { name = "plazia-kernel" },
+    { name = "plazia-messaging" },
+    { name = "plazia-observability", extra = ["otel"] },
+    { name = "plazia-persistence" },
+    { name = "plazia-settings" },
+    { name = "psycopg" },
+    { name = "pydantic-settings" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "plazia-authlib", extras = ["authn"], editable = "../plazia/packages/plazia-authlib" },
+    { name = "plazia-cli", editable = "../plazia/packages/plazia-cli" },
+    { name = "plazia-http", extras = ["httpx2", "fastapi"], editable = "../plazia/packages/plazia-http" },
+    { name = "plazia-kernel", editable = "../plazia/packages/plazia-kernel" },
+    { name = "plazia-messaging", editable = "../plazia/packages/plazia-messaging" },
+    { name = "plazia-observability", extras = ["otel"], editable = "../plazia/packages/plazia-observability" },
+    { name = "plazia-persistence", editable = "../plazia/packages/plazia-persistence" },
+    { name = "plazia-settings", editable = "../plazia/packages/plazia-settings" },
+    { name = "psycopg", specifier = ">=3.2,<4" },
+    { name = "pydantic-settings", specifier = ">=2.12,<3" },
+    { name = "uvicorn", specifier = ">=0.34,<1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.0,<10" },
+    { name = "ruff", specifier = ">=0.11.13,<1" },
+]
+
+[[package]]
 name = "plazia-feature"
 version = "0.1.0"
 source = { editable = "../plazia/packages/plazia-feature" }
@@ -1511,6 +1550,7 @@ dev = [
     { name = "mypy" },
     { name = "playwright" },
     { name = "plazia-authlib", extra = ["testing"] },
+    { name = "plazia-delivery" },
     { name = "plazia-tooling" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1547,6 +1587,7 @@ dev = [
     { name = "mypy", specifier = ">=1.13,<3" },
     { name = "playwright", specifier = ">=1.55,<2" },
     { name = "plazia-authlib", extras = ["testing"], editable = "../plazia/packages/plazia-authlib" },
+    { name = "plazia-delivery", editable = "../plazia/packages/plazia-delivery" },
     { name = "plazia-tooling", editable = "../plazia/packages/plazia-tooling" },
     { name = "pytest", specifier = ">=9,<10" },
     { name = "pytest-asyncio", specifier = ">=1,<2" },

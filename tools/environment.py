@@ -3,6 +3,7 @@
 import json
 
 from plazia_tooling.release.env_model import (
+    EnvCategory,
     EnvClass,
     EnvConsumer,
     EnvProducer,
@@ -10,10 +11,20 @@ from plazia_tooling.release.env_model import (
     EnvSurface,
     EnvVariable,
 )
+from plazia_tooling.release.stack_environment import RegistryOnlyStackEnvironment
 from pydantic import SecretStr
 
 from app.platform.settings import IdentitySettings, OwnerSettings, Settings, WorkerSettings
 
+_GENERATED = frozenset(
+    {
+        "PLZK_IDENTITY_ISSUER",
+        "PLZK_IDENTITY_AUDIENCE",
+        "PLZK_IDENTITY_CLIENT_ID",
+        "PLZK_IDENTITY_CLIENT_SECRET",
+    }
+)
+_PROVIDED = frozenset({"PLZK_OPENFGA_URL", "PLZK_OPENFGA_STORE_ID", "PLZK_OPENFGA_MODEL_ID"})
 _REQUIRED = frozenset(
     {
         "PLZK_WORKER_DATABASE_URL",
@@ -25,10 +36,6 @@ _REQUIRED = frozenset(
         "PLZK_OPENFGA_URL",
         "PLZK_OPENFGA_STORE_ID",
         "PLZK_OPENFGA_MODEL_ID",
-        "PLZK_IDENTITY_ISSUER",
-        "PLZK_IDENTITY_AUDIENCE",
-        "PLZK_IDENTITY_CLIENT_ID",
-        "PLZK_IDENTITY_CLIENT_SECRET",
     }
 )
 
@@ -39,19 +46,32 @@ def build_registry() -> EnvRegistry:
         for name, field in model.model_fields.items():
             selector = str(model.model_config["env_prefix"]) + name.upper()
             secret = field.annotation is SecretStr
+            generated = selector in _GENERATED
             required = selector in _REQUIRED
             default = field.default
             variables.append(
                 EnvVariable(
                     name=selector,
-                    env_class=EnvClass.REQUIRED if required else EnvClass.OVERRIDABLE,
+                    env_class=EnvClass.GENERATED
+                    if generated
+                    else EnvClass.REQUIRED
+                    if required
+                    else EnvClass.OVERRIDABLE,
                     purpose=field.description or f"{model.section}: {name.replace('_', ' ')}.",
-                    producer=EnvProducer.SECRETS if secret else EnvProducer.TOML_CONFIG,
+                    producer=EnvProducer.BOOTSTRAP
+                    if generated
+                    else EnvProducer.RELEASE_PIPELINE
+                    if selector in _PROVIDED
+                    else EnvProducer.SECRETS
+                    if secret
+                    else EnvProducer.TOML_CONFIG,
                     consumer=EnvConsumer.SETTINGS_FIELD,
-                    surface=EnvSurface.OPERATOR,
-                    toml_counterpart=None if secret else f"{model.section}.{name}",
+                    surface=EnvSurface.INTERNAL
+                    if generated or selector in _PROVIDED
+                    else EnvSurface.OPERATOR,
+                    toml_counterpart=None if secret or generated else f"{model.section}.{name}",
                     default=None
-                    if secret or required
+                    if secret or required or generated
                     else (default if isinstance(default, str) else json.dumps(default)),
                     secret=secret,
                     file_supported=secret,
@@ -60,6 +80,14 @@ def build_registry() -> EnvRegistry:
     return EnvRegistry(
         variables=tuple(variables)
         + (
+            EnvVariable(
+                name="PLZK_IDENTITY_OWNER_EMAIL",
+                env_class=EnvClass.REQUIRED,
+                purpose="Existing Plazia business owner used by Identity's enrollment session.",
+                producer=EnvProducer.RELEASE_PIPELINE,
+                consumer=EnvConsumer.RELEASE_ENV,
+                surface=EnvSurface.OPERATOR,
+            ),
             EnvVariable(
                 name="PLZK_FLYWAY_PROJECT",
                 env_class=EnvClass.OVERRIDABLE,
@@ -113,7 +141,20 @@ def build_registry() -> EnvRegistry:
                 producer=EnvProducer.SECRETS,
                 consumer=EnvConsumer.RELEASE_ENV,
                 surface=EnvSurface.INTERNAL,
+                category=EnvCategory.DEVOPS,
                 secret=True,
             ),
+        )
+    )
+
+
+class LinksEnvironment(RegistryOnlyStackEnvironment):
+    """Expose release metadata; Identity's hooks issue the generated bindings."""
+
+    registry = EnvRegistry(
+        variables=tuple(
+            variable
+            for variable in build_registry().variables
+            if variable.category is EnvCategory.DOMAIN
         )
     )

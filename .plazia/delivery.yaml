@@ -33,6 +33,10 @@ delivery:
           target: plazia/packages/plazia-contracts/pyproject.toml
         - source: ../plazia/packages/plazia-contracts/src
           target: plazia/packages/plazia-contracts/src
+        - source: ../plazia/packages/plazia-delivery/pyproject.toml
+          target: plazia/packages/plazia-delivery/pyproject.toml
+        - source: ../plazia/packages/plazia-delivery/src
+          target: plazia/packages/plazia-delivery/src
         - source: ../plazia/packages/plazia-feature/pyproject.toml
           target: plazia/packages/plazia-feature/pyproject.toml
         - source: ../plazia/packages/plazia-feature/src
@@ -77,7 +81,8 @@ delivery:
     registry_provider: tools.environment:build_registry
     common:
       enabled: false
-      dependencies: [plazia-postgres-links]
+      dependencies: [plazia-postgres-links, identity]
+      environment_provider: tools.environment:LinksEnvironment
       profile:
         scope: runtime
       execution:
@@ -133,8 +138,7 @@ delivery:
       optional_secrets:
       - PLZK_WORKER_SMTP_PASSWORD
       required_env:
-      - PLZK_IDENTITY_ISSUER
-      - PLZK_IDENTITY_CLIENT_ID
+      - PLZK_IDENTITY_OWNER_EMAIL
       - PLZK_OPENFGA_URL
       - PLZK_WORKER_SMTP_HOST
       - PLZK_WORKER_SMTP_FROM
@@ -146,7 +150,6 @@ delivery:
         - ${PLZ_POSTGRES_NETWORK}
         env:
           PLZK_IDENTITY_PUBLIC_BASE_URL: https://${PLZ_RELEASE_HOSTNAME}
-          PLZK_IDENTITY_AUDIENCE: https://${PLZ_RELEASE_HOSTNAME}/api/v1
         services: &runtime_services
         - schema-prepare
         - schema-migrate
@@ -166,6 +169,25 @@ delivery:
             - '{services}'
       preflight:
         compose_health: true
+      hooks:
+        links-identity-session:
+          provider: identity-session
+          module: identity.platform.release.hooks
+          dependency: identity
+          phase: before_up
+          units: [runtime]
+          environment_name: Default
+          business_name: Plazia
+          owner_email_env: PLZK_IDENTITY_OWNER_EMAIL
+          management_bearer_env: PLZK_IDENTITY_MANAGEMENT_BEARER
+        links-identity-resources:
+          provider: identity-resources
+          module: identity.platform.release.hooks
+          dependency: identity
+          phase: before_up
+          units: [runtime]
+          document: .plazia/identity-resources/links.json
+          management_bearer_env: PLZK_IDENTITY_MANAGEMENT_BEARER
       smoke:
         base_url: https://${PLZ_RELEASE_HOSTNAME}
         checks:
@@ -229,4 +251,14 @@ delivery:
         PLZK_FLYWAY_USER_TOML: PLZK_FLYWAY_USER_TOML
       outputs:
         PLZ_POSTGRES_NETWORK: PLZ_POSTGRES_NETWORK
+    identity:
+      repository: ../plazia-identity
+      lifecycle: false
+      registries: [domain]
+      outputs:
+        PLZK_OPENFGA_URL: PLZI_AUTHZ_API_URL
+        PLZI_SYSTEM_IDENTITY_DOMAIN: PLZI_SYSTEM_IDENTITY_DOMAIN
+      secret_outputs:
+        PLZK_OPENFGA_STORE_ID: PLZI_AUTHZ_STORE_ID
+        PLZK_OPENFGA_MODEL_ID: PLZI_AUTHZ_MODEL_ID
   tunnels: {}

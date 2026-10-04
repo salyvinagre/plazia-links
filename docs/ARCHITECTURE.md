@@ -77,3 +77,25 @@ state, without another application intent, response field, repository or setting
 Both resource routers consume the existing HTTP authentication boundary for
 capability and mutation-header declarations. Routers do not import each other;
 organization authorization still executes at the CQRS boundary.
+
+Identity enrollment is declarative. The existing provider session/resource
+hooks own reconciliation, credentials and protected checkpoints; Links owns
+only its client/API document. A registry-only environment provider exposes the
+existing settings declarations without another generator or configuration
+parser. Generated Identity bindings and imported OpenFGA bindings declare their
+producer; the enrollment owner email is confined to release tooling. CI's
+required credential guard and provider checkout make the cross-owner contract
+testable with Identity's actual parser. The added registry metadata, provider
+bridge, resource document and contract checks are necessary for that boundary;
+no application/worker Python, CQRS intent, migration or HTTP route is added.
+Schema-only release qualification remains excluded: worker fencing and recovery
+need their own owner evidence before release activation.
+
+Against `ea576c8`, this enrollment pass adds 38 nonblank, noncomment tooling
+Python lines (including docstrings): generated/provider provenance, the required
+owner-email selector and the shared registry-provider bridge. It adds 79 test
+lines to verify provider parsing, browser paths, granted capabilities, protected
+outputs and both CI credential guards. Release, resource and workflow
+declarations add 102 lines for hooks, dependency outputs, the immutable build
+source list and private checkouts. Application/worker Python grows by zero;
+generated environment/lock output and documentation are excluded from these counts.

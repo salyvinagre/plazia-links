@@ -27,7 +27,7 @@ plazia-links = "app.cli:main"
 dev = [
  "httpx2>=2.7,<3",
  "pytest>=9,<10", "pytest-asyncio>=1,<2", "pytest-cov>=7,<8", "pytest-bdd>=8,<9",
- "plazia-authlib[testing]==0.2.0", "ruff>=0.15,<1", "mypy>=1.13,<3", "playwright>=1.55,<2", "plazia-tooling",
+ "plazia-authlib[testing]==0.2.0", "ruff>=0.15,<1", "mypy>=1.13,<3", "playwright>=1.55,<2", "plazia-tooling", "plazia-delivery",
 ]
 
 [tool.ruff]
@@ -63,6 +63,7 @@ entrypoint = "app.index:app"
 plazia-authlib = { path = "../plazia/packages/plazia-authlib", editable = true }
 plazia-cli = { path = "../plazia/packages/plazia-cli", editable = true }
 plazia-contracts = { path = "../plazia/packages/plazia-contracts", editable = true }
+plazia-delivery = { path = "../plazia/packages/plazia-delivery", editable = true }
 plazia-feature = { path = "../plazia/packages/plazia-feature", editable = true }
 plazia-http = { path = "../plazia/packages/plazia-http", editable = true }
 plazia-kernel = { path = "../plazia/packages/plazia-kernel", editable = true }

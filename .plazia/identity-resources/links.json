@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "business": {"name": "Plazia"},
+  "environments": [{"ref": "selected"}],
+  "applications": [
+    {
+      "ref": "links",
+      "name": "plazia-links",
+      "type": "reg",
+      "environment": "selected",
+      "token_endpoint_auth_method": "client_secret_basic",
+      "redirect_paths": ["/auth/callback"],
+      "logout_paths": ["/signed-out"],
+      "initiate_login_path": "/login"
+    }
+  ],
+  "apis": [
+    {
+      "ref": "links",
+      "name": "plazia-links",
+      "audience_path": "/api/v1",
+      "visibility": "published",
+      "scopes": [
+        {"ref": "read", "key": "links:read", "description": "Read organization links, pools and pixels."},
+        {"ref": "create", "key": "links:create", "description": "Create organization links, pools and pixels."},
+        {"ref": "update", "key": "links:update", "description": "Activate and edit organization links and rename pools."},
+        {"ref": "delete", "key": "links:delete", "description": "Delete organization links, pools and pixels."}
+      ]
+    }
+  ],
+  "grants": [
+    {
+      "application": "links",
+      "api": {"ref": "links"},
+      "scopes": [{"ref": "read"}, {"ref": "create"}, {"ref": "update"}, {"ref": "delete"}]
+    }
+  ],
+  "outputs": [
+    {"key": "PLZK_IDENTITY_AUDIENCE", "source": "api.audience", "ref": "links"},
+    {"key": "PLZK_IDENTITY_ISSUER", "source": "environment.preferred_issuer", "ref": "selected"},
+    {"key": "PLZK_IDENTITY_CLIENT_ID", "source": "application.client_id", "ref": "links"},
+    {"key": "PLZK_IDENTITY_CLIENT_SECRET", "source": "application.client_secret", "ref": "links", "missing": "rotate_once"}
+  ]
+}

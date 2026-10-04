@@ -128,17 +128,24 @@ Production routing is `https://links.liberalia.net`. Preview routing is
 revision. Shared routing owns DNS/tunnel/TLS convergence. The public route
 covers public short links, dashboard, callback and API paths through the same
 origin. API and worker receive that origin explicitly; the API audience is
-`<origin>/api/v1`. Register the dedicated Links browser client's
-`<origin>/auth/callback` redirect and API resource with the selected Identity
-environment before activation. The client may share the Plazia business;
-organization remains the pool authorization boundary.
+`<origin>/api/v1`. The [Identity document](../.plazia/identity-resources/links.json)
+registers the dedicated browser client's `<origin>/auth/callback` redirect,
+logout/login paths and Links API resource through Identity-owned hooks before
+the runtime unit starts. Supply `PLZK_IDENTITY_OWNER_EMAIL` for the existing
+Plazia business owner. The hooks target its `Default` environment within the
+selected provider deployment; organization remains the pool authorization
+boundary. Issuer, API audience and client credentials are generated outputs, not release
+operator inputs. See [Identity ownership](IDENTITY.md#deployment-ownership).
 
 The provider declaration projects owner/API/worker DSNs and Flyway credentials.
 The migration order is prepare → literal Flyway migrate → finish → API/worker.
 Redis remains a required external secret binding for API sessions, replay and
 rate limits. This pass adds no Redis provider: the inspected current root
 capability catalog has none. Identity/OpenFGA installation outputs and SMTP
-bindings must come from their owners. Releases require explicit
+bindings come from their owners. The Identity dependency consumes the
+already-ready provider without deploying or destroying it, and projects its
+OpenFGA URL/store/model bindings. The management session bearer stays transient
+between provider hooks and never enters runtime secret mounts. Releases require explicit
 PLZK_WORKER_SMTP_HOST and PLZK_WORKER_SMTP_FROM; username, port and TLS mode
 use the worker TOML section unless explicitly supplied as worker-only
 environment overrides. Remote Compose mounts the packaged SQL artifact
@@ -166,7 +173,17 @@ The API owns forwarded rate-limit identity. Configure app.trusted_proxy_ips (or 
 
 For simultaneous local Podman work, pin a session with the native CONTAINER_CONNECTION selector when running image/acceptance lanes. Changing the global connection during a run can split its owned resources across stores. The harness touches only its unique labelled resources.
 
-CI checks out Links and salyvinagre/plazia as siblings and runs the same Make lanes as local development. For private shared sources, configure PLZK_SHARED_SOURCE_TOKEN with read access. The shared checkout must publish the Python 3.14 package manifests consumed by this lockfile; local shared-source changes are not proof of that publication. The disposable acceptance lane uses Docker, a local OAuth issuer and SMTP capture. Workflow execution on GitHub remains unverified here.
+CI checks out Links, salyvinagre/plazia and salyvinagre/plazia-identity as siblings
+and runs the same Make lanes as local development. Configure
+PLZK_SHARED_SOURCE_TOKEN with read access to both private provider repositories;
+both jobs fail before provider checkout when it is absent. There is no
+github.token fallback for those checkouts. Deployment contract tests load
+Identity's actual document parser and hook providers from that checkout;
+`plazia-delivery` is a tooling/development dependency required by the parser,
+not a new Links runtime service. The shared checkouts must publish the Python
+3.14 package contracts consumed by this lockfile; local source changes are not
+proof of publication. The disposable acceptance lane uses Docker, a local OAuth
+issuer and SMTP capture. Workflow execution on GitHub remains unverified here.
 
 ## Telemetry
 PLZK_TELEMETRY_EXPORT_DRIVER=noop is the API default; the worker uses PLZK_WORKER_TELEMETRY_EXPORT_DRIVER. Set it to otel and configure PLZK_TELEMETRY_OTLP_ENDPOINT for shared OTLP HTTP export. All signals use stable service.name=plazia-links, service.namespace=plazia, version 0.2.0 and the deployment environment; api/worker use distinct instrumentation scopes. Configure the collector and dashboards through the platform owner. Export and queue-sampling failures remain passive. Provider shutdown flushes on normal API/worker exit.

@@ -16,6 +16,32 @@ from app.platform.settings import IdentitySettings, PublicSettings, Settings, Wo
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.parametrize("job", ["quality", "acceptance"])
+@pytest.mark.parametrize("credential", ["", "fixture-source-credential"])
+def test_ci_private_checkouts_require_an_explicit_credential(job, credential):
+    import subprocess
+
+    steps = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"][job]["steps"]
+    guard = next(step for step in steps if "PLZK_SHARED_SOURCE_TOKEN" in step.get("env", {}))
+    result = subprocess.run(
+        ["/bin/sh", "-eu", "-c", guard["run"]],
+        env={"PLZK_SHARED_SOURCE_TOKEN": credential},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == (0 if credential else 1)
+    assert not credential or credential not in result.stdout + result.stderr
+    private = [step for step in steps if step.get("with", {}).get("repository")]
+    assert {step["with"]["repository"] for step in private} == {
+        "salyvinagre/plazia",
+        "salyvinagre/plazia-identity",
+    }
+    for checkout in private:
+        assert steps.index(guard) < steps.index(checkout)
+        assert checkout["with"]["token"] == "${{ secrets.PLZK_SHARED_SOURCE_TOKEN }}"
+
+
 @pytest.mark.parametrize("override", [False, True])
 def test_smtp_configuration_survives_release_projection(monkeypatch, tmp_path, override):
     from plazia_tooling.release.plans import ReleaseExpansion
@@ -95,7 +121,6 @@ def test_public_routing_and_process_origins_share_the_retained_environment(envir
         selected.release.values["stack"]["env"], env=context, label="Links stack"
     )
     assert stack["PLZK_IDENTITY_PUBLIC_BASE_URL"] == selected.application_origin
-    assert stack["PLZK_IDENTITY_AUDIENCE"] == selected.application_origin + "/api/v1"
     web = selected.release.values["resources"]["web"]
     assert ReleaseExpansion.text(web["public"]["routes"][0]["hosts"][0], env=context) == expected
     assert web["ingress"] == {
@@ -125,12 +150,74 @@ def test_provider_claim_keeps_owner_api_worker_credentials_distinct():
     dependency = declared["delivery"]["dependencies"]["plazia-postgres-links"]
     assert set(dependency["secret_outputs"].values()) == set(claim.secret_outputs)
     selected = ReleaseConfig.from_repo(ROOT).resolve(environment="pr-42", env={})
-    assert selected.release.values["dependencies"] == ["plazia-postgres-links"]
+    assert selected.release.values["dependencies"] == ["plazia-postgres-links", "identity"]
     parsed = DependencyConfig.from_mapping("plazia-postgres-links", dependency, repo_root=ROOT)
     assert parsed.infrastructure is not None
     provision = parsed.infrastructure.resolve(release_environment="pr-42", label="Links PostgreSQL")
     assert provision.selection.environment == "preview"
     assert provision.claims[0].owner == "salyvinagre/plazia-links"
+
+
+@pytest.mark.parametrize("environment", ["dev", "pr-42", "production"])
+def test_identity_enrollment_matches_the_browser_and_api_contract(environment):
+    from urllib.parse import urlsplit
+
+    from plazia_tooling.release.environment_provider import resolve_environment_provider
+    from plazia_tooling.release.hooks import (
+        HookExecutionPhase,
+        ReleaseHookExecution,
+        resolve_generated_secret_selectors,
+        resolve_hook_selectors,
+    )
+    from plazia_tooling.release.repository_module import import_repository_module
+
+    from app.interfaces.authentication import oauth
+    from app.interfaces.browser import router
+
+    selected = ReleaseConfig.from_repo(ROOT).resolve(environment=environment, env={})
+    hooks = ReleaseHookExecution.configs(
+        selected.release, phase=HookExecutionPhase.BEFORE_UP, unit="runtime"
+    )
+    assert [provider for _, provider, _ in hooks] == ["identity-session", "identity-resources"]
+    session, resources = (config for _, _, config in hooks)
+    owner = ROOT.parent / "plazia-identity"
+    model = import_repository_module(owner, "identity.platform.management.domain.document")
+    resolution = import_repository_module(owner, "identity.platform.management.domain.resolution")
+    document = model.BusinessApplyDocument.from_file(str(ROOT / resources["document"])).resolved(
+        resolution.BusinessApplyResolutionContext(
+            environment_name=environment, application_origin=selected.application_origin
+        )
+    )
+    assert document.business.name == session["business_name"]
+    assert document.environments[0].name == session["environment_name"]
+    assert not document.organizations and not document.installations
+    client, api, grant = document.applications[0], document.apis[0], document.grants[0]
+    origin = IdentitySettings(public_base_url=selected.application_origin)
+    assert client.redirect_urls == [origin.redirect_uri]
+    routes = {route.path for route in router.routes}
+    assert all(
+        urlsplit(url).path in routes for url in [*client.logout_urls, client.initiate_login_uri]
+    )
+    assert api.audience == selected.application_origin + "/api/v1"
+    assert any(
+        output.key == "PLZK_IDENTITY_AUDIENCE" and output.source == "api.audience"
+        for output in document.outputs
+    )
+    assert {scope.key for scope in api.scopes} == set(oauth.model.flows.authorizationCode.scopes)
+    assert grant.application == client.ref and grant.api.ref == api.ref
+    assert {scope.ref for scope in grant.scopes} == {scope.ref for scope in api.scopes}
+    provider = resolve_environment_provider(ROOT, selected, {})
+    assert set(provider.generated_key_names) == {output.key for output in document.outputs}
+    assert "PLZK_SHARED_SOURCE_TOKEN" not in {
+        variable.name for variable in provider.registry.variables
+    }
+    generated = resolve_hook_selectors(
+        repo_root=ROOT, selection=selected, generated=True, unit="runtime"
+    )
+    assert set(provider.generated_key_names) <= set(generated)
+    assert resolve_generated_secret_selectors(
+        repo_root=ROOT, selection=selected, unit="runtime"
+    ) == ("PLZK_IDENTITY_CLIENT_SECRET",)
 
 
 def test_shared_secret_projection_mounts_credentials_only_into_their_consumers(tmp_path):
