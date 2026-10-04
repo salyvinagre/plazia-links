@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import HTTPException, Request, Security
+from fastapi import Header, HTTPException, Request, Security
 from fastapi.security import OAuth2AuthorizationCodeBearer
 
 from app.contexts.access.contracts import (
@@ -19,10 +19,10 @@ oauth = OAuth2AuthorizationCodeBearer(
     authorizationUrl=_config.authorization_endpoint,
     tokenUrl=_config.token_endpoint,
     scopes={
-        "links:read": "Read links and pools",
-        "links:create": "Create links and reserve pools",
+        "links:read": "Read links, pools and pixels",
+        "links:create": "Create links, pools and pixels",
         "links:update": "Activate and edit links",
-        "links:delete": "Delete links",
+        "links:delete": "Delete links, pools and pixels",
     },
     auto_error=False,
 )
@@ -80,6 +80,21 @@ async def api_principal(
         raise HTTPException(
             503, "identity_unavailable", headers={"Cache-Control": "no-store"}
         ) from exc
+
+
+KeyHeader = Annotated[
+    str,
+    Header(
+        alias="Idempotency-Key",
+        min_length=1,
+        max_length=128,
+        description="Required mutation key. Retries replay the original result.",
+    ),
+]
+Reader = Annotated[Principal, Security(api_principal, scopes=["links:read"])]
+Creator = Annotated[Principal, Security(api_principal, scopes=["links:create"])]
+Updater = Annotated[Principal, Security(api_principal, scopes=["links:update"])]
+Deleter = Annotated[Principal, Security(api_principal, scopes=["links:delete"])]
 
 
 async def browser_session(request: Request) -> BrowserSession:

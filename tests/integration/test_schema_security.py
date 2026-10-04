@@ -13,6 +13,44 @@ from tests.integration.test_postgres_links import postgres_urls as postgres_urls
     ("change", "restore", "runtime", "reason"),
     [
         (
+            "GRANT UPDATE(requests) ON links.pixels TO links_app",
+            "REVOKE UPDATE(requests) ON links.pixels FROM links_app",
+            "app",
+            "role separation",
+        ),
+        (
+            "GRANT INSERT(requests) ON links.pixels TO links_app",
+            "REVOKE INSERT(requests) ON links.pixels FROM links_app",
+            "app",
+            "role separation",
+        ),
+        (
+            "GRANT SELECT ON links.pixels TO links_worker",
+            "REVOKE SELECT ON links.pixels FROM links_worker",
+            "worker",
+            "role separation",
+        ),
+        (
+            "GRANT EXECUTE ON FUNCTION links.record_pixel_request(uuid,text) TO links_worker",
+            "REVOKE EXECUTE ON FUNCTION links.record_pixel_request(uuid,text) FROM links_worker",
+            "worker",
+            "pixel grants",
+        ),
+        (
+            "REVOKE INSERT(reference) ON links.pixels FROM links_app",
+            "GRANT INSERT(reference) ON links.pixels TO links_app",
+            "app",
+            "pixel grants",
+        ),
+        (
+            "ALTER POLICY pixels_tenant_scope ON links.pixels USING(true) WITH CHECK(true)",
+            "ALTER POLICY pixels_tenant_scope ON links.pixels "
+            "USING(organization_id=platform.current_organization_id()) "
+            "WITH CHECK(organization_id=platform.current_organization_id())",
+            "app",
+            "policies",
+        ),
+        (
             "GRANT UPDATE(name) ON access.organizations TO links_app",
             "REVOKE UPDATE(name) ON access.organizations FROM links_app",
             "app",
@@ -247,7 +285,7 @@ from tests.integration.test_postgres_links import postgres_urls as postgres_urls
 def test_runtime_rejects_security_drift(postgres_urls, change, restore, runtime, reason):
     url = postgres_urls.app if runtime == "app" else postgres_urls.worker
     authority = SchemaAuthority(url)
-    assert authority.check(runtime=runtime).revision == "4"
+    assert authority.check(runtime=runtime).revision == "5"
     with Connection.connect(postgres_urls.owner, autocommit=True) as owner:
         roles = PostgresRoles.read(owner, owner="salyvinagre/plazia-links")
         for key in ("links_app", "links_worker"):
@@ -263,4 +301,4 @@ def test_runtime_rejects_security_drift(postgres_urls, change, restore, runtime,
                 authority.check(runtime=runtime)
         finally:
             owner.execute(sql.SQL(restore).format(sql.Identifier(name)))
-    assert authority.check(runtime=runtime).revision == "4"
+    assert authority.check(runtime=runtime).revision == "5"

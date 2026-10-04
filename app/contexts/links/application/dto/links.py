@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Self
 
+from app.contexts.links.application.dto.pixels import PixelDto
 from app.contexts.links.application.dto.statistics import StatisticsDto
 from app.kernel.ids import LinkId, PoolId
 
@@ -90,5 +91,5 @@ class PublicLinkDto:
 
 @dataclass(frozen=True, slots=True)
 class CommandResultDto:
-    value: LinkDto | PoolDto | None
+    value: LinkDto | PoolDto | PixelDto | None
     replayed: bool = False

@@ -1,13 +1,6 @@
 {% extends "identity/base.html" %}
 {% block title %}Links · Plazia Links{% endblock %}
-{% macro action_trigger(label) %}
-<summary class="btn btn-ghost btn-square btn-sm text-muted hover:bg-primary/10 hover:text-primary"
-         aria-label="{{ label }}">
-  <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/>
-  </svg>
-</summary>
-{% endmacro %}
+{% from "identity/macros.html" import action_trigger %}
 {% macro statistics_item(value) %}
 <li><details>
   <summary class="min-h-11 content-center justify-between hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary">Statistics</summary>
@@ -155,7 +148,7 @@
     </label>
     <span id="selection-count" class="ml-auto whitespace-nowrap text-xs text-muted" aria-live="polite">0 selected</span>
     <div class="flex w-full items-center justify-end gap-3 sm:w-auto">
-      <button class="btn btn-ghost" type="button" data-cancel-selection>Cancel selection</button>
+      <button class="btn btn-ghost hover:bg-primary/10 hover:text-primary" type="button" data-cancel-selection>Cancel selection</button>
       <button class="btn btn-ghost border border-base-300 text-danger hover:bg-danger/10"
               type="submit" data-delete-selection disabled>Delete selected</button>
     </div>
@@ -213,6 +206,7 @@
                 {{ action_trigger('Actions for ' ~ (link.title or link.short_code)) }}
                 {% if 'links:delete' in session.principal.scopes %}
                 <form id="delete-form-{{ link.id }}" hidden hx-disabled-elt="#delete-action-{{ link.id }}"
+                      data-confirm="Delete this link? Its subscriptions and queued notifications will also be removed."
                       method="post" action="/dashboard/links/{{ link.id }}/delete{% if pool_id %}?pool_id={{ pool_id|urlencode }}{% if pools.page > 1 %}&amp;pool_page={{ pools.page }}{% endif %}{% elif pools.page > 1 %}?pool_page={{ pools.page }}{% endif %}">
                   <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
                   <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
@@ -260,7 +254,7 @@
   {% else %}
   <div class="card border border-base-300 bg-base-100 px-7 py-7 text-center sm:px-6 sm:py-12">
     <h2>{{ 'No links in this pool' if pool_id else 'No links yet' }}</h2>
-    <p class="text-muted">Reserve a pool or create a link to get started.</p>
+    {% if 'links:create' in session.principal.scopes %}<p class="text-muted">Reserve a pool or create a link to get started.</p>{% endif %}
   </div>
   {% endif %}
   <nav class="flex items-center justify-center gap-6 pt-6 text-sm text-muted" aria-label="Pagination">

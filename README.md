@@ -1,6 +1,6 @@
 # Plazia Links
 
-Reserve organization-owned short links, share them before a destination exists, and notify subscribers when the owner activates them.
+Reserve organization-owned short links, share them before a destination exists, and notify subscribers when the owner activates them. Create independent tracking pixels for emails sent by your applications.
 
 Requires Python 3.14, uv 0.12.21, PostgreSQL 18, Redis, an Identity OAuth client and the portfolio OpenFGA organization model. Shared Python packages are consumed from the sibling plazia/packages checkout. Review the generated .env.example and supply process-owned secrets and provider bindings; all application selectors start with PLZK_.
 
@@ -72,6 +72,10 @@ Company brand book, edition 1.3; see `app/static/brand/README.md` for asset prov
 | DELETE /api/v1/links/{link_id} | links:delete |
 | DELETE /api/v1/links?ids=lnk_…&ids=lnk_… | links:delete |
 | DELETE /api/v1/links?all=true[&pool_id=lpl_…] | links:delete |
+| POST /api/v1/pixels | links:create |
+| GET /api/v1/pixels | links:read |
+| GET /api/v1/pixels/{pixel_id} | links:read |
+| DELETE /api/v1/pixels/{pixel_id} | links:delete |
 
 Each management request also requires OpenFGA organization authority and an active local binding. Pool ownership comes exclusively from the verified org claim. Pool creation returns its id, name and size; its Location header identifies the canonical pool read. List its links with the pool_id filter. PATCH destination_url activates a reserved link. POST /{code}/subscriptions accepts a form email. Disabled links return 410, unknown links 404, reserved links a waiting page, and active links 307.
 
@@ -112,7 +116,40 @@ Unavailable statistics return 503 with `statistics_unavailable`, rather than
 inventing zeros. Statistics reads require the same organization authority and
 `links:read` scope as other management reads; no caller-supplied tenant is accepted.
 
-This is a fresh-schema cutover: no customer-data upgrade is supported. Removed inherited marketing/authentication/workspace routes have no compatibility mode. See [architecture](docs/ARCHITECTURE.md), [configuration and deployment](docs/DEPLOYMENT.md), [Identity contract](docs/IDENTITY.md), [implementation packet](.codex/specs/link-pools/spec.md), and [validation evidence](.codex/specs/link-pools/validation.md).
+Email pixels have their own lifecycle under `/api/v1/pixels`. POST accepts an
+optional `reference` of up to 200 characters and requires `Idempotency-Key`.
+Create one per delivery and keep its canonical `lpx_` ID associated with the
+message in the sending application. Use an opaque delivery reference instead of
+a recipient address. Creation returns `id`, `reference`, `image_url` and
+`created_at`; it replays the original result without changing statistics.
+GET collection/item reads add `statistics.requests`, `first_requested_at`,
+`last_requested_at` and `as_of`. Timestamps are UTC and request times are null
+before any capture. Collection reads use the same `limit`, opaque `token` and
+HAL navigation as links. DELETE requires a key and removes the pixel and its
+aggregate; the public URL then returns 404. Authority uses the existing
+`links:read/create/delete` capabilities and verified organization binding.
+
+Embed the returned URL in the HTML part of an email:
+
+```html
+<img src="https://links.liberalia.net/pixels/PUBLIC_CODE.gif" width="1" height="1" alt="">
+```
+
+The public image route is a delivery surface alongside short URLs, outside the
+versioned management API. It serves a transparent GIF with `no-store`, without
+redirecting or setting cookies. HEAD resolves the image but does not count.
+Capture is atomic and best effort, with a 250 ms budget; recording failures
+preserve image delivery. Request counts include repeated or automated fetches.
+Image fetching does not establish a human read: clients may prefetch or block
+images, and forwarded emails keep their original pixel. Links stores no visitor
+IP, user agent or recipient address in pixel data. Open the Pixels dashboard,
+create a pixel, expand **Embed code** and choose **Copy embed code**. Its card
+shows counts/timestamps without loading the image itself. The three-dot menu
+deletes a pixel after confirmation. Activation notifications continue to use
+their existing email flow.
+
+This is a fresh-schema cutover from inherited storage; verified Flyway versions
+upgrade through forward migrations. Removed inherited marketing/authentication/workspace routes have no compatibility mode. See [architecture](docs/ARCHITECTURE.md), [configuration and deployment](docs/DEPLOYMENT.md), [Identity contract](docs/IDENTITY.md), [implementation packet](.codex/specs/link-pools/spec.md), and [validation evidence](.codex/specs/link-pools/validation.md).
 
 Configuration and releases use shared Plazia tooling. Shared activation remains pending Identity deployment and worker qualification; see
 [deployment ownership and admission](docs/DEPLOYMENT.md). Owner commands require

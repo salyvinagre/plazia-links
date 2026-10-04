@@ -23,6 +23,7 @@ from app.contexts.links.application.dto.links import (
     PoolDto,
     PublicLinkDto,
 )
+from app.contexts.links.application.dto.pixels import PixelDto
 from app.contexts.links.application.dto.statistics import StatisticsDto, VisitOutcome
 from app.contexts.links.application.errors.statistics import StatisticsUnavailableError
 from app.contexts.links.domain.link import (
@@ -34,7 +35,7 @@ from app.contexts.links.domain.link import (
     LinkPatch,
     PublicCode,
 )
-from app.kernel.ids import LinkId, PoolId
+from app.kernel.ids import LinkId, PixelId, PoolId
 
 _CODE_CONSTRAINT = "uq_links_short_code"
 _LINK_ID_CONSTRAINT = "links_pkey"
@@ -124,6 +125,9 @@ class PostgresLinkRepository:
             return CommandResultDto(None, True)
         values = dict(row[1]["value"])
         values["created_at"] = datetime.fromisoformat(values["created_at"])
+        if action == "CreatePixelCommand":
+            values["id"] = PixelId(values["id"])
+            return CommandResultDto(PixelDto(**values), True)
         if action in {"ReservePoolCommand", "RenamePoolCommand"}:
             values["id"] = PoolId(values["id"])
             return CommandResultDto(PoolDto(**values), True)
@@ -133,7 +137,7 @@ class PostgresLinkRepository:
         return CommandResultDto(LinkDto(**values), True)
 
     async def remember(
-        self, actor: Principal, action: str, key: str, result: LinkDto | PoolDto | None
+        self, actor: Principal, action: str, key: str, result: LinkDto | PoolDto | PixelDto | None
     ) -> None:
         snapshot = {
             "value": json.loads(json.dumps(asdict(result), default=str)) if result else None
@@ -480,7 +484,7 @@ class PostgresLinkRepository:
         self,
         organization_id: OrganizationId,
         action: str,
-        resource_ids: tuple[LinkId | PoolId, ...],
+        resource_ids: tuple[LinkId | PoolId | PixelId, ...],
         context: Invocation,
     ) -> None:
         actor = context.actor_context
@@ -507,7 +511,14 @@ class PostgresLinkRepository:
                 operation.traceparent,
                 operation.tracestate,
                 operation.idempotency_key,
-                ["link" if isinstance(id, LinkId) else "pool" for id in resource_ids],
+                [
+                    "link"
+                    if isinstance(id, LinkId)
+                    else "pixel"
+                    if isinstance(id, PixelId)
+                    else "pool"
+                    for id in resource_ids
+                ],
                 [id.uuid for id in resource_ids],
             ),
         )

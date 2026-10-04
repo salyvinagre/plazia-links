@@ -17,9 +17,11 @@ from app.contexts.links.application.dto.links import (
     PoolDto,
     PublicLinkDto,
 )
+from app.contexts.links.application.dto.pixels import PixelDto, PixelReadDto, PixelStatisticsDto
 from app.contexts.links.application.dto.statistics import StatisticsDto
 from app.contexts.links.domain.link import LinkConflictError, LinkDraft, LinkNotFoundError
-from app.kernel.ids import LinkId, PoolId
+from app.contexts.links.domain.pixel import PixelConflictError, PixelNotFoundError
+from app.kernel.ids import LinkId, PixelId, PoolId
 from app.platform.database import Scope
 from tests.identity_support import ORG_A, ORG_B
 
@@ -40,6 +42,7 @@ class MemoryRepository:
         self.public_locked = False
         self.receipts = {}
         self.visits = {}
+        self.pixel_rows = {}
         self.tracked_from = datetime.now(UTC)
 
     async def record_visit(self, link_id, code, outcome):
@@ -228,23 +231,94 @@ class MemoryRepository:
         self.audits.extend((organization_id, action, id, context) for id in resource_ids)
 
 
+class MemoryPixelRepository:
+    def __init__(self, repository):
+        self.repository = repository
+
+    async def create(self, organization_id, draft, code):
+        if any(row.code == code for _, row in self.repository.pixel_rows.values()):
+            raise PixelConflictError
+        row = PixelDto(PixelId.new(), code, draft.reference, datetime.now(UTC))
+        self.repository.pixel_rows[row.id] = (
+            organization_id,
+            PixelReadDto(
+                id=row.id,
+                code=row.code,
+                reference=row.reference,
+                created_at=row.created_at,
+                statistics=PixelStatisticsDto(0, None, None, datetime.now(UTC)),
+            ),
+        )
+        return row
+
+    async def get(self, organization_id, id):
+        entry = self.repository.pixel_rows.get(id)
+        if entry is None or entry[0] != organization_id:
+            raise PixelNotFoundError
+        row = entry[1]
+        return replace(row, statistics=replace(row.statistics, as_of=datetime.now(UTC)))
+
+    async def list(self, organization_id, page, page_size):
+        rows = [
+            await self.get(organization_id, id)
+            for id, (org, _) in self.repository.pixel_rows.items()
+            if org == organization_id
+        ]
+        rows.sort(key=lambda row: (row.created_at, row.id), reverse=True)
+        return PageDto(
+            tuple(rows[(page - 1) * page_size : page * page_size]), len(rows), page, page_size
+        )
+
+    async def delete(self, organization_id, id):
+        await self.get(organization_id, id)
+        del self.repository.pixel_rows[id]
+
+    async def public(self, code):
+        for id, (_, row) in self.repository.pixel_rows.items():
+            if row.code == code:
+                return id
+        raise PixelNotFoundError
+
+    async def record(self, id, code):
+        entry = self.repository.pixel_rows.get(id)
+        if entry is None or entry[1].code != code:
+            return
+        org, row = entry
+        now = datetime.now(UTC)
+        self.repository.pixel_rows[id] = (
+            org,
+            replace(
+                row,
+                statistics=PixelStatisticsDto(
+                    row.statistics.requests + 1, row.statistics.first_requested_at or now, now, now
+                ),
+            ),
+        )
+
+
 class MemoryDatabase:
     def __init__(self, repository):
         self.repository = repository
+        self.pixels = MemoryPixelRepository(repository)
         self.scope_count = 0
         self.commit_failure = False
 
     @asynccontextmanager
     async def scope(self, organization_id=None, *, readonly=True):
         self.scope_count += 1
-        yield Scope(self.repository, self.repository, OrganizationAccess(self.repository))
+        yield Scope(
+            self.repository, self.repository, OrganizationAccess(self.repository), self.pixels
+        )
 
 
 class MemoryUow(BaseCommandUnitOfWork):
     def __init__(self, database):
         super().__init__(
             scope=Scope(
-                database.repository, database.repository, OrganizationAccess(database.repository)
+                database.repository,
+                database.repository,
+                OrganizationAccess(database.repository),
+                database.pixels,
             )
         )
         self.database = database

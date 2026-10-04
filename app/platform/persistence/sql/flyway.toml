@@ -14,7 +14,7 @@ ignoreMigrationPatterns = []
 validateMigrationNaming = true
 validateOnMigrate = true
 cleanDisabled = true
-target = "4"
+target = "5"
 
 [environments.default]
 schemas = ["links_migrations"]

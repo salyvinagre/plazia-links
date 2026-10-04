@@ -2,10 +2,9 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Path, Query, Request, Response, Security
+from fastapi import APIRouter, Path, Query, Request, Response
 from shared_http.fastapi import ApiErrorResponse, LinkedResponse, NavigationFacts, linked
 
-from app.contexts.access.contracts import Principal
 from app.contexts.links.contracts import (
     CreateLinkCommand,
     DeleteLinkCommand,
@@ -36,7 +35,7 @@ from app.interfaces.api.schemas.links import (
     StatisticsResponse,
     UpdateLinkRequest,
 )
-from app.interfaces.authentication import api_principal, runtime
+from app.interfaces.authentication import Creator, Deleter, KeyHeader, Reader, Updater, runtime
 from app.interfaces.dispatch import mutate, queries, request_context
 from app.kernel.api import ApiContract
 from app.kernel.ids import LinkId, PoolId
@@ -48,19 +47,6 @@ router = APIRouter(
         status: {"model": ApiErrorResponse} for status in (400, 401, 403, 404, 409, 422, 503)
     },
 )
-KeyHeader = Annotated[
-    str,
-    Header(
-        alias="Idempotency-Key",
-        min_length=1,
-        max_length=128,
-        description="Required mutation key. Retries replay the original result.",
-    ),
-]
-Reader = Annotated[Principal, Security(api_principal, scopes=["links:read"])]
-Creator = Annotated[Principal, Security(api_principal, scopes=["links:create"])]
-Updater = Annotated[Principal, Security(api_principal, scopes=["links:update"])]
-Deleter = Annotated[Principal, Security(api_principal, scopes=["links:delete"])]
 
 
 @router.get("/links", operation_id="list_links")

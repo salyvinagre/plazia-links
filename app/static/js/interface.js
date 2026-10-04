@@ -10,7 +10,7 @@ function updateSelection(active) {
       item.checked = false;
     }
   }
-  for (const item of items) item.disabled = all.checked;
+  for (const item of items) item.disabled = all?.checked ?? false;
   const count = all?.checked ? Number(all.dataset.total) : items.filter((item) => item.checked).length;
   if (all) all.indeterminate = !all.checked && count > 0;
   const status = document.getElementById("selection-count");
@@ -94,3 +94,21 @@ for (const event of ["htmx:responseError", "htmx:sendError", "htmx:timeout"]) {
     if (alert) alert.hidden = false;
   });
 }
+
+// Copy the rendered embed markup; never load the pixel in the dashboard itself.
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-copy]");
+  if (!button) return;
+  const field = document.getElementById(button.dataset.copy);
+  const status = field.closest("article").querySelector("[data-copy-status]");
+  status.hidden = false;
+  try {
+    await navigator.clipboard.writeText(field.value);
+    status.textContent = "Copied";
+  } catch {
+    field.closest("details").open = true;
+    field.focus();
+    field.select();
+    status.textContent = "Select and copy the embed code.";
+  }
+});

@@ -23,7 +23,9 @@ from app.contexts.access.adapters.repositories.sql.postgres import (
 from app.contexts.access.application.policies.organization import OrganizationAccess
 from app.contexts.access.application.ports.organizations import OrganizationRepository
 from app.contexts.access.contracts import OrganizationAccessPort
+from app.contexts.links.adapters.repositories.sql.pixels import PostgresPixelRepository
 from app.contexts.links.adapters.repositories.sql.postgres import PostgresLinkRepository
+from app.contexts.links.application.ports.pixels import PixelRepository
 from app.contexts.links.application.ports.repository import LinkRepository
 
 _POSTGRES_CONFIGURATION = PostgresSessionConfiguration(
@@ -39,6 +41,7 @@ class Scope:
     links: LinkRepository
     organizations: OrganizationRepository
     access: OrganizationAccessPort
+    pixels: PixelRepository
 
 
 class PostgresDatabase:
@@ -90,6 +93,7 @@ class PostgresDatabase:
                     links=PostgresLinkRepository(connection),
                     organizations=organizations,
                     access=OrganizationAccess(organizations),
+                    pixels=PostgresPixelRepository(connection),
                 )
 
     async def close(self) -> None:

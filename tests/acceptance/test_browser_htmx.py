@@ -175,3 +175,76 @@ async def test_selection_form_deletes_only_checked_links_and_keeps_pool(
     assert "1 link in this pool" in after.text
     assert all(f"/{row['short_code']}" not in after.text for row in rows[:2])
     assert f"/{rows[2]['short_code']}" in after.text
+
+
+async def test_pixel_form_is_csrf_protected_and_preserves_invalid_input(
+    identity_client, issuer, ephemeral
+):
+    await sign_in(identity_client)
+    state = json.loads(
+        await ephemeral.get("session", identity_client.cookies.get("plazia_links_session"))
+    )
+    form = {
+        "csrf_token": state["csrf_token"],
+        "idempotency_key": "pixel-form",
+        "reference": "delivery-1",
+    }
+    assert (
+        await identity_client.post("/dashboard/pixels", data=form | {"csrf_token": "wrong"})
+    ).status_code == 403
+    invalid = await identity_client.post(
+        "/dashboard/pixels", data=form | {"reference": "x" * 201}, headers={"HX-Request": "true"}
+    )
+    assert invalid.status_code == 422 and invalid.headers["HX-Push-Url"] == "false"
+    assert 'value="pixel-form"' in invalid.text and 'value="' + "x" * 201 + '"' in invalid.text
+    assert 'aria-invalid="true"' in invalid.text
+    assert 'aria-describedby="reference-hint reference-error"' in invalid.text
+    assert (await identity_client.post("/dashboard/pixels", data=form)).status_code == 303
+    listed = (await identity_client.get("/api/v1/pixels", headers=bearer(issuer))).json()["items"]
+    pixel = listed[0]
+    page = await identity_client.get("/dashboard/pixels")
+    assert page.status_code == 200 and "delivery-1" in page.text
+    assert '&lt;img src="' in page.text and '<img src="' + pixel["image_url"] not in page.text
+    assert pixel["statistics"]["requests"] == 0
+    path = "/dashboard/pixels/" + pixel["id"] + "/delete"
+    assert (
+        await identity_client.post(
+            path, data={"csrf_token": "wrong", "idempotency_key": "pixel-delete"}
+        )
+    ).status_code == 403
+    assert (
+        await identity_client.post(
+            path, data={"csrf_token": state["csrf_token"], "idempotency_key": "pixel-delete"}
+        )
+    ).status_code == 303
+    assert (await identity_client.get(pixel["image_url"])).status_code == 404
+
+
+async def test_pixel_deletion_preserves_pagination_and_returns_from_an_empty_page(
+    identity_client, issuer, ephemeral
+):
+    await sign_in(identity_client)
+    state = json.loads(
+        await ephemeral.get("session", identity_client.cookies.get("plazia_links_session"))
+    )
+    pixels = [
+        (await identity_client.post("/api/v1/pixels", headers=bearer(issuer), json={})).json()
+        for _ in range(22)
+    ]
+    path = "/dashboard/pixels?page=2"
+    page = await identity_client.get(path)
+    for pixel in pixels[:2]:
+        code = pixel["image_url"].rsplit("/", 1)[1][:-4]
+        assert "Pixel " + code[:8] in page.text
+        action = f"/dashboard/pixels/{pixel['id']}/delete?page=2"
+        assert f'action="{action}"' in page.text
+        deleted = await identity_client.post(
+            action, data={"csrf_token": state["csrf_token"], "idempotency_key": pixel["id"]}
+        )
+        assert deleted.status_code == 303 and deleted.headers["location"] == path
+        page = await identity_client.get(path)
+    assert page.status_code == 303 and page.headers["location"] == "/dashboard/pixels"
+    assert (await identity_client.get("/dashboard/pixels")).status_code == 200
+    assert (await identity_client.get("/dashboard/pixels?page=999")).headers["location"] == (
+        "/dashboard/pixels"
+    )

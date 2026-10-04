@@ -13,8 +13,11 @@ from shared_kernel.contacts import NormalizedEmail
 from app.contexts.links.contracts import (
     VISIT_FAILURE,
     Destination,
+    PixelCode,
+    RecordPixelRequestCommand,
     RecordVisitCommand,
     ResolveLinkQuery,
+    ResolvePixelQuery,
     SubscribeLinkCommand,
 )
 from app.interfaces.api.schemas.links import SubscriptionForm
@@ -24,6 +27,28 @@ from app.platform.logging import get_logger
 
 router = APIRouter(include_in_schema=False)
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
+
+
+class PublicResponses:
+    # GIF89a, 1×1 transparent image; no external asset or runtime generation.
+    PIXEL = bytes.fromhex(
+        "47494638396101000100800000000000ffffff21f90401000000002c00000000010001000002024401003b"
+    )
+
+    @staticmethod
+    async def record(
+        request: Request, command: RecordVisitCommand | RecordPixelRequestCommand
+    ) -> None:
+        try:
+            async with asyncio.timeout(0.25):
+                await commands(request).dispatch(command, context=request_context(request))
+        except Exception as error:
+            get_logger(__name__).warning(
+                "Public request recording failed", extra={"error_type": type(error).__name__}
+            )
+            telemetry = getattr(request.app.state, "telemetry", None)
+            if telemetry is not None:
+                telemetry.metrics.emit(VISIT_FAILURE, value=1)
 
 
 def public_host(request: Request) -> None:
@@ -53,23 +78,31 @@ async def resolve(short_code: str, request: Request) -> Response:
             link.destination_url, status_code=307, headers={"Cache-Control": "no-store"}
         )
     )
+    await PublicResponses.record(
+        request,
+        RecordVisitCommand(
+            link.id, short_code, "waiting" if link.destination_url is None else "redirect"
+        ),
+    )
+    return response
+
+
+@router.api_route("/pixels/{code}.gif", methods=["GET", "HEAD"])
+async def pixel(code: str, request: Request) -> Response:
+    """Deliver an image without visitor identifiers; HEAD never records a fetch."""
+    public_host(request)
     try:
-        async with asyncio.timeout(0.25):
-            await commands(request).dispatch(
-                RecordVisitCommand(
-                    link.id,
-                    short_code,
-                    "waiting" if link.destination_url is None else "redirect",
-                ),
-                context=request_context(request),
-            )
-    except Exception as error:
-        get_logger(__name__).warning(
-            "Visit recording failed", extra={"error_type": type(error).__name__}
-        )
-        telemetry = getattr(request.app.state, "telemetry", None)
-        if telemetry is not None:
-            telemetry.metrics.emit(VISIT_FAILURE, value=1)
+        PixelCode(code)
+    except ValueError as error:
+        raise HTTPException(404, "pixel_not_found") from error
+    id = await queries(request).ask(ResolvePixelQuery(code), context=request_context(request))
+    response = Response(
+        PublicResponses.PIXEL if request.method == "GET" else b"",
+        media_type="image/gif",
+        headers={"Cache-Control": "no-store", "Content-Length": str(len(PublicResponses.PIXEL))},
+    )
+    if request.method == "GET":
+        await PublicResponses.record(request, RecordPixelRequestCommand(id, code))
     return response
 
 

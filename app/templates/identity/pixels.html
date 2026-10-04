@@ -1,0 +1,90 @@
+{% extends "identity/base.html" %}
+{% from "identity/macros.html" import action_trigger %}
+{% block title %}Pixels · Plazia Links{% endblock %}
+{% block content %}
+<div class="mb-6 sm:mb-8">
+  <p class="eyebrow">Email tracking</p>
+  <h1>Pixels</h1>
+  <p class="mb-0 text-muted">Embed one pixel per email delivery to observe image requests.</p>
+</div>
+{% if 'links:create' in session.principal.scopes %}
+<section class="card mb-8 gap-4 border border-base-300 bg-base-100 p-5 sm:p-7" aria-labelledby="create-heading">
+  <h2 class="mb-0" id="create-heading">Create a pixel</h2>
+  {% if error %}<p id="reference-error" class="alert border border-base-300 bg-base-100 text-sm" role="alert">{{ error }}</p>{% endif %}
+  <form class="grid grid-cols-1 items-end gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr)_auto]" method="post" action="/dashboard/pixels" hx-disabled-elt="find button">
+    <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+    <input type="hidden" name="idempotency_key" value="{{ key or creation_key() }}">
+    <div class="min-w-0 flex-1">
+      <label for="reference">Delivery reference <span>(optional)</span></label>
+      <input class="input w-full placeholder:text-muted placeholder:opacity-100" id="reference" name="reference"
+             value="{{ reference or '' }}" maxlength="200" placeholder="delivery-1842"
+             aria-describedby="reference-hint{% if error %} reference-error{% endif %}" {% if error %}aria-invalid="true"{% endif %}>
+    </div>
+    <button class="btn btn-primary row-start-3 mt-2 sm:col-start-2 sm:row-start-1 sm:mt-0" type="submit">Create pixel</button>
+    <p class="hint col-span-full row-start-2 mt-0" id="reference-hint">Use a message reference, without a recipient’s email address.</p>
+  </form>
+</section>
+{% endif %}
+<section aria-labelledby="pixels-heading">
+  <div class="mb-4 flex items-center gap-3">
+    <h2 class="mb-0" id="pixels-heading">Your pixels</h2>
+    <span class="badge badge-ghost badge-sm text-muted">{{ pixels.total }}</span>
+  </div>
+  <div class="grid min-w-0 gap-4 lg:grid-cols-2">
+    {% for pixel in pixels.items %}
+    {% set label = pixel.reference or 'Pixel ' ~ pixel.code[:8] %}
+    <article class="card min-w-0 gap-4 border border-base-300 bg-base-100 p-5 sm:p-6" aria-labelledby="pixel-{{ pixel.id }}">
+      <div class="flex min-w-0 items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h3 class="mb-1 font-semibold [overflow-wrap:anywhere]" id="pixel-{{ pixel.id }}">{{ label }}</h3>
+          <p class="mb-0 text-sm text-muted">Created {{ pixel.created_at.strftime('%d %b %Y, %H:%M UTC') }}</p>
+        </div>
+        {% if 'links:delete' in session.principal.scopes %}
+        <details class="dropdown dropdown-end shrink-0" name="resource-actions">
+          {{ action_trigger('Pixel actions for ' ~ label) }}
+          <ul class="dropdown-content menu menu-md z-20 w-56 rounded-box border border-base-300 bg-base-100 shadow-lg">
+            <li>
+              <button class="min-h-11 content-center text-danger hover:bg-danger/10 hover:text-danger focus:bg-danger/10 focus:text-danger"
+                      id="delete-pixel-action-{{ pixel.id }}" type="submit" form="delete-pixel-{{ pixel.id }}">Delete pixel</button>
+            </li>
+          </ul>
+          <form id="delete-pixel-{{ pixel.id }}" hidden method="post"
+                action="/dashboard/pixels/{{ pixel.id }}/delete{% if pixels.page > 1 %}?page={{ pixels.page }}{% endif %}"
+                hx-disabled-elt="#delete-pixel-action-{{ pixel.id }}"
+                data-confirm="Delete this pixel? Its image URL and statistics will be removed.">
+            <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+            <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
+          </form>
+        </details>
+        {% endif %}
+      </div>
+      <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+        <dt class="text-muted">Requests</dt><dd class="text-right">{{ pixel.statistics.requests }}</dd>
+        <dt class="text-muted">First request</dt><dd class="text-right">{{ pixel.statistics.first_requested_at.strftime('%d %b %Y, %H:%M UTC') if pixel.statistics.first_requested_at else '—' }}</dd>
+        <dt class="text-muted">Last request</dt><dd class="text-right">{{ pixel.statistics.last_requested_at.strftime('%d %b %Y, %H:%M UTC') if pixel.statistics.last_requested_at else '—' }}</dd>
+      </dl>
+      <details class="min-w-0">
+        <summary class="cursor-pointer text-sm hover:text-primary">Embed code</summary>
+        <label class="sr-only" for="embed-{{ pixel.id }}">HTML image for this email delivery</label>
+        <textarea class="textarea mt-3 w-full text-sm" id="embed-{{ pixel.id }}" rows="3" readonly spellcheck="false">&lt;img src="{{ public_base }}/pixels/{{ pixel.code }}.gif" width="1" height="1" alt=""&gt;</textarea>
+        <button class="btn btn-ghost btn-sm mt-3 hover:bg-primary/10 hover:text-primary"
+                type="button" data-copy="embed-{{ pixel.id }}">Copy embed code</button>
+      </details>
+      <p class="mb-0 text-sm text-muted" role="status" data-copy-status hidden></p>
+    </article>
+    {% else %}
+    <p class="col-span-full py-6 text-sm text-muted">No pixels yet.{% if 'links:create' in session.principal.scopes %} Create one to embed in an email.{% endif %}</p>
+    {% endfor %}
+  </div>
+  {% if pixels.items %}
+  <p class="mt-5 text-sm text-muted">Image requests are open signals. Email clients may load images automatically or block them.</p>
+  {% endif %}
+  {% if pixels.page > 1 or pixels.has_next %}
+  <nav class="mt-5 flex flex-wrap items-center gap-4 text-sm text-muted" aria-label="Pixel pagination">
+    {% if pixels.page > 1 %}<a class="inline-flex min-h-11 items-center" href="?page={{ pixels.page - 1 }}">Previous</a>{% endif %}
+    <span>Page {{ pixels.page }}</span>
+    {% if pixels.has_next %}<a class="inline-flex min-h-11 items-center" href="?page={{ pixels.page + 1 }}">Next</a>{% endif %}
+  </nav>
+  {% endif %}
+</section>
+{% endblock %}

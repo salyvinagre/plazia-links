@@ -64,10 +64,10 @@ make migrate runs read-only admission, literal Flyway migrate (with validation o
 
 Operator commands use the shared plazia-cli parser; `uv run --locked plazia-links --help` works without runtime secrets or network access. Owner CQRS assembly and database lifetime live in platform composition. Only an owner credential can bind/disable organizations. Supply PLZK_IDENTITY_ISSUER and PLZK_SCHEMA_DATABASE_URL to the operator command; never run the API with that credential. disable-organization revokes existing management sessions on their next request without affecting public destinations.
 
-Request statistics and subscriber counts require Flyway V4. Run the same
+This application revision requires Flyway V5. Run the same
 owner-scoped `make migrate` before starting this application revision against a
-V1/V2/V3 database. Admission accepts verified packaged history prefixes for
-upgrade; runtime requires V4.
+V1/V2/V3/V4 database. Admission accepts verified packaged history prefixes for
+upgrade; runtime requires V5.
 V2 adds pool UPDATE/DELETE privileges for the API role and cascades
 pool deletion to links. The worker retains no pool-management access. No
 conversion from inherited ORM storage is provided.
@@ -80,7 +80,13 @@ is passive: a public response proceeds after a bounded capture attempt, and a
 private-free failure counter signals gaps. No worker or broker is introduced.
 V4 lets the API count retained subscriptions by granting SELECT on only their
 organization/link IDs. Tenant RLS remains enforced; subscriber email stays private.
-Applied V1/V2/V3 SQL remains unchanged. Schema admission does not establish
+V5 adds independent tenant-owned pixels with aggregate counters in the same
+row, opaque public codes and narrow resolution/capture functions. The API can
+read and delete pixels and insert only definition columns; it cannot seed or
+update counters directly. The worker has no pixel table/function access.
+No extra environment settings, process or infrastructure provider is needed;
+the configured public origin serves stable pixel URLs in both runtime modes.
+Applied V1/V2/V3/V4 SQL remains unchanged. Schema admission does not establish
 mixed-version rollout, binary compatibility or recovery safety; stateful owner
 qualification remains pending successful Identity deployment.
 

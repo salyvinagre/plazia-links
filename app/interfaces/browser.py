@@ -20,13 +20,16 @@ from app.contexts.access.contracts import (
 )
 from app.contexts.links.contracts import (
     CreateLinkCommand,
+    CreatePixelCommand,
     DeleteLinkCommand,
+    DeletePixelCommand,
     DeletePoolCommand,
     GetLinkQuery,
     GetPoolQuery,
     GetStatisticsQuery,
     LinkConflictError,
     ListLinksQuery,
+    ListPixelsQuery,
     ListPoolsQuery,
     RenamePoolCommand,
     ReservePoolCommand,
@@ -39,9 +42,10 @@ from app.interfaces.api.schemas.links import (
     ReservePoolRequest,
     UpdateLinkRequest,
 )
+from app.interfaces.api.schemas.pixels import CreatePixelRequest
 from app.interfaces.authentication import browser_session, csrf, runtime
 from app.interfaces.dispatch import mutate, queries, request_context
-from app.kernel.ids import LinkId, PoolId
+from app.kernel.ids import LinkId, PixelId, PoolId
 
 router = APIRouter(include_in_schema=False)
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
@@ -430,3 +434,80 @@ async def delete_link(
         key=str(form.get("idempotency_key", "")),
     )
     return _links_redirect(pool_id, pool_page)
+
+
+@router.get("/dashboard/pixels", response_class=HTMLResponse)
+async def pixels(
+    request: Request, session: Session, page: int = Query(1, ge=1, le=100000)
+) -> Response:
+    return await _pixels_page(request, session, page)
+
+
+async def _pixels_page(
+    request: Request,
+    session: BrowserSession,
+    page: int = 1,
+    *,
+    error: str | None = None,
+    reference: str | None = None,
+    key: str | None = None,
+) -> Response:
+    context = request_context(request, session.principal)
+    organization = await queries(request).ask(
+        ResolveOrganizationQuery(session.principal), context=context
+    )
+    result = await queries(request).ask(ListPixelsQuery(session.principal, page), context=context)
+    if page > 1 and not result.items:
+        page = max(1, (result.total + result.page_size - 1) // result.page_size)
+        return _redirect(f"/dashboard/pixels?page={page}" if page > 1 else "/dashboard/pixels")
+    return templates.TemplateResponse(
+        request,
+        "identity/pixels.html",
+        {
+            "session": session,
+            "organization_name": organization.name,
+            "pixels": result,
+            "public_base": runtime(request).config.public_base_url.rstrip("/"),
+            "error": error,
+            "reference": reference,
+            "key": key,
+        },
+        status_code=422 if error else 200,
+        headers={"HX-Push-Url": "false"} if error else {},
+    )
+
+
+@router.post("/dashboard/pixels")
+async def create_pixel(request: Request, session: Session) -> Response:
+    form = await request.form(max_fields=3, max_files=0)
+    csrf(request, session, str(form.get("csrf_token", "")))
+    reference, key = str(form.get("reference", "")), str(form.get("idempotency_key", ""))
+    try:
+        data = CreatePixelRequest(reference=reference)
+    except ValidationError:
+        return await _pixels_page(
+            request,
+            session,
+            error="Use a delivery reference of 200 characters or fewer.",
+            reference=reference,
+            key=key,
+        )
+    await mutate(
+        request, CreatePixelCommand(session.principal, data.draft()), session.principal, key=key
+    )
+    return _redirect("/dashboard/pixels")
+
+
+@router.post("/dashboard/pixels/{pixel_id}/delete")
+async def delete_pixel(
+    pixel_id: str, request: Request, session: Session, page: int = Query(1, ge=1, le=100000)
+) -> Response:
+    form = await request.form(max_fields=2, max_files=0)
+    csrf(request, session, str(form.get("csrf_token", "")))
+    await mutate(
+        request,
+        DeletePixelCommand(session.principal, PixelId(pixel_id)),
+        session.principal,
+        key=str(form.get("idempotency_key", "")),
+    )
+    return _redirect(f"/dashboard/pixels?page={page}" if page > 1 else "/dashboard/pixels")
