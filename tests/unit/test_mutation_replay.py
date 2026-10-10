@@ -128,12 +128,12 @@ async def test_sql_receipt_restores_original_typed_snapshot(action, issuer):
     )
     snapshot = {"value": json.loads(json.dumps(asdict(result), default=str)) if result else None}
     connection = AsyncMock()
-    connection.execute.return_value = _Cursor(row=("digest", snapshot))
+    connection.execute.return_value = _Cursor(row=("digest", snapshot, True))
     repository = PostgresLinkRepository(connection)
     await repository.remember(actor, action, "key", result)
     replay = await repository.replay(actor, action, "key", "digest")
     assert replay.replayed and replay.value == result
-    connection.execute.return_value = _Cursor(row=("digest", None))
+    connection.execute.return_value = _Cursor(row=("digest", None, True))
     assert await repository.replay(actor, action, "key", "digest") is None
     from app.contexts.links.domain.link import IdempotencyConflictError
 

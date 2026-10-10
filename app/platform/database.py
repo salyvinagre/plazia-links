@@ -22,7 +22,7 @@ from app.contexts.access.adapters.repositories.sql.postgres import (
 )
 from app.contexts.access.application.policies.organization import OrganizationAccess
 from app.contexts.access.application.ports.organizations import OrganizationRepository
-from app.contexts.access.contracts import OrganizationAccessPort
+from app.contexts.access.contracts import OrganizationAccessPort, Principal
 from app.contexts.links.adapters.repositories.sql.pixels import PostgresPixelRepository
 from app.contexts.links.adapters.repositories.sql.postgres import PostgresLinkRepository
 from app.contexts.links.application.ports.pixels import PixelRepository
@@ -68,6 +68,7 @@ class PostgresDatabase:
         organization_id: OrganizationId | None = None,
         *,
         readonly: bool = True,
+        actor: Principal | None = None,
     ) -> AsyncIterator[Scope]:
         """Yield repositories after setting transaction-local tenant and access mode."""
 
@@ -87,6 +88,11 @@ class PostgresDatabase:
                     connection,
                     organization_id=str(organization_id) if organization_id is not None else None,
                     configuration=_POSTGRES_CONFIGURATION,
+                )
+                await connection.execute(
+                    "SELECT set_config('plazia.issuer', %s, true), "
+                    "set_config('plazia.client_id', %s, true)",
+                    (actor.issuer if actor else "", actor.client_id if actor else ""),
                 )
                 organizations = PostgresOrganizationRepository(connection)
                 yield Scope(
@@ -115,7 +121,9 @@ class PostgresUowFactory:
         organization_id = getattr(actor, "organization_id", None)
         if organization_id is not None and not isinstance(organization_id, OrganizationId):
             raise TypeError("command actor organization_id must be a shared OrganizationId")
-        return _PostgresCommandUnitOfWork(self._database, organization_id)
+        return _PostgresCommandUnitOfWork(
+            self._database, organization_id, actor if isinstance(actor, Principal) else None
+        )
 
 
 class _PostgresCommandUnitOfWork(BaseCommandUnitOfWork):
@@ -123,16 +131,20 @@ class _PostgresCommandUnitOfWork(BaseCommandUnitOfWork):
         self,
         database: PostgresDatabase,
         organization_id: OrganizationId | None,
+        actor: Principal | None,
     ) -> None:
         super().__init__(scope=None)
         self._database = database
         self._organization_id = organization_id
+        self._actor = actor
         self._scope_context: AbstractAsyncContextManager[Scope] | None = None
 
     async def _enter(self) -> None:
         if self._scope_context is not None:
             raise RuntimeError("PostgreSQL unit of work has already been entered")
-        self._scope_context = self._database.scope(self._organization_id, readonly=False)
+        self._scope_context = self._database.scope(
+            self._organization_id, readonly=False, actor=self._actor
+        )
         self._scope = await self._scope_context.__aenter__()
 
     async def _commit(self) -> None:

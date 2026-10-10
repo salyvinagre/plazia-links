@@ -3,8 +3,8 @@
 import ipaddress
 import re
 import secrets
-import string
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Annotated, ClassVar
 from urllib.parse import urlsplit
 
@@ -27,6 +27,38 @@ class LinkConflictError(Exception):
 
 class LinkDisabledError(Exception):
     """The public link has been disabled by its owner."""
+
+
+class Entropy(StrEnum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class Visibility(StrEnum):
+    organization = "organization"
+    workload_private = "workload_private"
+
+
+@dataclass(frozen=True, slots=True)
+class LinkPolicy:
+    entropy: Entropy
+    visibility: Visibility
+
+    @classmethod
+    def select(
+        cls, entropy: Entropy | None, visibility: Visibility | None, *, workload: bool
+    ) -> LinkPolicy:
+        selected = visibility or (
+            Visibility.workload_private if workload else Visibility.organization
+        )
+        if workload and selected is not Visibility.workload_private:
+            raise InvalidLinkError("Workload links must remain private")
+        required = workload or selected is Visibility.workload_private
+        level = entropy or (Entropy.high if required else Entropy.low)
+        if required and level is not Entropy.high:
+            raise InvalidLinkError("Workload-private links require high entropy")
+        return cls(level, selected)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +109,7 @@ class Destination:
 
 @dataclass(frozen=True, slots=True)
 class PublicCode:
-    value: Annotated[str, StringValue(), Length(minimum=3, maximum=10)]
+    value: Annotated[str, StringValue(), Length(minimum=3, maximum=32)]
     RESERVED: ClassVar[frozenset[str]] = frozenset(
         {
             "api",
@@ -97,16 +129,16 @@ class PublicCode:
     def __post_init__(self) -> None:
         AnnotatedFields.normalize(self)
         if (
-            not re.fullmatch(r"[A-Za-z0-9_-]{3,10}", self.value)
+            not re.fullmatch(r"[A-Za-z0-9_-]{3,32}", self.value)
             or self.value.lower() in self.RESERVED
         ):
             raise InvalidLinkError("Short code is invalid or reserved")
 
     @classmethod
-    def generate(cls) -> str:
+    def generate(cls, entropy: Entropy = Entropy.low) -> str:
         while True:
-            candidate = "".join(
-                secrets.choice(string.ascii_letters + string.digits) for _ in range(8)
+            candidate = secrets.token_urlsafe(
+                {Entropy.low: 6, Entropy.medium: 15, Entropy.high: 24}[entropy]
             )
             if candidate.lower() not in cls.RESERVED:
                 return candidate
@@ -119,6 +151,8 @@ class LinkDraft:
     short_code: str | None = None
     notes: Annotated[str | None, StringValue(), Length(maximum=4000)] = None
     pool_id: Annotated[PoolId | None, CanonicalIdField(PoolId)] = None
+    entropy: Entropy | None = None
+    visibility: Visibility | None = None
 
     def __post_init__(self) -> None:
         AnnotatedFields.normalize(self)

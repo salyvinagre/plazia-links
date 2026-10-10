@@ -87,6 +87,8 @@ def _link_row(
         True,
         _NOW,
         _NOW,
+        None,
+        "organization",
     )
 
 
@@ -118,7 +120,7 @@ async def test_repository_maps_database_uuids_to_canonical_ids_and_scopes_pages(
 async def test_access_repository_maps_shared_canonical_organization_id():
     organization_id = OrganizationId(uuid=uuid7())
     connection = _AsyncConnection(
-        lambda _query, _params: _Cursor(row=(organization_id.uuid, "Example", True))
+        lambda _query, _params: _Cursor(row=(organization_id.uuid, "Example", True, ()))
     )
 
     organization = await PostgresOrganizationRepository(connection).find(
@@ -276,7 +278,10 @@ class _Catalog:
             )
         if "pg_catalog.pg_policy" in query:
             policies = SchemaAuthority._policies(
-                self.marker["roles"]["links_worker"], statistics=statistics, pixels=pixels
+                self.marker["roles"]["links_worker"],
+                statistics=statistics,
+                pixels=pixels,
+                app=self.marker["roles"]["links_app"] if int(revision) >= 6 else None,
             )
             return _CatalogResult(
                 [(table, name, *value) for (table, name), value in policies.items()]
@@ -410,7 +415,7 @@ def test_schema_authority_admits_empty_target_and_current_flyway_schema(monkeypa
     _catalog(monkeypatch, current)
     status = authority.finish()
 
-    assert status.revision == "5"
+    assert status.revision == "6"
     assert "links_migrations.flyway_schema_history" in status.tables
 
 
@@ -437,12 +442,12 @@ def test_schema_authority_keeps_role_bindings_with_each_transaction(monkeypatch)
 
     def overlapping_check(query, params=()):
         if "FROM pg_catalog.pg_roles" in query:
-            assert authority.finish().revision == "5"
+            assert authority.finish().revision == "6"
         return execute(query, params)
 
     monkeypatch.setattr(outer, "execute", overlapping_check)
 
-    assert authority.finish().revision == "5"
+    assert authority.finish().revision == "6"
 
 
 @pytest.mark.parametrize(
@@ -532,7 +537,9 @@ class _CommandDatabase:
         self.readonly: bool | None = None
         self.scope_value = _CommandScope()
 
-    def scope(self, organization_id: OrganizationId | None = None, *, readonly: bool = True):
+    def scope(
+        self, organization_id: OrganizationId | None = None, *, readonly: bool = True, actor=None
+    ):
         self.organization_id = organization_id
         self.readonly = readonly
         return self.scope_value
@@ -613,7 +620,7 @@ def test_runtime_admission_rejects_owner_credentials_and_inherited_bypass(
     _catalog(monkeypatch, Catalog(history=_CURRENT_HISTORY))
     authority = SchemaAuthority("postgresql://db/links")
     if allowed:
-        assert authority.check(runtime=runtime).revision == "5"
+        assert authority.check(runtime=runtime).revision == "6"
     else:
         with pytest.raises(SchemaError, match="dedicated role"):
             authority.check(runtime=runtime)

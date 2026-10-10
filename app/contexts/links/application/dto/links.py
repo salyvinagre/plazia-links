@@ -4,6 +4,7 @@ from typing import Literal, Self
 
 from app.contexts.links.application.dto.pixels import PixelDto
 from app.contexts.links.application.dto.statistics import StatisticsDto
+from app.contexts.links.domain.link import Entropy, Visibility
 from app.kernel.ids import LinkId, PoolId
 
 
@@ -18,6 +19,8 @@ class LinkDto:
     created_at: datetime
     updated_at: datetime
     pool_id: PoolId | None = None
+    entropy: Entropy | None = None
+    visibility: Visibility = Visibility.organization
 
     @property
     def status(self) -> Literal["disabled", "reserved", "active"]:
@@ -32,6 +35,8 @@ class PoolDto:
     name: str | None
     size: int
     created_at: datetime
+    entropy: Entropy | None = None
+    visibility: Visibility = Visibility.organization
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -50,6 +55,8 @@ class LinkReadDto(LinkDto):
             created_at=link.created_at,
             updated_at=link.updated_at,
             pool_id=link.pool_id,
+            entropy=link.entropy,
+            visibility=link.visibility,
             statistics=statistics,
         )
 
@@ -65,6 +72,8 @@ class PoolReadDto(PoolDto):
             name=pool.name,
             size=pool.size,
             created_at=pool.created_at,
+            entropy=pool.entropy,
+            visibility=pool.visibility,
             statistics=statistics,
         )
 

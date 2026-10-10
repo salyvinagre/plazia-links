@@ -85,6 +85,7 @@ from app.contexts.links.application.telemetry.signals import VISIT_FAILURE as VI
 from app.contexts.links.domain.link import (
     Destination as Destination,
 )
+from app.contexts.links.domain.link import Entropy as Entropy
 from app.contexts.links.domain.link import (
     InvalidLinkError as InvalidLinkError,
 )
@@ -103,6 +104,7 @@ from app.contexts.links.domain.link import (
 from app.contexts.links.domain.link import (
     PublicCode as PublicCode,
 )
+from app.contexts.links.domain.link import Visibility as Visibility
 from app.contexts.links.domain.pixel import PixelCode as PixelCode
 from app.contexts.links.domain.pixel import PixelConflictError as PixelConflictError
 from app.contexts.links.domain.pixel import PixelDraft as PixelDraft

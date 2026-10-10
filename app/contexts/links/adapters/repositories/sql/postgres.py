@@ -27,13 +27,16 @@ from app.contexts.links.application.dto.pixels import PixelDto
 from app.contexts.links.application.dto.statistics import StatisticsDto, VisitOutcome
 from app.contexts.links.application.errors.statistics import StatisticsUnavailableError
 from app.contexts.links.domain.link import (
+    Entropy,
     IdempotencyConflictError,
     LinkConflictError,
     LinkDisabledError,
     LinkDraft,
     LinkNotFoundError,
     LinkPatch,
+    LinkPolicy,
     PublicCode,
+    Visibility,
 )
 from app.kernel.ids import LinkId, PixelId, PoolId
 
@@ -105,19 +108,19 @@ class PostgresLinkRepository:
         identity = (actor.organization_id.uuid, actor.issuer, actor.subject, action, key)
         await self._connection.execute(
             """INSERT INTO platform.command_receipts
-            (organization_id,issuer,subject,action,key,fingerprint)
-            VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
-            (*identity, fingerprint),
+            (organization_id,issuer,subject,action,key,fingerprint,client_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
+            (*identity, fingerprint, actor.client_id),
         )
         row = await (
             await self._connection.execute(
-                """SELECT fingerprint,result
+                """SELECT fingerprint,result,expires_at > clock_timestamp()
             FROM platform.command_receipts WHERE organization_id=%s AND issuer=%s
-            AND subject=%s AND action=%s AND key=%s FOR UPDATE""",
-                identity,
+            AND subject=%s AND action=%s AND key=%s AND client_id=%s FOR UPDATE""",
+                (*identity, actor.client_id),
             )
         ).fetchone()
-        if row[0] != fingerprint:
+        if row is None or row[0] != fingerprint or not row[2]:
             raise IdempotencyConflictError
         if row[1] is None:
             return None
@@ -144,8 +147,17 @@ class PostgresLinkRepository:
         }
         await self._connection.execute(
             """UPDATE platform.command_receipts SET result=%s
-            WHERE organization_id=%s AND issuer=%s AND subject=%s AND action=%s AND key=%s""",
-            (Jsonb(snapshot), actor.organization_id.uuid, actor.issuer, actor.subject, action, key),
+            WHERE organization_id=%s AND issuer=%s AND subject=%s AND action=%s AND key=%s
+            AND client_id=%s""",
+            (
+                Jsonb(snapshot),
+                actor.organization_id.uuid,
+                actor.issuer,
+                actor.subject,
+                action,
+                key,
+                actor.client_id,
+            ),
         )
 
     async def list(
@@ -168,7 +180,7 @@ class PostgresLinkRepository:
         cursor = await self._connection.execute(
             f"""
             SELECT id, organization_id, pool_id, short_code, destination_url,
-                   title, notes, is_active, created_at, updated_at
+                   title, notes, is_active, created_at, updated_at, entropy, visibility
             FROM links.links
             WHERE {where}
             ORDER BY created_at DESC, id DESC
@@ -195,7 +207,7 @@ class PostgresLinkRepository:
         cursor = await self._connection.execute(
             f"""
             SELECT id, organization_id, pool_id, short_code, destination_url,
-                   title, notes, is_active, created_at, updated_at
+                   title, notes, is_active, created_at, updated_at, entropy, visibility
             FROM links.links
             WHERE organization_id = %s AND id = %s{suffix}
             """,
@@ -214,10 +226,10 @@ class PostgresLinkRepository:
                     """
                     INSERT INTO links.links
                         (organization_id, pool_id, short_code, destination_url,
-                         title, notes, is_active)
-                    VALUES (%s, %s, %s, %s, %s, %s, true)
+                         title, notes, is_active, entropy, visibility)
+                    VALUES (%s, %s, %s, %s, %s, %s, true, %s, %s)
                     RETURNING id, organization_id, pool_id, short_code, destination_url,
-                              title, notes, is_active, created_at, updated_at
+                              title, notes, is_active, created_at, updated_at, entropy, visibility
                     """,
                     (
                         organization_id.uuid,
@@ -226,6 +238,8 @@ class PostgresLinkRepository:
                         draft.destination_url,
                         draft.title,
                         draft.notes,
+                        draft.entropy,
+                        draft.visibility or Visibility.organization,
                     ),
                 )
                 row = await cursor.fetchone()
@@ -255,7 +269,7 @@ class PostgresLinkRepository:
                 updated_at = clock_timestamp()
             WHERE organization_id = %s AND id = %s
             RETURNING id, organization_id, pool_id, short_code, destination_url,
-                      title, notes, is_active, created_at, updated_at
+                      title, notes, is_active, created_at, updated_at, entropy, visibility
             """,
             (
                 "destination_url" in fields,
@@ -315,33 +329,48 @@ class PostgresLinkRepository:
         organization_id: OrganizationId,
         name: str | None,
         codes: tuple[str, ...],
+        policy: LinkPolicy | None = None,
     ) -> PoolDto:
         for _ in range(5):
             try:
                 async with self._connection.transaction():
                     cursor = await self._connection.execute(
                         """
-                        INSERT INTO links.pools (organization_id, name)
-                        VALUES (%s, %s)
-                        RETURNING id, name, created_at
+                        INSERT INTO links.pools (organization_id, name, entropy, visibility)
+                        VALUES (%s, %s, %s, %s)
+                        RETURNING id, name, created_at, entropy, visibility
                         """,
-                        (organization_id.uuid, name),
+                        (
+                            organization_id.uuid,
+                            name,
+                            policy.entropy if policy else None,
+                            policy.visibility if policy else Visibility.organization,
+                        ),
                     )
                     pool_row = await cursor.fetchone()
                     for short_code in codes:
                         await self._connection.execute(
                             """
                             INSERT INTO links.links
-                                (organization_id, pool_id, short_code, destination_url, is_active)
-                            VALUES (%s, %s, %s, NULL, true)
+                                (organization_id, pool_id, short_code, destination_url,
+                                 is_active, entropy, visibility)
+                            VALUES (%s, %s, %s, NULL, true, %s, %s)
                             """,
-                            (organization_id.uuid, pool_row[0], short_code),
+                            (
+                                organization_id.uuid,
+                                pool_row[0],
+                                short_code,
+                                pool_row[3],
+                                pool_row[4],
+                            ),
                         )
                 return PoolDto(
                     id=PoolId(uuid=pool_row[0]),
                     name=pool_row[1],
                     size=len(codes),
                     created_at=pool_row[2],
+                    entropy=Entropy(pool_row[3]) if pool_row[3] else None,
+                    visibility=Visibility(pool_row[4]),
                 )
             except UniqueViolation as error:
                 constraint = self._constraint(error)
@@ -374,12 +403,12 @@ class PostgresLinkRepository:
     async def get_pool(self, organization_id: OrganizationId, pool_id: PoolId) -> PoolDto:
         cursor = await self._connection.execute(
             """
-            SELECT p.id, p.name, p.created_at, count(l.id)
+            SELECT p.id, p.name, p.created_at, count(l.id), p.entropy, p.visibility
             FROM links.pools AS p
             LEFT JOIN links.links AS l
               ON l.organization_id = p.organization_id AND l.pool_id = p.id
             WHERE p.organization_id = %s AND p.id = %s
-            GROUP BY p.id, p.name, p.created_at
+            GROUP BY p.id, p.name, p.created_at, p.entropy, p.visibility
             """,
             (organization_id.uuid, pool_id.uuid),
         )
@@ -391,6 +420,8 @@ class PostgresLinkRepository:
             name=row[1],
             created_at=row[2],
             size=int(row[3]),
+            entropy=Entropy(row[4]) if row[4] else None,
+            visibility=Visibility(row[5]),
         )
 
     async def pools(
@@ -406,12 +437,12 @@ class PostgresLinkRepository:
         total = int((await count_cursor.fetchone())[0])
         cursor = await self._connection.execute(
             """
-            SELECT p.id, p.name, p.created_at, count(l.id)
+            SELECT p.id, p.name, p.created_at, count(l.id), p.entropy, p.visibility
             FROM links.pools AS p
             LEFT JOIN links.links AS l
               ON l.organization_id = p.organization_id AND l.pool_id = p.id
             WHERE p.organization_id = %s
-            GROUP BY p.id, p.name, p.created_at
+            GROUP BY p.id, p.name, p.created_at, p.entropy, p.visibility
             ORDER BY p.created_at DESC, p.id DESC
             LIMIT %s OFFSET %s
             """,
@@ -425,6 +456,8 @@ class PostgresLinkRepository:
                     name=row[1],
                     created_at=row[2],
                     size=int(row[3]),
+                    entropy=Entropy(row[4]) if row[4] else None,
+                    visibility=Visibility(row[5]),
                 )
                 for row in rows
             ),
@@ -536,6 +569,8 @@ class PostgresLinkRepository:
             created_at=values[8],
             updated_at=values[9],
             pool_id=PoolId(uuid=values[2]) if values[2] is not None else None,
+            entropy=Entropy(values[10]) if values[10] else None,
+            visibility=Visibility(values[11]),
         )
 
     @staticmethod

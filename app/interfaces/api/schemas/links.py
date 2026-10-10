@@ -15,6 +15,7 @@ from app.contexts.access.contracts import Principal
 from app.contexts.links.contracts import (
     DeleteLinksCommand,
     Destination,
+    Entropy,
     LinkDraft,
     LinkDto,
     LinkPatch,
@@ -23,6 +24,7 @@ from app.contexts.links.contracts import (
     PoolReadDto,
     PublicCode,
     StatisticsDto,
+    Visibility,
 )
 from app.kernel.ids import LinkId, PoolId
 
@@ -50,9 +52,23 @@ class CreateLinkRequest(ApiRequest):
     )
     title: str | None = Field(None, max_length=200, description="Optional display title.")
     short_code: str | None = Field(
-        None, min_length=3, max_length=10, description="Chosen short code; omit to generate one."
+        None, min_length=3, max_length=32, description="Chosen short code; omit to generate one."
     )
     notes: str | None = Field(None, max_length=4000, description="Optional owner notes.")
+    entropy: Entropy | None = Field(
+        None, description="Generated code profile; omitted selects the trusted default."
+    )
+    visibility: Visibility | None = Field(
+        None, description="Management visibility; workload policy is authoritative."
+    )
+
+    @model_validator(mode="after")
+    def generated(self) -> Self:
+        if self.short_code and (
+            self.entropy is not None or self.visibility is Visibility.workload_private
+        ):
+            raise ValueError("Custom short_code and generated entropy are mutually exclusive")
+        return self
 
     @field_validator("destination_url")
     @classmethod
@@ -65,7 +81,14 @@ class CreateLinkRequest(ApiRequest):
         return PublicCode(value).value if value is not None else None
 
     def draft(self) -> LinkDraft:
-        return LinkDraft(self.destination_url, self.title, self.short_code, self.notes)
+        return LinkDraft(
+            self.destination_url,
+            self.title,
+            self.short_code,
+            self.notes,
+            entropy=self.entropy,
+            visibility=self.visibility,
+        )
 
 
 class UpdateLinkRequest(ApiRequest):
@@ -104,6 +127,12 @@ class ReservePoolRequest(ApiRequest):
 
     size: int = Field(ge=1, le=100, strict=True, description="Number of links to reserve.")
     name: str | None = Field(None, max_length=200, description="Optional display name.")
+    entropy: Entropy | None = Field(
+        None, description="Generated code profile; omitted selects the trusted default."
+    )
+    visibility: Visibility | None = Field(
+        None, description="Management visibility; workload policy is authoritative."
+    )
 
 
 class RenamePoolRequest(ApiRequest):
@@ -141,6 +170,7 @@ class Pagination(ApiRequest):
             "issuer": actor.issuer,
             "organization": str(actor.organization_id),
             "subject": actor.subject,
+            "client": actor.client_id,
             "limit": self.limit,
             "pool": getattr(self, "pool_id", None),
         }
@@ -173,7 +203,11 @@ class LinkResponse(ApiResponse):
     """A short link visible to the verified organization."""
 
     id: LinkIdText
-    short_code: str = Field(min_length=3, max_length=10, description="Stable public short code.")
+    short_code: str = Field(min_length=3, max_length=32, description="Stable public short code.")
+    entropy: Entropy | None = Field(
+        description="Generation profile; null for custom or pre-profile codes."
+    )
+    visibility: Visibility = Field(description="Immutable management visibility.")
     short_url: str = Field(description="Absolute public URL of this short link.")
     destination_url: str | None = Field(description="Destination URL; null while reserved.")
     title: str | None = Field(max_length=200, description="Display title; null when unset.")
@@ -198,6 +232,8 @@ class LinkResponse(ApiResponse):
             pool_id=str(link.pool_id) if link.pool_id else None,
             created_at=link.created_at,
             updated_at=link.updated_at,
+            entropy=link.entropy,
+            visibility=link.visibility,
         )
 
 
@@ -205,13 +241,22 @@ class PoolResponse(ApiResponse):
     """Pool metadata and its current link count."""
 
     id: PoolIdText
+    entropy: Entropy | None = Field(description="Generation profile; null for pre-profile pools.")
+    visibility: Visibility = Field(description="Immutable management visibility.")
     name: str | None = Field(max_length=200, description="Display name; null when unset.")
     size: int = Field(ge=0, le=100, description="Number of links currently in the pool.")
     created_at: AwareDatetime = Field(description="Reservation time in UTC.")
 
     @classmethod
     def from_application(cls, pool: PoolDto) -> PoolResponse:
-        return cls(id=str(pool.id), name=pool.name, size=pool.size, created_at=pool.created_at)
+        return cls(
+            id=str(pool.id),
+            name=pool.name,
+            size=pool.size,
+            created_at=pool.created_at,
+            entropy=pool.entropy,
+            visibility=pool.visibility,
+        )
 
 
 class StatisticsResponse(ApiResponse):

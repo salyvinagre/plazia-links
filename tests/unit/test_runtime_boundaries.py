@@ -285,7 +285,7 @@ def test_domain_validation_rejects_private_ambiguous_and_reserved_inputs():
     ):
         with pytest.raises(ValueError):
             Destination(url)
-    for code in ("login", "too-long-code", "a b"):
+    for code in ("login", "a" * 33, "a b"):
         with pytest.raises(ValueError):
             PublicCode(code)
     with pytest.raises(ValueError):

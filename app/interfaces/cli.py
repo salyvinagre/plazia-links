@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 from plazia_cli.commands import (
     CommandArgument,
@@ -53,7 +53,12 @@ class OperatorCli:
             help=_HELP[self.action],
             handler=self._invoke,
             arguments=(CommandArgument("organization"),) if organization else (),
-            options=(CommandOption("--name", required=True, help="Organization display name."),)
+            options=(
+                CommandOption("--name", required=True, help="Organization display name."),
+                CommandOption(
+                    "--workload", multiple=True, help="Enrolled private workload client ID."
+                ),
+            )
             if self.action == "bind-organization"
             else (),
         )
@@ -75,7 +80,15 @@ class OperatorCli:
                     raise CommandError("PLZK_IDENTITY_ISSUER is required")
                 org = OrganizationId(invocation.str("organization"))
                 command = (
-                    BindOrganizationCommand(identity.issuer, org, invocation.str("name"))
+                    BindOrganizationCommand(
+                        identity.issuer,
+                        org,
+                        invocation.str("name"),
+                        tuple(
+                            str(value)
+                            for value in cast(tuple[object, ...], invocation.value("workload"))
+                        ),
+                    )
                     if self.action == "bind-organization"
                     else DisableOrganizationCommand(identity.issuer, org)
                 )

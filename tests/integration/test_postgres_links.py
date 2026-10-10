@@ -67,7 +67,7 @@ def postgres_urls() -> _DatabaseUrls:
             "must point to the isolated Flyway-migrated PostgreSQL 18 database"
         )
     urls = _DatabaseUrls(app=values[0], worker=values[1], owner=values[2])  # type: ignore[arg-type]
-    assert SchemaAuthority(urls.owner).check().revision == "5"
+    assert SchemaAuthority(urls.owner).check().revision == "6"
     return urls
 
 

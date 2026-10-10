@@ -14,7 +14,7 @@ from app.contexts.links.application.dto.links import (
 )
 from app.contexts.links.application.dto.pixels import PixelDto
 from app.contexts.links.application.dto.statistics import StatisticsDto, VisitOutcome
-from app.contexts.links.domain.link import LinkDraft, LinkPatch
+from app.contexts.links.domain.link import LinkDraft, LinkPatch, LinkPolicy
 from app.kernel.ids import LinkId, PixelId, PoolId
 
 
@@ -58,7 +58,11 @@ class LinkRepository(Protocol):
         all: bool = False,
     ) -> tuple[LinkId, ...]: ...
     async def reserve(
-        self, organization_id: OrganizationId, name: str | None, codes: tuple[str, ...]
+        self,
+        organization_id: OrganizationId,
+        name: str | None,
+        codes: tuple[str, ...],
+        policy: LinkPolicy | None = None,
     ) -> PoolDto: ...
     async def get_pool(self, organization_id: OrganizationId, pool_id: PoolId) -> PoolDto: ...
     async def rename_pool(

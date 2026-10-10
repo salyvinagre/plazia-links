@@ -149,7 +149,11 @@ async def reserve_pool(
     _key: KeyHeader,
 ) -> PoolResponse:
     """Reserve 1–100 short links without destinations in one atomic pool."""
-    pool = await mutate(request, ReservePoolCommand(actor, data.size, data.name), actor)
+    pool = await mutate(
+        request,
+        ReservePoolCommand(actor, data.size, data.name, data.entropy, data.visibility),
+        actor,
+    )
     response.headers["Location"] = ApiContract.resource("pools", pool.id)
     return PoolResponse.from_application(pool)
 

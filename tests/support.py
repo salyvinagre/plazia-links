@@ -19,7 +19,12 @@ from app.contexts.links.application.dto.links import (
 )
 from app.contexts.links.application.dto.pixels import PixelDto, PixelReadDto, PixelStatisticsDto
 from app.contexts.links.application.dto.statistics import StatisticsDto
-from app.contexts.links.domain.link import LinkConflictError, LinkDraft, LinkNotFoundError
+from app.contexts.links.domain.link import (
+    LinkConflictError,
+    LinkDraft,
+    LinkNotFoundError,
+    Visibility,
+)
 from app.contexts.links.domain.pixel import PixelConflictError, PixelNotFoundError
 from app.kernel.ids import LinkId, PixelId, PoolId
 from app.platform.database import Scope
@@ -102,8 +107,8 @@ class MemoryRepository:
     async def find(self, issuer, organization_id):
         return self.bindings.get(organization_id) if issuer == self.issuer else None
 
-    async def bind(self, issuer, organization_id, name):
-        self.bindings[organization_id] = OrganizationDto(organization_id, name, True)
+    async def bind(self, issuer, organization_id, name, workloads=()):
+        self.bindings[organization_id] = OrganizationDto(organization_id, name, True, workloads)
 
     async def disable(self, issuer, organization_id):
         self.bindings[organization_id] = replace(self.bindings[organization_id], is_active=False)
@@ -138,6 +143,8 @@ class MemoryRepository:
             now,
             now,
             draft.pool_id,
+            draft.entropy,
+            draft.visibility or Visibility.organization,
         )
         self.links[id], self.owners[id] = row, organization_id
         return row
@@ -177,11 +184,27 @@ class MemoryRepository:
             await self.delete(organization_id, id)
         return ids
 
-    async def reserve(self, organization_id, name, codes):
-        pool = PoolDto(PoolId.new(), name, len(codes), datetime.now(UTC))
+    async def reserve(self, organization_id, name, codes, policy=None):
+        pool = PoolDto(
+            PoolId.new(),
+            name,
+            len(codes),
+            datetime.now(UTC),
+            policy.entropy if policy else None,
+            policy.visibility if policy else Visibility.organization,
+        )
         self.pool_rows[pool.id] = (organization_id, pool)
         for code in codes:
-            await self.create(organization_id, LinkDraft(None, short_code=code, pool_id=pool.id))
+            await self.create(
+                organization_id,
+                LinkDraft(
+                    None,
+                    short_code=code,
+                    pool_id=pool.id,
+                    entropy=pool.entropy,
+                    visibility=pool.visibility,
+                ),
+            )
         return pool
 
     async def get_pool(self, organization_id, pool_id):
@@ -304,7 +327,7 @@ class MemoryDatabase:
         self.commit_failure = False
 
     @asynccontextmanager
-    async def scope(self, organization_id=None, *, readonly=True):
+    async def scope(self, organization_id=None, *, readonly=True, actor=None):
         self.scope_count += 1
         yield Scope(
             self.repository, self.repository, OrganizationAccess(self.repository), self.pixels

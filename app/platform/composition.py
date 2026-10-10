@@ -65,7 +65,7 @@ from app.contexts.links.application.commands.subscribe_link.command import Subsc
 from app.contexts.links.application.commands.subscribe_link.handler import SubscribeLinkHandler
 from app.contexts.links.application.commands.update_link.command import UpdateLinkCommand
 from app.contexts.links.application.commands.update_link.handler import UpdateLinkHandler
-from app.contexts.links.application.dto.links import CommandResultDto
+from app.contexts.links.application.dto.links import CommandResultDto, LinkDto, PoolDto
 from app.contexts.links.application.queries.get_link.handler import GetLinkHandler
 from app.contexts.links.application.queries.get_link.query import GetLinkQuery
 from app.contexts.links.application.queries.get_pixel.handler import GetPixelHandler
@@ -84,13 +84,18 @@ from app.contexts.links.application.queries.resolve_link.handler import ResolveL
 from app.contexts.links.application.queries.resolve_link.query import ResolveLinkQuery
 from app.contexts.links.application.queries.resolve_pixel.handler import ResolvePixelHandler
 from app.contexts.links.application.queries.resolve_pixel.query import ResolvePixelQuery
+from app.contexts.links.domain.link import Entropy, InvalidLinkError, Visibility
 from app.platform.database import PostgresDatabase, PostgresUowFactory, Scope
 from app.platform.settings import OwnerSettings
 
 
 class Database(Protocol):
     def scope(
-        self, organization_id: OrganizationId | None = None, *, readonly: bool = True
+        self,
+        organization_id: OrganizationId | None = None,
+        *,
+        readonly: bool = True,
+        actor: Principal | None = None,
     ) -> AbstractAsyncContextManager[Scope]: ...
 
 
@@ -149,7 +154,8 @@ class ScopedQueryHandler:
     async def execute(self, query: object, *, context: Invocation | None = None) -> Any:
         actor = getattr(query, "actor", None)
         async with self.database.scope(
-            actor.organization_id if isinstance(actor, Principal) else None
+            actor.organization_id if isinstance(actor, Principal) else None,
+            actor=actor if isinstance(actor, Principal) else None,
         ) as scope:
             return await Container.handler(self.kind, scope).execute(query, context=context)
 
@@ -162,7 +168,9 @@ class ScopedCommandHandler:
 
     async def execute(self, command: Any, *, context: Invocation) -> Any:
         # Binding revocation and capabilities apply to replay as well as first execution.
-        await self.scope.access.require(command.actor, cast(Any, PERMISSIONS[type(command)]))
+        organization = await self.scope.access.require(
+            command.actor, cast(Any, PERMISSIONS[type(command)])
+        )
         key = context.operation_context.idempotency_key
         if not key:
             raise ValueError("Mutation requires an idempotency key")
@@ -180,6 +188,14 @@ class ScopedCommandHandler:
         action = type(command).__name__
         saved = await self.scope.links.replay(command.actor, action, key, fingerprint)
         if saved is not None:
+            if command.actor.client_id in organization.workloads and isinstance(
+                saved.value, (LinkDto, PoolDto)
+            ):
+                if (
+                    saved.value.entropy != Entropy.high
+                    or saved.value.visibility != Visibility.workload_private
+                ):
+                    raise InvalidLinkError("Earlier receipt does not satisfy workload policy")
             return saved
         result = await Container.handler(self.kind, self.scope, self.telemetry).execute(
             command, context=context

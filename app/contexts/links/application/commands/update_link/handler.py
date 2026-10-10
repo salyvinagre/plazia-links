@@ -8,7 +8,7 @@ from app.contexts.links.application.commands.update_link.command import UpdateLi
 from app.contexts.links.application.dto.links import LinkDto
 from app.contexts.links.application.ports.repository import LinkRepository
 from app.contexts.links.application.telemetry.signals import ENQUEUE, ENQUEUE_DURATION
-from app.contexts.links.domain.link import InvalidLinkError
+from app.contexts.links.domain.link import Entropy, InvalidLinkError, Visibility
 
 
 class UpdateLinkHandler:
@@ -24,6 +24,17 @@ class UpdateLinkHandler:
     async def execute(self, command: UpdateLinkCommand, *, context: Invocation) -> LinkDto:
         organization = await self._access.require(command.actor, "links:update")
         previous = await self._repository.get(organization.id, command.link_id, lock=True)
+        if (
+            command.actor.client_id in organization.workloads
+            and "destination_url" in command.patch.fields
+            and (
+                previous.entropy is not Entropy.high
+                or previous.visibility is not Visibility.workload_private
+            )
+        ):
+            raise InvalidLinkError(
+                "Workload activation requires a high-entropy private reservation"
+            )
         activating = previous.destination_url is None and "destination_url" in command.patch.fields
         if activating and (
             command.patch.is_active is False

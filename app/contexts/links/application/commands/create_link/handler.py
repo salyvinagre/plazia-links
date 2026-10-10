@@ -6,7 +6,13 @@ from app.contexts.access.contracts import OrganizationAccessPort
 from app.contexts.links.application.commands.create_link.command import CreateLinkCommand
 from app.contexts.links.application.dto.links import LinkDto
 from app.contexts.links.application.ports.repository import LinkRepository
-from app.contexts.links.domain.link import LinkConflictError, PublicCode
+from app.contexts.links.domain.link import (
+    InvalidLinkError,
+    LinkConflictError,
+    LinkPolicy,
+    PublicCode,
+    Visibility,
+)
 
 
 class CreateLinkHandler:
@@ -15,11 +21,23 @@ class CreateLinkHandler:
 
     async def execute(self, command: CreateLinkCommand, *, context: Invocation) -> LinkDto:
         organization = await self._access.require(command.actor, "links:create")
+        policy = LinkPolicy.select(
+            command.draft.entropy,
+            command.draft.visibility,
+            workload=command.actor.client_id in organization.workloads,
+        )
+        if command.draft.short_code and policy.visibility is Visibility.workload_private:
+            raise InvalidLinkError("Workload-private links cannot use custom aliases")
         for _ in range(5):
             draft = (
                 command.draft
                 if command.draft.short_code
-                else replace(command.draft, short_code=PublicCode.generate())
+                else replace(
+                    command.draft,
+                    short_code=PublicCode.generate(policy.entropy),
+                    entropy=policy.entropy,
+                    visibility=policy.visibility,
+                )
             )
             try:
                 link = await self._repository.create(organization.id, draft)

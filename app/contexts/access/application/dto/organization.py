@@ -8,3 +8,4 @@ class OrganizationDto:
     id: OrganizationId
     name: str
     is_active: bool
+    workloads: tuple[str, ...] = ()

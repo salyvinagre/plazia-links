@@ -285,7 +285,7 @@ from tests.integration.test_postgres_links import postgres_urls as postgres_urls
 def test_runtime_rejects_security_drift(postgres_urls, change, restore, runtime, reason):
     url = postgres_urls.app if runtime == "app" else postgres_urls.worker
     authority = SchemaAuthority(url)
-    assert authority.check(runtime=runtime).revision == "5"
+    assert authority.check(runtime=runtime).revision == "6"
     with Connection.connect(postgres_urls.owner, autocommit=True) as owner:
         roles = PostgresRoles.read(owner, owner="salyvinagre/plazia-links")
         for key in ("links_app", "links_worker"):
@@ -295,10 +295,48 @@ def test_runtime_rejects_security_drift(postgres_urls, change, restore, runtime,
             "SELECT pg_catalog.pg_get_userbyid(nspowner) FROM pg_catalog.pg_namespace "
             "WHERE nspname='links'"
         ).fetchone()[0]
+        # Changing ownership removes the new owner's explicit ACL entries. Restore
+        # them too, so a drift probe cannot corrupt later provider tests.
+        grants = (
+            owner.execute(
+                "SELECT pg_get_userbyid(a.grantee), a.privilege_type, a.is_grantable "
+                "FROM pg_class c, LATERAL aclexplode(c.relacl) a "
+                "WHERE c.oid='links.links'::regclass"
+            ).fetchall()
+            if change.startswith("ALTER TABLE links.links OWNER")
+            else []
+        )
+        function_grants = (
+            owner.execute(
+                "SELECT pg_get_userbyid(a.grantee), a.privilege_type, a.is_grantable "
+                "FROM pg_proc p, LATERAL aclexplode(p.proacl) a "
+                "WHERE p.oid='links.subscribe_reserved_link(uuid,text)'::regprocedure"
+            ).fetchall()
+            if change.startswith("ALTER FUNCTION links.subscribe_reserved_link(uuid,text) OWNER")
+            else []
+        )
         try:
             owner.execute(change)
             with pytest.raises(SchemaError, match=reason):
                 authority.check(runtime=runtime)
         finally:
             owner.execute(sql.SQL(restore).format(sql.Identifier(name)))
-    assert authority.check(runtime=runtime).revision == "5"
+            for grantee, privilege, grantable in grants:
+                owner.execute(
+                    sql.SQL("GRANT {} ON links.links TO {}{}").format(
+                        sql.SQL(privilege),
+                        sql.Identifier(grantee),
+                        sql.SQL(" WITH GRANT OPTION" if grantable else ""),
+                    )
+                )
+            for grantee, privilege, grantable in function_grants:
+                owner.execute(
+                    sql.SQL(
+                        "GRANT {} ON FUNCTION links.subscribe_reserved_link(uuid,text) TO {}{}"
+                    ).format(
+                        sql.SQL(privilege),
+                        sql.Identifier(grantee),
+                        sql.SQL(" WITH GRANT OPTION" if grantable else ""),
+                    )
+                )
+    assert authority.check(runtime=runtime).revision == "6"

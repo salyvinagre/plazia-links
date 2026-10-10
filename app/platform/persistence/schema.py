@@ -332,7 +332,9 @@ class SchemaAuthority:
                 (list(_OWNED_SCHEMAS),),
             ).fetchall()
         }
-        if policies != self._policies(worker, statistics=statistics, pixels=pixels):
+        if policies != self._policies(
+            worker, statistics=statistics, pixels=pixels, app=app if int(revision) >= 6 else None
+        ):
             raise SchemaError("Links tenant policies differ from the packaged migration")
         private_access = connection.execute(
             """SELECT bool_or(CASE
@@ -510,7 +512,7 @@ class SchemaAuthority:
 
     @staticmethod
     def _policies(
-        worker: str, *, statistics: bool, pixels: bool = False
+        worker: str, *, statistics: bool, pixels: bool = False, app: str | None = None
     ) -> dict[tuple[str, str], tuple[object, ...]]:
         tenant = "(organization_id = platform.current_organization_id())"
         values: dict[tuple[str, str], tuple[object, ...]] = {
@@ -567,6 +569,35 @@ class SchemaAuthority:
                 ),
             }
         )
+        if app is not None:
+            private = (
+                "((visibility = 'organization'::text) OR "
+                "((owner_issuer = current_setting('plazia.issuer'::text, true)) AND "
+                "(owner_client = current_setting('plazia.client_id'::text, true))))"
+            )
+            receipt = (
+                "((issuer = current_setting('plazia.issuer'::text, true)) AND "
+                "(client_id = current_setting('plazia.client_id'::text, true)))"
+            )
+            for table, name in (
+                ("links.links", "links_workload_scope"),
+                ("links.pools", "pools_workload_scope"),
+            ):
+                values[table, name] = ("*", False, (app,), private, private)
+            values["platform.command_receipts", "receipts_workload_scope"] = (
+                "*",
+                False,
+                (app,),
+                receipt,
+                receipt,
+            )
+            values["links.statistics", "statistics_workload_scope"] = (
+                "*",
+                False,
+                (app,),
+                "(EXISTS ( SELECT\n   FROM links.links\n  WHERE (links.id = statistics.link_id)))",
+                None,
+            )
         return values
 
 

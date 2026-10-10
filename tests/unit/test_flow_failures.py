@@ -160,7 +160,7 @@ async def test_anonymous_origin_email_and_host_validation(identity_client, issue
 async def test_generated_code_retry_is_bounded_and_atomic(
     identity_client, issuer, identity_db, monkeypatch
 ):
-    monkeypatch.setattr(PublicCode, "generate", lambda: "collision")
+    monkeypatch.setattr(PublicCode, "generate", lambda *_: "collision")
     identity_db.reserve = reserve = AsyncMock(side_effect=LinkConflictError)
     result = await identity_client.post("/api/v1/pools", headers=bearer(issuer), json={"size": 1})
     assert result.status_code == 409 and reserve.await_count == 5

@@ -1700,6 +1700,7 @@ version = "0.1.0"
 source = { editable = "../plazia/packages/plazia-persistence" }
 dependencies = [
     { name = "plazia-kernel" },
+    { name = "plazia-observability" },
     { name = "psycopg", extra = ["binary"] },
     { name = "psycopg-pool" },
 ]
@@ -1707,6 +1708,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "plazia-kernel", editable = "../plazia/packages/plazia-kernel" },
+    { name = "plazia-observability", editable = "../plazia/packages/plazia-observability" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "psycopg-pool", specifier = ">=3.2,<4" },
 ]
@@ -1743,6 +1745,8 @@ source = { editable = "../plazia/packages/plazia-tooling" }
 dependencies = [
     { name = "cloudflare" },
     { name = "cryptography" },
+    { name = "dependency-injector" },
+    { name = "dnspython" },
     { name = "jinja2" },
     { name = "plazia-authlib", extra = ["authn", "authz"] },
     { name = "plazia-cli", extra = ["prompts"] },
@@ -1767,6 +1771,8 @@ dependencies = [
 requires-dist = [
     { name = "cloudflare", specifier = ">=5.6,<6" },
     { name = "cryptography", specifier = ">=46,<50" },
+    { name = "dependency-injector", specifier = ">=4.49,<5" },
+    { name = "dnspython", specifier = ">=2.8,<3" },
     { name = "jinja2", specifier = ">=3.1,<4" },
     { name = "plazia-authlib", extras = ["authn", "authz"], editable = "../plazia/packages/plazia-authlib" },
     { name = "plazia-cli", extras = ["prompts"], editable = "../plazia/packages/plazia-cli" },

@@ -11,4 +11,6 @@ class BindOrganizationHandler:
         self._repository = repository
 
     async def execute(self, command: BindOrganizationCommand, *, context: Invocation) -> None:
-        await self._repository.bind(command.issuer, command.organization_id, command.name)
+        await self._repository.bind(
+            command.issuer, command.organization_id, command.name, command.workloads
+        )
