@@ -291,6 +291,7 @@ class _Catalog:
                 [
                     (schema, name, *value)
                     for (schema, name), value in schema_module._FUNCTION_SECURITY.items()
+                    if int(revision) >= 6 or (schema, name) != ("links", "guard_policy")
                     if statistics or name != "record_visit"
                     if pixels or name not in {"resolve_public_pixel", "record_pixel_request"}
                 ]
@@ -419,7 +420,7 @@ def test_schema_authority_admits_empty_target_and_current_flyway_schema(monkeypa
     assert "links_migrations.flyway_schema_history" in status.tables
 
 
-@pytest.mark.parametrize("revision", (1, 2, 3, 4))
+@pytest.mark.parametrize("revision", (1, 2, 3, 4, 5))
 def test_schema_authority_admits_packaged_prefix_for_upgrade_but_not_runtime(monkeypatch, revision):
     _catalog(monkeypatch, _Catalog(history=_CURRENT_HISTORY[:revision]))
     authority = SchemaAuthority("postgresql://db.example/links")

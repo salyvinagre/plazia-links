@@ -286,6 +286,7 @@ class SchemaAuthority:
         expected_functions = {
             key: value
             for key, value in _FUNCTION_SECURITY.items()
+            if int(revision) >= 6 or key != ("links", "guard_policy")
             if statistics or key != ("links", "record_visit")
             if pixels
             or key not in {("links", "resolve_public_pixel"), ("links", "record_pixel_request")}
