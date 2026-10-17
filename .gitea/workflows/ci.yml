@@ -1,0 +1,164 @@
+# Provider adaptation of .github/workflows/ci.yml at 455348ddbeed73c51cc25239cc91013891eaa10d
+name: Links quality and acceptance
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  quality:
+    runs-on: plazia-linux
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: plazia-links
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        path: plazia-links
+        github-server-url: https://git.home.arpa
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        persist-credentials: false
+    - name: Use read-only Gitea source transport
+      shell: bash
+      run: |
+        test -n "$PLAZIA_GIT_TOKEN"
+        export GIT_CONFIG_GLOBAL="$RUNNER_TEMP/gitea.gitconfig"
+        echo "GIT_CONFIG_GLOBAL=$GIT_CONFIG_GLOBAL" >> "$GITHUB_ENV"
+        # Defer secret expansion until Git requests a credential.
+        # shellcheck disable=SC2016
+        git config --global credential.https://git.home.arpa.helper '!f() { printf "%s\n" "username=ci-saly" "password=$PLAZIA_GIT_TOKEN"; }; f'
+        git config --global url.https://git.home.arpa/salyvinagre/.insteadOf https://github.com/salyvinagre/
+    - name: Start disposable nested container engine
+      working-directory: .
+      shell: bash
+      run: |
+        dockerd --host unix:///var/run/docker.sock --storage-driver=vfs > "$RUNNER_TEMP/dockerd.log" 2>&1 &
+        for _ in {1..60}; do
+          if docker info > /dev/null 2>&1; then
+            docker version
+            podman info
+            exit 0
+          fi
+          sleep 1
+        done
+        cat "$RUNNER_TEMP/dockerd.log"
+        exit 1
+    - name: Require the private source credential
+      env:
+        PLZK_SHARED_SOURCE_TOKEN: ${{ secrets.PLAZIA_GIT_TOKEN }}
+      run: |
+        if [ -z "$PLZK_SHARED_SOURCE_TOKEN" ]; then
+          echo "::error::Configure PLZK_SHARED_SOURCE_TOKEN with read access to plazia and plazia-identity."
+          exit 1
+        fi
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        repository: salyvinagre/plazia
+        path: plazia
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        github-server-url: https://git.home.arpa
+        persist-credentials: false
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        repository: salyvinagre/plazia-identity
+        path: plazia-identity
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        github-server-url: https://git.home.arpa
+        persist-credentials: false
+    - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+      with:
+        version: 0.12.21
+        enable-cache: true
+    - run: make bootstrap check coverage build docs-check actions-check
+    - run: make openapi
+    - run: make openapi-check CONTAINER=docker
+  acceptance:
+    runs-on: plazia-linux
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: plazia-links
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        path: plazia-links
+        github-server-url: https://git.home.arpa
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        persist-credentials: false
+    - name: Use read-only Gitea source transport
+      shell: bash
+      run: |
+        test -n "$PLAZIA_GIT_TOKEN"
+        export GIT_CONFIG_GLOBAL="$RUNNER_TEMP/gitea.gitconfig"
+        echo "GIT_CONFIG_GLOBAL=$GIT_CONFIG_GLOBAL" >> "$GITHUB_ENV"
+        # Defer secret expansion until Git requests a credential.
+        # shellcheck disable=SC2016
+        git config --global credential.https://git.home.arpa.helper '!f() { printf "%s\n" "username=ci-saly" "password=$PLAZIA_GIT_TOKEN"; }; f'
+        git config --global url.https://git.home.arpa/salyvinagre/.insteadOf https://github.com/salyvinagre/
+    - name: Start disposable nested container engine
+      working-directory: .
+      shell: bash
+      run: |
+        dockerd --host unix:///var/run/docker.sock --storage-driver=vfs > "$RUNNER_TEMP/dockerd.log" 2>&1 &
+        for _ in {1..60}; do
+          if docker info > /dev/null 2>&1; then
+            docker version
+            podman info
+            exit 0
+          fi
+          sleep 1
+        done
+        cat "$RUNNER_TEMP/dockerd.log"
+        exit 1
+    - name: Require the private source credential
+      env:
+        PLZK_SHARED_SOURCE_TOKEN: ${{ secrets.PLAZIA_GIT_TOKEN }}
+      run: |
+        if [ -z "$PLZK_SHARED_SOURCE_TOKEN" ]; then
+          echo "::error::Configure PLZK_SHARED_SOURCE_TOKEN with read access to plazia and plazia-identity."
+          exit 1
+        fi
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        repository: salyvinagre/plazia
+        path: plazia
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        github-server-url: https://git.home.arpa
+        persist-credentials: false
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        repository: salyvinagre/plazia-identity
+        path: plazia-identity
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        github-server-url: https://git.home.arpa
+        persist-credentials: false
+    - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+      with:
+        version: 0.12.21
+        enable-cache: true
+    - run: make bootstrap
+    - run: uv run --locked playwright install --with-deps chromium
+    - run: make acceptance CONTAINER=docker
+    - name: Build the production runtime
+      env:
+        PLAZIA_CONTAINER_BUILDER: docker
+      run: make image image-smoke CONTAINER=docker
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      if: ${{ !cancelled() }}
+      with:
+        name: browser-${{ github.sha }}
+        path: plazia-links/output/playwright
+        retention-days: 7
+'on':
+  push:
+    branches:
+    - main
+    - feat/**
+  pull_request:
+    branches:
+    - main
+  workflow_dispatch: null
+env:
+  PLAZIA_GIT_TOKEN: ${{ secrets.PLAZIA_GIT_TOKEN }}
+  UV_NATIVE_TLS: 'true'
