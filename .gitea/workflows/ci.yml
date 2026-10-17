@@ -29,21 +29,6 @@ jobs:
         # shellcheck disable=SC2016
         git config --global credential.https://git.home.arpa.helper '!f() { printf "%s\n" "username=ci-saly" "password=$PLAZIA_GIT_TOKEN"; }; f'
         git config --global url.https://git.home.arpa/salyvinagre/.insteadOf https://github.com/salyvinagre/
-    - name: Start disposable nested container engine
-      working-directory: .
-      shell: bash
-      run: |
-        dockerd --host unix:///var/run/docker.sock --storage-driver=vfs > "$RUNNER_TEMP/dockerd.log" 2>&1 &
-        for _ in {1..60}; do
-          if docker info > /dev/null 2>&1; then
-            docker version
-            podman info
-            exit 0
-          fi
-          sleep 1
-        done
-        cat "$RUNNER_TEMP/dockerd.log"
-        exit 1
     - name: Require the private source credential
       env:
         PLZK_SHARED_SOURCE_TOKEN: ${{ secrets.PLAZIA_GIT_TOKEN }}
@@ -96,21 +81,6 @@ jobs:
         # shellcheck disable=SC2016
         git config --global credential.https://git.home.arpa.helper '!f() { printf "%s\n" "username=ci-saly" "password=$PLAZIA_GIT_TOKEN"; }; f'
         git config --global url.https://git.home.arpa/salyvinagre/.insteadOf https://github.com/salyvinagre/
-    - name: Start disposable nested container engine
-      working-directory: .
-      shell: bash
-      run: |
-        dockerd --host unix:///var/run/docker.sock --storage-driver=vfs > "$RUNNER_TEMP/dockerd.log" 2>&1 &
-        for _ in {1..60}; do
-          if docker info > /dev/null 2>&1; then
-            docker version
-            podman info
-            exit 0
-          fi
-          sleep 1
-        done
-        cat "$RUNNER_TEMP/dockerd.log"
-        exit 1
     - name: Require the private source credential
       env:
         PLZK_SHARED_SOURCE_TOKEN: ${{ secrets.PLAZIA_GIT_TOKEN }}
