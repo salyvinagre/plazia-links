@@ -1,5 +1,20 @@
 quality:
   checks:
+    github:
+      actions:
+        check:
+          path: .github/workflows/ci.yml
+          local: true
+          events: [workflow_dispatch]
+          job: quality
+          act:
+            image: ubuntu-latest=localhost/plazia-ci:24.04
+            runtime: podman
+            env_file: /dev/null
+            secret_file: /dev/null
+            flags: ["--secret=GITHUB_TOKEN=", "--rm", "--pull=false", "--concurrent-jobs=1", "-P", "ubuntu-24.04=localhost/plazia-ci:24.04"]
+            required_paths: [../plazia, ../plazia-identity]
+            mount_paths: [../plazia, ../plazia-identity]
     domain_normalizers:
       targets: [app/contexts, app/kernel]
       fail_on_findings: true

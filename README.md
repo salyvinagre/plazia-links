@@ -154,3 +154,11 @@ upgrade through forward migrations. Removed inherited marketing/authentication/w
 Configuration and releases use shared Plazia tooling. Shared activation remains pending Identity deployment and worker qualification; see
 [deployment ownership and admission](docs/DEPLOYMENT.md). Owner commands require
 `PLZK_SCHEMA_DATABASE_URL`; worker SMTP settings use `PLZK_WORKER_`.
+
+## Local workflow execution
+
+Routine CI runs with local `act`: native ARM64 on the Mac and AMD64 on Fedora
+`10.1.30.130`. Hosted workflows are disabled to preserve the Actions allowance;
+workflow files retain manual dispatch. See the portfolio [local CI runbook](../plazia/docs/local-ci.md)
+for this repository's Make command, source prerequisites, proof status and explicit
+hosted reactivation. Publication, provider and platform jobs retain their own gates.

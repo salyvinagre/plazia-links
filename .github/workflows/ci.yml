@@ -1,9 +1,5 @@
 name: Links quality and acceptance
 on:
-  push:
-    branches: [main, 'feat/**']
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,12 +12,13 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: plazia-links
+        working-directory: ${{ env.ACT && '.' || 'plazia-links' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          path: plazia-links
+          path: ${{ env.ACT && '.' || 'plazia-links' }}
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: ${{ !env.ACT }}
         with:
           repository: salyvinagre/plazia
           path: plazia
@@ -38,12 +35,13 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: plazia-links
+        working-directory: ${{ env.ACT && '.' || 'plazia-links' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          path: plazia-links
+          path: ${{ env.ACT && '.' || 'plazia-links' }}
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: ${{ !env.ACT }}
         with:
           repository: salyvinagre/plazia
           path: plazia
