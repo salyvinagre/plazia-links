@@ -44,7 +44,7 @@ jobs:
         token: ${{ secrets.PLAZIA_GIT_TOKEN }}
         github-server-url: https://git.home.arpa
         persist-credentials: false
-        ref: a5ab22cfe87e029111cab027400e43218f16f790
+        ref: 50adbbc2014723e5e8156483b0ae665c2ae74994
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       with:
         repository: salyvinagre/plazia-identity
@@ -52,7 +52,7 @@ jobs:
         token: ${{ secrets.PLAZIA_GIT_TOKEN }}
         github-server-url: https://git.home.arpa
         persist-credentials: false
-        ref: 745d2f1f777be66639adc154f34d60de3c74a93c
+        ref: b9ab9f7d971d588b10883ec6aa9db6db1e3be401
     - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
       with:
         version: 0.12.21
@@ -98,7 +98,7 @@ jobs:
         token: ${{ secrets.PLAZIA_GIT_TOKEN }}
         github-server-url: https://git.home.arpa
         persist-credentials: false
-        ref: a5ab22cfe87e029111cab027400e43218f16f790
+        ref: 50adbbc2014723e5e8156483b0ae665c2ae74994
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       with:
         repository: salyvinagre/plazia-identity
@@ -106,7 +106,7 @@ jobs:
         token: ${{ secrets.PLAZIA_GIT_TOKEN }}
         github-server-url: https://git.home.arpa
         persist-credentials: false
-        ref: 745d2f1f777be66639adc154f34d60de3c74a93c
+        ref: b9ab9f7d971d588b10883ec6aa9db6db1e3be401
     - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
       with:
         version: 0.12.21
