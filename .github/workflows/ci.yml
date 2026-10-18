@@ -60,7 +60,7 @@ jobs:
     - run: make bootstrap check coverage build docs-check actions-check
     - run: make openapi
     - run: make openapi-check CONTAINER=docker
-    if: ${{ github.server_url == 'https://git.home.arpa' || github.actor == 'nektos/act' }}
+    if: ${{ github.server_url == 'https://git.home.arpa/' || github.actor == 'nektos/act' }}
   acceptance:
     runs-on: plazia-linux
     timeout-minutes: 20
@@ -125,7 +125,7 @@ jobs:
         name: browser-${{ github.sha }}
         path: plazia-links/output/playwright
         retention-days: 7
-    if: ${{ github.server_url == 'https://git.home.arpa' || github.actor == 'nektos/act' }}
+    if: ${{ github.server_url == 'https://git.home.arpa/' || github.actor == 'nektos/act' }}
 'on':
   push:
     branches:
