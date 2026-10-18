@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 import httpx2
 import psycopg
 import yaml
+from plazia_tooling.release.image_catalog import ImageCatalog
 from plazia_tooling.release.postgres import PostgresConfig
 from plazia_tooling.release.postgres_environment import PostgresStackEnvironment
 from plazia_tooling.repo.private_file import PrivateFile
@@ -278,9 +279,8 @@ def run():
 
         modelpath = AuthzResources.package().openfga_model
         # Compile the canonical model using the existing official CLI.
-        cli = (
-            "docker.io/openfga/cli@sha256:"
-            "568b94a978b080d95d5a905719b40feebda3badda1499d331e06950c1be12a17"
+        cli = ImageCatalog.default().resolve(
+            "fga-cli", version=None, registry_profile=None, explicit_reference=None
         )
         cli = os.getenv("OPENFGA_CLI_IMAGE", cli)
         model = json.loads(
