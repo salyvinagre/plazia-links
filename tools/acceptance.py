@@ -33,8 +33,8 @@ MAIL = (
     "98b916bd3c8d61f7633a52d3ea2f58d00620cb01ca57ab59edde68c347a95365"
 )
 REDIS = (
-    "docker.io/library/redis@sha256:"
-    "1f09a89a207d794a8c61d9edfc26e7c58427de10ccef7c5d18d638df79a63b85"
+    "docker.io/library/redis:7.4.11-alpine@sha256:"
+    "858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499"
 )
 
 
