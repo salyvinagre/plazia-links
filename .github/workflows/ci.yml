@@ -81,10 +81,14 @@ jobs:
       - run: make bootstrap
       - run: uv run --locked playwright install --with-deps chromium
       - run: make acceptance CONTAINER=docker
+      - name: Install the native image builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes podman
       - name: Build the production runtime
         env:
-          PLAZIA_CONTAINER_BUILDER: docker
-        run: make image image-smoke CONTAINER=docker
+          PLAZIA_CONTAINER_BUILDER: podman
+        run: make image image-smoke CONTAINER=podman
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ !cancelled() }}
         with:
