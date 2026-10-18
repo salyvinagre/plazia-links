@@ -154,3 +154,13 @@ upgrade through forward migrations. Removed inherited marketing/authentication/w
 Configuration and releases use shared Plazia tooling. Shared activation remains pending Identity deployment and worker qualification; see
 [deployment ownership and admission](docs/DEPLOYMENT.md). Owner commands require
 `PLZK_SCHEMA_DATABASE_URL`; worker SMTP settings use `PLZK_WORKER_`.
+
+## Continuous integration
+
+GitHub remains primary and `origin`. Ordinary CI is defined once in
+`.github/workflows`, runs on Gitea after synchronized GitHub branch changes and
+returns its result to the exact GitHub commit. Ordinary jobs are skipped on
+GitHub. Source sync, credential activation, status reporting and recovery are
+owned by [plazia-metal](https://git.home.arpa/salyvinagre/plazia-metal/src/branch/main/gitea-sync).
+Publication, signing and deployment retain their existing gates. Native Make
+commands remain available for local verification.

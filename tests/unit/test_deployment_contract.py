@@ -39,7 +39,7 @@ def test_ci_private_checkouts_require_an_explicit_credential(job, credential):
     }
     for checkout in private:
         assert steps.index(guard) < steps.index(checkout)
-        assert checkout["with"]["token"] == "${{ secrets.PLZK_SHARED_SOURCE_TOKEN }}"
+        assert checkout["with"]["token"] == "${{ secrets.PLAZIA_GIT_TOKEN }}"
 
 
 @pytest.mark.parametrize("override", [False, True])

@@ -1,10 +1,5 @@
+# Shared CI definition; ordinary jobs execute on the Gitea provider.
 name: Links quality and acceptance
-on:
-  push:
-    branches: [main, 'feat/**']
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -12,86 +7,130 @@ concurrency:
   cancel-in-progress: true
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: plazia-linux
     timeout-minutes: 15
     defaults:
       run:
         working-directory: plazia-links
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          path: plazia-links
-      - name: Require the private source credential
-        env:
-          PLZK_SHARED_SOURCE_TOKEN: ${{ secrets.PLZK_SHARED_SOURCE_TOKEN }}
-        run: |
-          if [ -z "$PLZK_SHARED_SOURCE_TOKEN" ]; then
-            echo "::error::Configure PLZK_SHARED_SOURCE_TOKEN with read access to plazia and plazia-identity."
-            exit 1
-          fi
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: salyvinagre/plazia
-          path: plazia
-          token: ${{ secrets.PLZK_SHARED_SOURCE_TOKEN }}
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: salyvinagre/plazia-identity
-          path: plazia-identity
-          token: ${{ secrets.PLZK_SHARED_SOURCE_TOKEN }}
-      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
-        with:
-          version: '0.12.21'
-          enable-cache: true
-      - run: make bootstrap check coverage build docs-check actions-check
-      - run: make openapi
-      - run: make openapi-check CONTAINER=docker
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        path: plazia-links
+        github-server-url: https://git.home.arpa
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        persist-credentials: false
+    - name: Use read-only Gitea source transport
+      shell: bash
+      run: |
+        test -n "$PLAZIA_GIT_TOKEN"
+        export GIT_CONFIG_GLOBAL="$RUNNER_TEMP/gitea.gitconfig"
+        echo "GIT_CONFIG_GLOBAL=$GIT_CONFIG_GLOBAL" >> "$GITHUB_ENV"
+        # Defer secret expansion until Git requests a credential.
+        # shellcheck disable=SC2016
+        git config --global credential.https://git.home.arpa.helper '!f() { printf "%s\n" "username=ci-saly" "password=$PLAZIA_GIT_TOKEN"; }; f'
+        git config --global url.https://git.home.arpa/salyvinagre/.insteadOf https://github.com/salyvinagre/
+    - name: Require the private source credential
+      env:
+        PLZK_SHARED_SOURCE_TOKEN: ${{ secrets.PLAZIA_GIT_TOKEN }}
+      run: |
+        if [ -z "$PLZK_SHARED_SOURCE_TOKEN" ]; then
+          echo "::error::Configure PLAZIA_GIT_TOKEN with read access to plazia and plazia-identity."
+          exit 1
+        fi
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        repository: salyvinagre/plazia
+        path: plazia
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        github-server-url: https://git.home.arpa
+        persist-credentials: false
+        ref: 50adbbc2014723e5e8156483b0ae665c2ae74994
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        repository: salyvinagre/plazia-identity
+        path: plazia-identity
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        github-server-url: https://git.home.arpa
+        persist-credentials: false
+        ref: b9ab9f7d971d588b10883ec6aa9db6db1e3be401
+    - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+      with:
+        version: 0.12.21
+        enable-cache: true
+    - run: make bootstrap check coverage build docs-check actions-check
+    - run: make openapi
+    - run: make openapi-check CONTAINER=docker
+    if: ${{ github.server_url == 'https://git.home.arpa' || github.actor == 'nektos/act' }}
   acceptance:
-    runs-on: ubuntu-latest
+    runs-on: plazia-linux
     timeout-minutes: 20
     defaults:
       run:
         working-directory: plazia-links
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          path: plazia-links
-      - name: Require the private source credential
-        env:
-          PLZK_SHARED_SOURCE_TOKEN: ${{ secrets.PLZK_SHARED_SOURCE_TOKEN }}
-        run: |
-          if [ -z "$PLZK_SHARED_SOURCE_TOKEN" ]; then
-            echo "::error::Configure PLZK_SHARED_SOURCE_TOKEN with read access to plazia and plazia-identity."
-            exit 1
-          fi
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: salyvinagre/plazia
-          path: plazia
-          token: ${{ secrets.PLZK_SHARED_SOURCE_TOKEN }}
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: salyvinagre/plazia-identity
-          path: plazia-identity
-          token: ${{ secrets.PLZK_SHARED_SOURCE_TOKEN }}
-      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
-        with:
-          version: '0.12.21'
-          enable-cache: true
-      - run: make bootstrap
-      - run: uv run --locked playwright install --with-deps chromium
-      - run: make acceptance CONTAINER=docker
-      - name: Install the native image builder
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes podman
-      - name: Build the production runtime
-        env:
-          PLAZIA_CONTAINER_BUILDER: podman
-        run: make image image-smoke CONTAINER=podman
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: ${{ !cancelled() }}
-        with:
-          name: browser-${{ github.sha }}
-          path: plazia-links/output/playwright
-          retention-days: 7
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        path: plazia-links
+        github-server-url: https://git.home.arpa
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        persist-credentials: false
+    - name: Use read-only Gitea source transport
+      shell: bash
+      run: |
+        test -n "$PLAZIA_GIT_TOKEN"
+        export GIT_CONFIG_GLOBAL="$RUNNER_TEMP/gitea.gitconfig"
+        echo "GIT_CONFIG_GLOBAL=$GIT_CONFIG_GLOBAL" >> "$GITHUB_ENV"
+        # Defer secret expansion until Git requests a credential.
+        # shellcheck disable=SC2016
+        git config --global credential.https://git.home.arpa.helper '!f() { printf "%s\n" "username=ci-saly" "password=$PLAZIA_GIT_TOKEN"; }; f'
+        git config --global url.https://git.home.arpa/salyvinagre/.insteadOf https://github.com/salyvinagre/
+    - name: Require the private source credential
+      env:
+        PLZK_SHARED_SOURCE_TOKEN: ${{ secrets.PLAZIA_GIT_TOKEN }}
+      run: |
+        if [ -z "$PLZK_SHARED_SOURCE_TOKEN" ]; then
+          echo "::error::Configure PLAZIA_GIT_TOKEN with read access to plazia and plazia-identity."
+          exit 1
+        fi
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        repository: salyvinagre/plazia
+        path: plazia
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        github-server-url: https://git.home.arpa
+        persist-credentials: false
+        ref: 50adbbc2014723e5e8156483b0ae665c2ae74994
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        repository: salyvinagre/plazia-identity
+        path: plazia-identity
+        token: ${{ secrets.PLAZIA_GIT_TOKEN }}
+        github-server-url: https://git.home.arpa
+        persist-credentials: false
+        ref: b9ab9f7d971d588b10883ec6aa9db6db1e3be401
+    - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+      with:
+        version: 0.12.21
+        enable-cache: true
+    - run: make bootstrap
+    - run: uv run --locked playwright install --with-deps chromium
+    - run: make acceptance CONTAINER=docker
+    - name: Build the production runtime
+      env:
+        PLAZIA_CONTAINER_BUILDER: podman
+      run: make image image-smoke CONTAINER=podman
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      if: ${{ !cancelled() }}
+      with:
+        name: browser-${{ github.sha }}
+        path: plazia-links/output/playwright
+        retention-days: 7
+    if: ${{ github.server_url == 'https://git.home.arpa' || github.actor == 'nektos/act' }}
+'on':
+  push:
+    branches:
+    - '**'
+  workflow_dispatch: null
+env:
+  PLAZIA_GIT_TOKEN: ${{ secrets.PLAZIA_GIT_TOKEN }}
+  UV_NATIVE_TLS: 'true'
