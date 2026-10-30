@@ -39,8 +39,8 @@ needs its own operators, billing or security policy.
 
 Bind an authorized Identity organization with the owner CLI after installation:
 `PLZK_SCHEMA_DATABASE_URL` is the owner credential; `PLZK_DATABASE_URL` is always
-the API credential. Native Python and serverless installations may supply their
-own explicit Identity bindings without running the release hooks. Shared release
+the API credential. Native development may supply explicit Identity bindings
+without running the release hooks. Shared release
 activation remains disabled; actual provider enrollment and production
 acceptance remain open.
 

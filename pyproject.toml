@@ -56,9 +56,6 @@ source = ["app", "worker"]
 fail_under = 85
 show_missing = true
 
-[tool.vercel]
-entrypoint = "app.index:app"
-
 [tool.uv.sources]
 plazia-authlib = { path = "../plazia/packages/plazia-authlib", editable = true }
 plazia-cli = { path = "../plazia/packages/plazia-cli", editable = true }

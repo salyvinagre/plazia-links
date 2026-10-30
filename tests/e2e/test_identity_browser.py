@@ -20,8 +20,8 @@ pytestmark = [
 ]
 
 
-@pytest.fixture(scope="module", params=["container", "serverless"])
-def live_application(request):
+@pytest.fixture(scope="module")
+def live_application():
     from playwright.sync_api import sync_playwright
 
     with socket.socket() as sock:
@@ -32,7 +32,6 @@ def live_application(request):
     env = {
         **os.environ,
         "PLZK_ENVIRONMENT": "test",
-        "PLZK_DEPLOYMENT_MODE": request.param,
         "PLZK_DATABASE_URL": os.environ["POSTGRES_TEST_URL"],
         "PLZK_IDENTITY_ISSUER": issuer.url,
         "PLZK_IDENTITY_AUDIENCE": "https://links.example.test/api/v1",
@@ -66,13 +65,13 @@ def live_application(request):
     ).raise_for_status()
     output = root / "output" / "playwright"
     output.mkdir(parents=True, exist_ok=True)
-    with (output / f"server-{request.param}.log").open("w+") as log:
+    with (output / "server-container.log").open("w+") as log:
         process = subprocess.Popen(
             [
                 sys.executable,
                 "-m",
                 "uvicorn",
-                "app.index:app",
+                "app.main:app",
                 "--host",
                 "127.0.0.1",
                 "--port",
@@ -87,7 +86,7 @@ def live_application(request):
         try:
             for _ in range(150):
                 if process.poll() is not None:
-                    raise AssertionError((output / f"server-{request.param}.log").read_text())
+                    raise AssertionError((output / "server-container.log").read_text())
                 try:
                     if httpx2.get(base + "/health", timeout=0.5).status_code == 200:
                         break
@@ -99,7 +98,7 @@ def live_application(request):
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch()
                 try:
-                    yield base, issuer, browser, request.param
+                    yield base, issuer, browser
                 finally:
                     browser.close()
         finally:
@@ -124,7 +123,7 @@ def test_reserve_subscribe_activate_and_delivery(live_application):
     from app.contexts.links.adapters.repositories.sql.notifications import PostgresDeliveryQueue
     from app.contexts.links.application.workflows.notifications import ActivationEmailsWorkflow
 
-    base, issuer, browser, mode = live_application
+    base, issuer, browser = live_application
     context = browser.new_context(viewport={"width": 1280, "height": 900})
     page = context.new_page()
     page.goto(base + "/login")
@@ -137,12 +136,12 @@ def test_reserve_subscribe_activate_and_delivery(live_application):
     code = rows.first.locator("td").first.get_by_role("link").inner_text().strip("/")
     link = rows.first.get_by_role("link", name="Activate")
     screenshot = Path("output/playwright")
-    page.screenshot(path=str(screenshot / f"pool-{mode}-desktop.png"), full_page=True)
+    page.screenshot(path=str(screenshot / "pool-container-desktop.png"), full_page=True)
     visitor_context = browser.new_context(viewport={"width": 390, "height": 844})
     visitor = visitor_context.new_page()
     visitor.goto(base + "/" + code)
     expect(visitor.get_by_role("heading", name="This link is coming soon")).to_be_visible()
-    visitor.screenshot(path=str(screenshot / f"waiting-{mode}-mobile.png"), full_page=True)
+    visitor.screenshot(path=str(screenshot / "waiting-container-mobile.png"), full_page=True)
     visitor.get_by_label("Email address").fill("subscriber@example.com")
     visitor.get_by_role("button", name="Notify me").click()
     expect(visitor.get_by_role("heading", name="You’re on the list")).to_be_visible()
@@ -152,7 +151,7 @@ def test_reserve_subscribe_activate_and_delivery(live_application):
     for width in (320, 390, 768):
         page.set_viewport_size({"width": width, "height": 844})
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-        page.screenshot(path=str(screenshot / f"activation-{mode}-{width}.png"), full_page=True)
+        page.screenshot(path=str(screenshot / f"activation-container-{width}.png"), full_page=True)
     page.set_viewport_size({"width": 1280, "height": 900})
     page.get_by_role("button", name="Save changes").click()
     expect(page.get_by_role("heading", name="Links", exact=True)).to_be_visible()
@@ -210,7 +209,7 @@ def test_reserve_subscribe_activate_and_delivery(live_application):
             visited.locator("[data-status]:visible").bounding_box()["y"]
             < (visited.get_by_role("link", name="/" + code, exact=True).bounding_box()["y"])
         )
-        page.screenshot(path=str(screenshot / f"pool-{mode}-{width}.png"), full_page=True)
+        page.screenshot(path=str(screenshot / f"pool-container-{width}.png"), full_page=True)
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         for name in ("Sign out", "Reserve links"):
             bounds = page.get_by_role("button", name=name, exact=True).bounding_box()
@@ -228,17 +227,17 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
     from playwright.sync_api import TimeoutError as BrowserTimeoutError
     from playwright.sync_api import expect
 
-    base, _, browser, mode = live_application
+    base, _, browser = live_application
     context = browser.new_context(viewport={"width": width, "height": 900})
     page = context.new_page()
     page.goto(base + "/login")
     page.wait_for_url(base + "/dashboard/links")
-    keep = f"Keep-{mode}-{width}"
+    keep = f"Keep-container-{width}"
     page.get_by_label("Pool name").fill(keep)
     page.get_by_label("Number of links").fill("1")
     page.get_by_role("button", name="Reserve links").click()
     expect(page.get_by_role("heading", name=keep, exact=True)).to_be_visible()
-    name = f"Manage-{mode}-{width}"
+    name = f"Manage-container-{width}"
     page.get_by_label("Pool name").fill(name)
     page.get_by_label("Number of links").fill("4")
     page.get_by_role("button", name="Reserve links").click()
@@ -257,7 +256,7 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
     expect(page.get_by_label("Rename pool")).to_be_hidden()
     expect(page.locator("#delete-selection")).to_be_hidden()
     page.screenshot(
-        path=f"output/playwright/pool-actions-{mode}-{width}.png",
+        path=f"output/playwright/pool-actions-container-{width}.png",
         full_page=True,
         animations="disabled",
     )
@@ -269,7 +268,7 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
     expect(page.get_by_role("button", name="Delete links", exact=True)).to_be_hidden()
     actions.click()
     page.screenshot(
-        path=f"output/playwright/pool-menu-{mode}-{width}.png",
+        path=f"output/playwright/pool-menu-container-{width}.png",
         full_page=True,
         animations="disabled",
     )
@@ -317,7 +316,7 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
     selected = [items.nth(i).input_value() for i in (0, 1)]
     remaining = [items.nth(i).input_value() for i in (2, 3)]
     page.screenshot(
-        path=f"output/playwright/pool-management-{mode}-{width}.png",
+        path=f"output/playwright/pool-management-container-{width}.png",
         full_page=True,
         animations="disabled",
     )
@@ -388,7 +387,7 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
         expect(page.get_by_role("link", name="Previous pools", exact=True)).to_be_visible()
         expect(page.get_by_label("Rename pool")).to_be_hidden()
         page.screenshot(
-            path=f"output/playwright/pool-navigation-{mode}-{width}.png",
+            path=f"output/playwright/pool-navigation-container-{width}.png",
             full_page=True,
             animations="disabled",
         )
@@ -399,7 +398,7 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
         page.wait_for_url(base + "/dashboard/links?pool_page=2")
         expect(page.get_by_role("heading", name=keep + "-renamed", exact=True)).to_have_count(0)
         # All means the matching collection, including links beyond the visible page.
-        across = f"Across-{mode}-{width}"
+        across = f"Across-container-{width}"
         page.get_by_label("Pool name").fill(across)
         page.get_by_label("Number of links").fill("21")
         page.get_by_role("button", name="Reserve links").click()
@@ -422,11 +421,11 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
         expect(page.get_by_role("heading", name=across, exact=True)).to_be_visible()
         actions.click()
         expect(page.get_by_role("button", name="Delete links", exact=True)).to_have_count(0)
-        page.get_by_label("Pool name").fill(f"Global-{mode}-{width}")
+        page.get_by_label("Pool name").fill(f"Global-container-{width}")
         page.get_by_label("Number of links").fill("21")
         page.get_by_role("button", name="Reserve links").click()
         expect(
-            page.get_by_role("heading", name=f"Global-{mode}-{width}", exact=True)
+            page.get_by_role("heading", name=f"Global-container-{width}", exact=True)
         ).to_be_visible()
         page.get_by_role("link", name="All links", exact=True).click()
         expect(items).to_have_count(20)
@@ -449,7 +448,7 @@ def test_manage_pools_and_delete_a_selection(live_application, width):
 def test_pixel_create_embed_capture_and_revoke(live_application):
     from playwright.sync_api import expect
 
-    base, _, browser, mode = live_application
+    base, _, browser = live_application
     context = browser.new_context(
         viewport={"width": 1280, "height": 900}, permissions=["clipboard-read", "clipboard-write"]
     )
@@ -466,7 +465,7 @@ def test_pixel_create_embed_capture_and_revoke(live_application):
     page.get_by_role("button", name="Create pixel", exact=True).click()
     expect(page.get_by_role("alert").filter(has_text="Use a delivery reference")).to_be_visible()
     expect(page.get_by_label("Delivery reference")).to_be_focused()
-    reference = f"delivery-{mode}"
+    reference = "delivery-container"
     page.get_by_label("Delivery reference").fill(reference)
     page.get_by_role("button", name="Create pixel", exact=True).click()
     card = page.get_by_role("article").filter(
@@ -553,18 +552,18 @@ def test_pixel_create_embed_capture_and_revoke(live_application):
         ):
             bounds = button.bounding_box()
             assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= width
-        page.screenshot(path=f"output/playwright/pixels-{mode}-{width}.png", full_page=True)
+        page.screenshot(path=f"output/playwright/pixels-container-{width}.png", full_page=True)
         if width >= 640:
             field = page.get_by_label("Delivery reference").bounding_box()
             action = page.get_by_role("button", name="Create pixel", exact=True).bounding_box()
             assert field and action and abs(field["y"] - action["y"]) < 1
         card.get_by_text("Embed code", exact=True).click()
-        page.screenshot(path=f"output/playwright/pixel-embed-{mode}-{width}.png", full_page=True)
+        page.screenshot(path=f"output/playwright/pixel-embed-container-{width}.png", full_page=True)
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         card.get_by_text("Embed code", exact=True).click()
         actions.click()
         expect(card.get_by_role("button", name="Delete pixel")).to_be_visible()
-        page.screenshot(path=f"output/playwright/pixel-menu-{mode}-{width}.png", full_page=True)
+        page.screenshot(path=f"output/playwright/pixel-menu-container-{width}.png", full_page=True)
         page.keyboard.press("Escape")
         expect(actions).to_be_focused()
     import psycopg

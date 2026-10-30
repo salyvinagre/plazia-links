@@ -172,7 +172,8 @@ retained environment, independently of runtime revision. Production enters
 through the Plazia root aggregate. Every non-production name uses preview
 policy; native development is separate. Shared activation remains disabled
 until Identity deploys and worker qualification/fencing is implemented.
-Stateless API/serverless execution remains supported with external state.
+The API remains stateless across container replicas, with PostgreSQL and Redis
+as external state. Links uses its pooled container ASGI runtime.
 Redis remains an explicit external API binding; no new Redis provider is
 invented in this pass.
 

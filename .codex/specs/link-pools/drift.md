@@ -1,6 +1,6 @@
 # Plazia ecosystem drift and disposition
 
-Reconciled 2026-10-03 against implemented Links and current sibling sources. The initial audit found inherited ORM/Alembic/workspace code and a Python mismatch. The table describes the current disposition. No customer data exists; the user selected a fresh schema. This task modified no sibling production sources.
+Reconciled 2026-10-03 against implemented Links and current sibling sources; runtime disposition refreshed 2026-10-30. The initial audit found inherited ORM/Alembic/workspace code and a Python mismatch. The table describes the current disposition. No customer data exists; the user selected a fresh schema. This task modified no sibling production sources.
 
 Golden Principles resolve through plazia-tools principles path to ../plazia/packages/plazia-tooling. Bounded comparisons examined shared contracts and consumers in Plazia, Identity, Marketbook, Billing, TradeScale and the template, excluding environments, generated output and caches. Shared mechanisms remain distinct from service-owned domain repositories and live deployment evidence.
 
@@ -25,7 +25,7 @@ Identity's OAuth access-token profile uses RFC 9068 fields and client capabiliti
 
 The shared `plazia_authlib.authz` registry contains Links read/create/update/delete actions on Identity organizations. The shared adapter checks reader/manager relations; Links retains token capability checks and active organization bindings. Identity owns membership tuples.
 
-CI needs matching published shared 3.14 manifests and read access to its private sibling checkout. Local resolution/image builds do not prove publication or a successful GitHub run. Real Identity enrollment, deployed smoke, collector ingestion, restore drills and production inbox delivery remain live gates. Serverless needs a separate persistent worker. See [validation evidence](validation.md) for exact local closure.
+CI needs matching published shared 3.14 manifests and read access to its private sibling checkout. Local resolution/image builds do not prove publication or a successful GitHub run. Real Identity enrollment, deployed smoke, collector ingestion, restore drills and production inbox delivery remain live gates. The persistent worker remains a separate process from the API. See [validation evidence](validation.md) for exact local closure.
 
 ## Runtime and deployment disposition
 
@@ -47,7 +47,7 @@ preserves applied SQL history. The workload declares shared ingress at
 Redis remains an explicit external API binding; no current root Redis provider
 was found. Shared activation and root production-suite admission remain deferred
 until Identity deploys and Links worker qualification/fencing is implemented.
-Stateless API/serverless behavior stays supported with external state.
+The container API remains stateless with PostgreSQL and Redis as external state.
 
 The authlib merge is reflected in the dependency, authorization import and
 image allowlist: `plazia-authlib[authz]` replaces the deleted `plazia-authz`.

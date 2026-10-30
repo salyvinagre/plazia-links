@@ -1,5 +1,4 @@
 [app]
-deployment_mode = "container"
 rate_limit_enabled = true
 trusted_proxy_ips = []
 telemetry_export_driver = "noop"

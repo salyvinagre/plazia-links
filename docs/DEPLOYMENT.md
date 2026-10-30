@@ -95,7 +95,7 @@ ordered tenant columns, cascade actions and validation state, so dropped or
 altered constraints cannot silently leave subscriptions or queued mail behind.
 
 ## Runtime
-Container entrypoint: app.main:app. Serverless ASGI entrypoint: app.index:app; database scopes open per invocation, while container mode uses a lazy shared PostgreSQL pool. Both require Redis and OpenFGA. /health is startup readiness evidence, not ongoing SMTP or provider health. Vercel requires the same shared dependency artifacts in its build context; the sibling editable-source development checkout alone is not a self-contained cloud upload.
+ASGI entrypoint: app.main:app. The API uses a lazy shared PostgreSQL pool and requires Redis and OpenFGA. /health is startup readiness evidence, not ongoing SMTP or provider health.
 
 Run from Links with the sibling shared packages available:
 
@@ -157,12 +157,12 @@ Shared release activation remains disabled. After Identity deployment succeeds,
 complete Links' stateful worker qualification/fencing and admit its workload
 into the root production suite. Production operations enter from the Plazia
 root aggregate; a leaf `make plan RELEASE_ENV=production` is intentionally
-rejected by shared tooling. The API remains suitable for stateless
-container replicas or serverless execution with external PostgreSQL/Redis;
-the durable email worker still runs separately. No deployment, DNS/tunnel
+rejected by shared tooling. The API remains stateless across container
+replicas with external PostgreSQL/Redis; the durable email worker runs
+separately. No deployment, DNS/tunnel
 change, stateful rollout or restore qualification was performed here.
 
-Run the persistent worker separately: uv run python -m worker.run. Serverless API invocations do not drain email jobs. Worker settings use PLZK_WORKER_ selectors and the [worker] TOML section. SMTP security is starttls (default), tls or plain for isolated local capture only; plain SMTP is rejected in production. Timeout 10 seconds, worker idle interval 5 seconds, retry limit 5, exponential delays 30/60/120/240 seconds and cap 3600 seconds. Pending messages survive restart; SMTP acceptance immediately before a crash can duplicate delivery.
+Run the persistent worker separately: uv run python -m worker.run. API processes do not drain email jobs. Worker settings use PLZK_WORKER_ selectors and the [worker] TOML section. SMTP security is starttls (default), tls or plain for isolated local capture only; plain SMTP is rejected in production. Timeout 10 seconds, worker idle interval 5 seconds, retry limit 5, exponential delays 30/60/120/240 seconds and cap 3600 seconds. Pending messages survive restart; SMTP acceptance immediately before a crash can duplicate delivery.
 
 Delivery incident diagnosis starts with the worker role: count unsent jobs, attempts>=5 and next_attempt_at, without selecting email addresses. Repair SMTP/configuration first. Manual dead-letter replay changes delivery state and must be a targeted operator action. Retention purges delivered/dead subscribers after 30 days and old unactivated subscriptions after 365 days, cascading their jobs. Link deletion cancels waiting work.
 

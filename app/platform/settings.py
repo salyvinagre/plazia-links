@@ -60,7 +60,6 @@ class ServiceSettings(RuntimeSettings):
 
 
 class Settings(ServiceSettings):
-    deployment_mode: Literal["container", "serverless"] = "container"
     redis_url: SecretStr = Field(
         default=SecretStr("redis://localhost:6379/0"), exclude=True, repr=False
     )

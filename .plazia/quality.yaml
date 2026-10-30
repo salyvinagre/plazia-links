@@ -46,7 +46,6 @@ quality:
         - docs/ARCHITECTURE.md
         - docs/DEPLOYMENT.md
         - docs/IDENTITY.md
-        - docs/VERCEL.md
         - docs/UPSTREAM.md
         - .codex/specs/link-pools/spec.md
         - .codex/specs/link-pools/decisions.md

@@ -56,8 +56,8 @@ bounded capture policy. HEAD does not dispatch that command. Native atomic
 updates serialize on the pixel row, and deletion removes both definition and
 aggregate without allowing a raced capture to recreate them. Flyway V5 owns
 the policy, security-definer functions and restricted grants. API processes
-remain stateless with PostgreSQL as the statistics authority in container and
-serverless modes. Sending applications own message/recipient associations and
+remain stateless with PostgreSQL as the statistics authority across container
+replicas. Sending applications own message/recipient associations and
 HTML email construction; this feature does not add recipient data to Links.
 
 The added production source implements the new resource identity/lifecycle,

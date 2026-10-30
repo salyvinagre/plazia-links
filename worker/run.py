@@ -1,4 +1,4 @@
-"""Run the durable activation queue independently of API/serverless invocations."""
+"""Run the durable activation queue independently of the API process."""
 
 import asyncio
 from time import monotonic

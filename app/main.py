@@ -134,8 +134,7 @@ def create_app(
                 cleanup.push_async_callback(close_redis)
                 SchemaAuthority(config.database_url.get_secret_value()).check(runtime="app")
                 application.state.database = PostgresDatabase(
-                    config.database_url.get_secret_value(),
-                    pooled=config.deployment_mode == "container",
+                    config.database_url.get_secret_value()
                 )
                 cleanup.push_async_callback(application.state.database.close)
                 application.state.authority = OpenFgaOrganizationAuthority(
