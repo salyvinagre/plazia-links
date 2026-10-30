@@ -3,7 +3,7 @@ quality:
     github:
       actions:
         check:
-          path: .github/workflows/ci.yml
+          path: .github/workflows/check.yml
           local: true
           events: [workflow_dispatch]
           job: quality

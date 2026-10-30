@@ -1,5 +1,5 @@
 # Shared CI definition; ordinary jobs execute on the Gitea provider.
-name: Links quality and acceptance
+name: Check
 permissions:
   contents: read
 concurrency:
