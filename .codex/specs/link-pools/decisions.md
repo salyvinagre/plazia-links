@@ -271,3 +271,15 @@ The reviewed shared authlib consumer update separately adds three Python SLOC
 HTTP transport. All current app/worker Python changes therefore total +350 SLOC
 (+391 physical lines). This removes the superseded Identity facade at the caller
 without adding a local wrapper or alternate authorization path.
+
+## 2026-10-30: retire Vercel
+
+Links now has one API entrypoint, `app.main:app`, using its pooled container
+runtime. The Vercel configuration, duplicate entrypoint and deployment-mode
+selector were removed in `fed7b2e`; its exact Gitea run689 and `gitea/check`
+passed. The separate Vercel failure on that older commit is historical.
+
+The user confirmed project deletion in Vercel. An authenticated lookup of the
+exact former project returned404, and the team-scoped project-name search
+returned no projects. This removes that provider configuration; the declared
+container release remains under the existing admission and qualification gates.
