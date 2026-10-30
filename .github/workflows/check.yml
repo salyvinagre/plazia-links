@@ -7,7 +7,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   quality:
-    runs-on: plazia-linux
+    runs-on: [self-hosted, linux]
     timeout-minutes: 15
     defaults:
       run:
@@ -62,7 +62,7 @@ jobs:
     - run: make openapi-check CONTAINER=docker
     if: ${{ github.server_url == 'https://git.home.arpa/' || github.actor == 'nektos/act' }}
   acceptance:
-    runs-on: plazia-linux
+    runs-on: [self-hosted, linux]
     timeout-minutes: 20
     defaults:
       run:
