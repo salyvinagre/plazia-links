@@ -1,8 +1,10 @@
 delivery:
   stack:
-    machine_env: PLZK_PODMAN_MACHINE
+    machine_env: PLZ_STACK_PODMAN_MACHINE
     compose_dir: ops/containers
     label: Links owner stack
+    env_defaults:
+      PLZ_STACK_PODMAN_MACHINE: podman-machine-default
     image_builds:
       links:
         selectors:

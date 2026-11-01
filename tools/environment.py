@@ -98,7 +98,7 @@ def build_registry() -> EnvRegistry:
                 default="../../app/platform/persistence/sql",
             ),
             EnvVariable(
-                name="PLZK_CONFIG",
+                name="PLZK_CONFIG_FILE",
                 env_class=EnvClass.OVERRIDABLE,
                 purpose="Deployment-owned TOML projection for API, worker and Identity settings.",
                 producer=EnvProducer.TOML_CONFIG,
@@ -115,15 +115,6 @@ def build_registry() -> EnvRegistry:
                 surface=EnvSurface.OPERATOR,
                 secret=True,
                 file_supported=True,
-            ),
-            EnvVariable(
-                name="PLZK_PODMAN_MACHINE",
-                env_class=EnvClass.OVERRIDABLE,
-                purpose="Existing Podman machine selected for local owner operations.",
-                producer=EnvProducer.RELEASE_PIPELINE,
-                consumer=EnvConsumer.COMPOSE,
-                surface=EnvSurface.OPERATOR,
-                default="podman-machine-default",
             ),
             EnvVariable(
                 name="PLZK_IMAGE",
