@@ -13,7 +13,7 @@ class PostgresOrganizationRepository(OrganizationRepository):
 
     async def find(self, issuer: str, organization_id: OrganizationId) -> OrganizationDto | None:
         cursor = await self._connection.execute(
-            "SELECT organization_id, name, is_active, workloads "
+            "SELECT organization_id, name, is_active, private_clients "
             "FROM access.organizations WHERE issuer = %s AND organization_id = %s",
             (issuer, organization_id.uuid),
         )
@@ -24,7 +24,7 @@ class PostgresOrganizationRepository(OrganizationRepository):
             id=OrganizationId(uuid=row[0]),
             name=row[1],
             is_active=row[2],
-            workloads=tuple(row[3]),
+            private_clients=tuple(row[3]),
         )
 
     async def bind(
@@ -32,17 +32,18 @@ class PostgresOrganizationRepository(OrganizationRepository):
         issuer: str,
         organization_id: OrganizationId,
         name: str,
-        workloads: tuple[str, ...] = (),
+        private_clients: tuple[str, ...] = (),
     ) -> None:
         await self._connection.execute(
             """
-            INSERT INTO access.organizations (issuer, organization_id, name, is_active, workloads)
+            INSERT INTO access.organizations
+                (issuer, organization_id, name, is_active, private_clients)
             VALUES (%s, %s, %s, true, %s)
             ON CONFLICT (issuer, organization_id) DO UPDATE
-            SET name = EXCLUDED.name, is_active = true, workloads = EXCLUDED.workloads,
+            SET name = EXCLUDED.name, is_active = true, private_clients = EXCLUDED.private_clients,
                 updated_at = clock_timestamp()
             """,
-            (issuer, organization_id.uuid, name, list(workloads)),
+            (issuer, organization_id.uuid, name, list(private_clients)),
         )
 
     async def disable(self, issuer: str, organization_id: OrganizationId) -> None:

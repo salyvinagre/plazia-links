@@ -24,10 +24,10 @@ class CreateLinkHandler:
         policy = LinkPolicy.select(
             command.draft.entropy,
             command.draft.visibility,
-            workload=command.actor.client_id in organization.workloads,
+            private_required=command.actor.client_id in organization.private_clients,
         )
-        if command.draft.short_code and policy.visibility is Visibility.workload_private:
-            raise InvalidLinkError("Workload-private links cannot use custom aliases")
+        if command.draft.short_code and policy.visibility is Visibility.client_private:
+            raise InvalidLinkError("Client-private links cannot use custom aliases")
         for _ in range(5):
             draft = (
                 command.draft

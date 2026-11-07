@@ -20,6 +20,6 @@ class OrganizationRepository(Protocol):
         issuer: str,
         organization_id: OrganizationId,
         name: str,
-        workloads: tuple[str, ...] = (),
+        private_clients: tuple[str, ...] = (),
     ) -> None: ...
     async def disable(self, issuer: str, organization_id: OrganizationId) -> None: ...

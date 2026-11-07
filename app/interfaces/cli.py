@@ -56,7 +56,9 @@ class OperatorCli:
             options=(
                 CommandOption("--name", required=True, help="Organization display name."),
                 CommandOption(
-                    "--workload", multiple=True, help="Enrolled private workload client ID."
+                    "--private-client",
+                    multiple=True,
+                    help="Client ID required to use private links.",
                 ),
             )
             if self.action == "bind-organization"
@@ -86,7 +88,9 @@ class OperatorCli:
                         invocation.str("name"),
                         tuple(
                             str(value)
-                            for value in cast(tuple[object, ...], invocation.value("workload"))
+                            for value in cast(
+                                tuple[object, ...], invocation.value("private_client")
+                            )
                         ),
                     )
                     if self.action == "bind-organization"

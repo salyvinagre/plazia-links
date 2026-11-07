@@ -107,8 +107,10 @@ class MemoryRepository:
     async def find(self, issuer, organization_id):
         return self.bindings.get(organization_id) if issuer == self.issuer else None
 
-    async def bind(self, issuer, organization_id, name, workloads=()):
-        self.bindings[organization_id] = OrganizationDto(organization_id, name, True, workloads)
+    async def bind(self, issuer, organization_id, name, private_clients=()):
+        self.bindings[organization_id] = OrganizationDto(
+            organization_id, name, True, private_clients
+        )
 
     async def disable(self, issuer, organization_id):
         self.bindings[organization_id] = replace(self.bindings[organization_id], is_active=False)

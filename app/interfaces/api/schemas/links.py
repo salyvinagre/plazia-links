@@ -59,13 +59,13 @@ class CreateLinkRequest(ApiRequest):
         None, description="Generated code profile; omitted selects the trusted default."
     )
     visibility: Visibility | None = Field(
-        None, description="Management visibility; workload policy is authoritative."
+        None, description="Management visibility; private client policy is authoritative."
     )
 
     @model_validator(mode="after")
     def generated(self) -> Self:
         if self.short_code and (
-            self.entropy is not None or self.visibility is Visibility.workload_private
+            self.entropy is not None or self.visibility is Visibility.client_private
         ):
             raise ValueError("Custom short_code and generated entropy are mutually exclusive")
         return self
@@ -131,7 +131,7 @@ class ReservePoolRequest(ApiRequest):
         None, description="Generated code profile; omitted selects the trusted default."
     )
     visibility: Visibility | None = Field(
-        None, description="Management visibility; workload policy is authoritative."
+        None, description="Management visibility; private client policy is authoritative."
     )
 
 

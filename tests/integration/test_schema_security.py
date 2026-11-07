@@ -285,7 +285,7 @@ from tests.integration.test_postgres_links import postgres_urls as postgres_urls
 def test_runtime_rejects_security_drift(postgres_urls, change, restore, runtime, reason):
     url = postgres_urls.app if runtime == "app" else postgres_urls.worker
     authority = SchemaAuthority(url)
-    assert authority.check(runtime=runtime).revision == "6"
+    assert authority.check(runtime=runtime).revision == "7"
     with Connection.connect(postgres_urls.owner, autocommit=True) as owner:
         roles = PostgresRoles.read(owner, owner="salyvinagre/plazia-links")
         for key in ("links_app", "links_worker"):
@@ -339,4 +339,4 @@ def test_runtime_rejects_security_drift(postgres_urls, change, restore, runtime,
                         sql.SQL(" WITH GRANT OPTION" if grantable else ""),
                     )
                 )
-    assert authority.check(runtime=runtime).revision == "6"
+    assert authority.check(runtime=runtime).revision == "7"

@@ -9,6 +9,13 @@ The portfolio OpenFGA organization model must contain reader and manager relatio
 
 The API also checks an active local issuer+org binding. The operator binds the canonical organization directly; no local user, workspace, role or synthetic tenant is created at login. Existing management sessions lose access when authority or binding is revoked.
 
+`private_clients` records clients required to use high-entropy `client_private`
+links. It is a privacy policy, not an authorization allowlist. Private ownership
+is the verified issuer, organization and client ID; a machine subject does not
+replace that ownership key. Scopes, active binding and OpenFGA checks still apply
+to first execution and replay. The previous configuration/CLI/visibility names
+have no aliases. See the [V7 cutover](DEPLOYMENT.md) before upgrading.
+
 The shared action registry maps `links.read` to organization `reader` and `links.create`, `links.update`, and `links.delete` to organization `manager`. Links consumes that registry and the shared OpenFGA adapter with its own audit source. The existing organization graph and tuple ownership are preserved; product capability and active-binding guards remain in Links.
 
 

@@ -64,10 +64,23 @@ make migrate runs read-only admission, literal Flyway migrate (with validation o
 
 Operator commands use the shared plazia-cli parser; `uv run --locked plazia-links --help` works without runtime secrets or network access. Owner CQRS assembly and database lifetime live in platform composition. Only an owner credential can bind/disable organizations. Supply PLZK_IDENTITY_ISSUER and PLZK_SCHEMA_DATABASE_URL to the operator command; never run the API with that credential. disable-organization revokes existing management sessions on their next request without affecting public destinations.
 
-This application revision requires Flyway V5. Run the same
+This application revision requires Flyway V7. Run the same
 owner-scoped `make migrate` before starting this application revision against a
-V1/V2/V3/V4 database. Admission accepts verified packaged history prefixes for
-upgrade; runtime requires V5.
+V1–V6 database. Admission accepts verified packaged history prefixes for
+upgrade; runtime requires V7.
+
+V7 renames the privacy policy column to `private_clients` and stored visibility
+to `client_private`. It retains issuer/organization/client ownership, codes,
+destinations, receipt keys and the seven-day receipt expiry introduced in V6.
+Live create/reserve receipt fingerprints and original snapshots migrate together;
+unrecognized live fingerprints abort and roll back the upgrade. No receipts are
+discarded, replay windows extended or links reallocated.
+
+Stop old Links writers and Printer workers before migration. Change operator
+invocations to `--private-client` and Printer TOML to `[[access.credentials]]`; retain the same client IDs and mounted
+secret contents. Apply V7 through `make migrate`, verify it with `make schema-check`,
+then restart both owners with the matching binaries. The API accepts only
+`client_private`; there are no old-name aliases or mixed-version rolling path.
 V2 adds pool UPDATE/DELETE privileges for the API role and cascades
 pool deletion to links. The worker retains no pool-management access. No
 conversion from inherited ORM storage is provided.

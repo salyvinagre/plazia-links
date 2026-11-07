@@ -1,4 +1,4 @@
-"""Private workload capabilities and retry boundaries on the Flyway schema."""
+"""Client-private capabilities and retry boundaries on the Flyway schema."""
 
 from dataclasses import replace
 
@@ -26,7 +26,7 @@ from tests.support import FixtureAuthority
 
 
 @pytest.mark.slow
-async def test_private_workload_scope_activation_replay_and_expiry(postgres_urls):
+async def test_client_private_scope_activation_replay_and_expiry(postgres_urls):
     org = OrganizationId.new()
     issuer = "https://identity.example.test"
     actor = Principal(
@@ -46,14 +46,14 @@ async def test_private_workload_scope_activation_replay_and_expiry(postgres_urls
         await _bind_organization(postgres_urls.owner, issuer, org)
         async with await AsyncConnection.connect(postgres_urls.owner) as owner:
             await owner.execute(
-                "UPDATE access.organizations SET workloads=%s "
+                "UPDATE access.organizations SET private_clients=%s "
                 "WHERE issuer=%s AND organization_id=%s",
                 ([actor.client_id, "second-client"], issuer, org.uuid),
             )
         bus, _ = Container.buses(database, PostgresUowFactory(database), FixtureAuthority())
         command = ReservePoolCommand(actor, 2)
         pool = (await bus.dispatch(command, context=context)).value
-        assert pool.entropy is Entropy.high and pool.visibility is Visibility.workload_private
+        assert pool.entropy is Entropy.high and pool.visibility is Visibility.client_private
         assert (await bus.dispatch(command, context=context)).replayed
         second = replace(actor, client_id="second-client")
         other = (await bus.dispatch(ReservePoolCommand(second, 2), context=context)).value
@@ -65,14 +65,25 @@ async def test_private_workload_scope_activation_replay_and_expiry(postgres_urls
         for outsider in (
             replace(actor, client_id="ordinary"),
             replace(actor, issuer=issuer + "/other"),
+            replace(actor, organization_id=OrganizationId.new()),
         ):
-            async with database.scope(org, actor=outsider) as scope:
+            async with database.scope(
+                outsider.organization_id, readonly=False, actor=outsider
+            ) as scope:
                 assert (await scope.links.list(org, 1, 10)).total == 0
                 assert (await scope.links.pools(org, 1, 10)).total == 0
                 with pytest.raises(LinkNotFoundError):
                     await scope.links.get(org, links[0].id)
+                with pytest.raises(LinkNotFoundError):
+                    await scope.links.update(
+                        org, links[0].id, LinkPatch(frozenset({"notes"}), notes="tamper")
+                    )
                 stats = (await scope.links.statistics(org, (org,)))[org]
                 assert stats.redirects == stats.waiting_views == 0
+        # Private ownership follows the verified issuer/client in its organization,
+        # not the particular machine subject used to authenticate this request.
+        async with database.scope(org, actor=replace(actor, subject="another-machine")) as scope:
+            assert (await scope.links.get(org, links[0].id)).id == links[0].id
         for entropy, visibility in (
             (Entropy.low, None),
             (Entropy.medium, None),

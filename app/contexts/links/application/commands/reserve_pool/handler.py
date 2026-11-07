@@ -16,7 +16,7 @@ class ReservePoolHandler:
         policy = LinkPolicy.select(
             command.entropy,
             command.visibility,
-            workload=command.actor.client_id in organization.workloads,
+            private_required=command.actor.client_id in organization.private_clients,
         )
         for _ in range(5):
             codes = tuple(PublicCode.generate(policy.entropy) for _ in range(command.size))

@@ -10,11 +10,11 @@ class BindOrganizationCommand:
     issuer: Annotated[str, Text()]
     organization_id: Annotated[OrganizationId, CanonicalIdField(OrganizationId)]
     name: Annotated[str, Text(), Length(maximum=100)]
-    workloads: tuple[str, ...] = ()
+    private_clients: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         AnnotatedFields.normalize(self)
-        if len(self.workloads) > 16 or any(
-            not value.strip() or len(value) > 2048 for value in self.workloads
+        if len(self.private_clients) > 16 or any(
+            not value.strip() or len(value) > 2048 for value in self.private_clients
         ):
-            raise ValueError("Workload clients must be bounded nonempty identifiers")
+            raise ValueError("Private clients must be bounded nonempty identifiers")

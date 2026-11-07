@@ -12,5 +12,5 @@ class BindOrganizationHandler:
 
     async def execute(self, command: BindOrganizationCommand, *, context: Invocation) -> None:
         await self._repository.bind(
-            command.issuer, command.organization_id, command.name, command.workloads
+            command.issuer, command.organization_id, command.name, command.private_clients
         )

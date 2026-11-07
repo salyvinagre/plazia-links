@@ -27,3 +27,19 @@ migration preserves applied V1 and enables the new lifecycle.
 ## Boundaries
 No live account provisioning, deployment or external recipient email is performed. The local issuer, disposable services and SMTP capture provide local acceptance evidence. The shared authz registry lacks a Links fragment; the organization-level adapter consumes existing reader/manager relations. Deployment alignment updates the shared PostgreSQL claim and its Flyway projection.
 Production activation and worker qualification remain deferred until Identity deploys.
+
+## Client-private management vocabulary · 2026-11-07
+
+`client_private` identifies pools/links owned by the verified issuer, organization
+and client ID. `private_clients` is the organization policy requiring those
+clients to use private high-entropy links; it grants no authority. The operator
+uses `--private-client`. The browser issuer, scopes, active bindings and OpenFGA
+checks retain their existing responsibilities. Additional machine-issuer trust
+is separate Wave 0 work, whose setting is named `machine_issuers`.
+
+The clean cutover has no legacy wire/configuration aliases. Forward migration
+V7 preserves ownership, codes, original receipt results and seven-day expiry,
+and converts live creation fingerprints by matching the original input. Unknown
+live fingerprints abort the upgrade. Applied V1–V6 remain immutable. Follow the
+[coordinated Printer/Links cutover](../../../docs/DEPLOYMENT.md) before restarting
+the new binaries; mixed versions are unsupported.

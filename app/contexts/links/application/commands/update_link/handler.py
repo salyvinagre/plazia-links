@@ -25,15 +25,15 @@ class UpdateLinkHandler:
         organization = await self._access.require(command.actor, "links:update")
         previous = await self._repository.get(organization.id, command.link_id, lock=True)
         if (
-            command.actor.client_id in organization.workloads
+            command.actor.client_id in organization.private_clients
             and "destination_url" in command.patch.fields
             and (
                 previous.entropy is not Entropy.high
-                or previous.visibility is not Visibility.workload_private
+                or previous.visibility is not Visibility.client_private
             )
         ):
             raise InvalidLinkError(
-                "Workload activation requires a high-entropy private reservation"
+                "Private client activation requires a high-entropy private reservation"
             )
         activating = previous.destination_url is None and "destination_url" in command.patch.fields
         if activating and (

@@ -188,14 +188,14 @@ class ScopedCommandHandler:
         action = type(command).__name__
         saved = await self.scope.links.replay(command.actor, action, key, fingerprint)
         if saved is not None:
-            if command.actor.client_id in organization.workloads and isinstance(
+            if command.actor.client_id in organization.private_clients and isinstance(
                 saved.value, (LinkDto, PoolDto)
             ):
                 if (
                     saved.value.entropy != Entropy.high
-                    or saved.value.visibility != Visibility.workload_private
+                    or saved.value.visibility != Visibility.client_private
                 ):
-                    raise InvalidLinkError("Earlier receipt does not satisfy workload policy")
+                    raise InvalidLinkError("Earlier receipt does not satisfy private client policy")
             return saved
         result = await Container.handler(self.kind, self.scope, self.telemetry).execute(
             command, context=context

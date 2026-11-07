@@ -282,6 +282,7 @@ class _Catalog:
                 statistics=statistics,
                 pixels=pixels,
                 app=self.marker["roles"]["links_app"] if int(revision) >= 6 else None,
+                revision=int(revision),
             )
             return _CatalogResult(
                 [(table, name, *value) for (table, name), value in policies.items()]
@@ -290,10 +291,12 @@ class _Catalog:
             return _CatalogResult(
                 [
                     (schema, name, *value)
-                    for (schema, name), value in schema_module._FUNCTION_SECURITY.items()
-                    if int(revision) >= 6 or (schema, name) != ("links", "guard_policy")
-                    if statistics or name != "record_visit"
-                    if pixels or name not in {"resolve_public_pixel", "record_pixel_request"}
+                    for (schema, name), value in {
+                        key: value
+                        for version, functions in schema_module._FUNCTION_SECURITY.items()
+                        if version <= int(revision)
+                        for key, value in functions.items()
+                    }.items()
                 ]
             )
         if "pg_catalog.pg_roles" in query:
@@ -416,11 +419,11 @@ def test_schema_authority_admits_empty_target_and_current_flyway_schema(monkeypa
     _catalog(monkeypatch, current)
     status = authority.finish()
 
-    assert status.revision == "6"
+    assert status.revision == "7"
     assert "links_migrations.flyway_schema_history" in status.tables
 
 
-@pytest.mark.parametrize("revision", (1, 2, 3, 4, 5))
+@pytest.mark.parametrize("revision", (1, 2, 3, 4, 5, 6))
 def test_schema_authority_admits_packaged_prefix_for_upgrade_but_not_runtime(monkeypatch, revision):
     _catalog(monkeypatch, _Catalog(history=_CURRENT_HISTORY[:revision]))
     authority = SchemaAuthority("postgresql://db.example/links")
@@ -443,12 +446,12 @@ def test_schema_authority_keeps_role_bindings_with_each_transaction(monkeypatch)
 
     def overlapping_check(query, params=()):
         if "FROM pg_catalog.pg_roles" in query:
-            assert authority.finish().revision == "6"
+            assert authority.finish().revision == "7"
         return execute(query, params)
 
     monkeypatch.setattr(outer, "execute", overlapping_check)
 
-    assert authority.finish().revision == "6"
+    assert authority.finish().revision == "7"
 
 
 @pytest.mark.parametrize(
@@ -621,7 +624,7 @@ def test_runtime_admission_rejects_owner_credentials_and_inherited_bypass(
     _catalog(monkeypatch, Catalog(history=_CURRENT_HISTORY))
     authority = SchemaAuthority("postgresql://db/links")
     if allowed:
-        assert authority.check(runtime=runtime).revision == "6"
+        assert authority.check(runtime=runtime).revision == "7"
     else:
         with pytest.raises(SchemaError, match="dedicated role"):
             authority.check(runtime=runtime)

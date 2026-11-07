@@ -37,7 +37,7 @@ class Entropy(StrEnum):
 
 class Visibility(StrEnum):
     organization = "organization"
-    workload_private = "workload_private"
+    client_private = "client_private"
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,17 +47,17 @@ class LinkPolicy:
 
     @classmethod
     def select(
-        cls, entropy: Entropy | None, visibility: Visibility | None, *, workload: bool
+        cls, entropy: Entropy | None, visibility: Visibility | None, *, private_required: bool
     ) -> LinkPolicy:
         selected = visibility or (
-            Visibility.workload_private if workload else Visibility.organization
+            Visibility.client_private if private_required else Visibility.organization
         )
-        if workload and selected is not Visibility.workload_private:
-            raise InvalidLinkError("Workload links must remain private")
-        required = workload or selected is Visibility.workload_private
+        if private_required and selected is not Visibility.client_private:
+            raise InvalidLinkError("Client links must remain private")
+        required = private_required or selected is Visibility.client_private
         level = entropy or (Entropy.high if required else Entropy.low)
         if required and level is not Entropy.high:
-            raise InvalidLinkError("Workload-private links require high entropy")
+            raise InvalidLinkError("Client-private links require high entropy")
         return cls(level, selected)
 
 

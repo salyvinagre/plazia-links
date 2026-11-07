@@ -17,7 +17,6 @@ from shared_persistence.roles import PostgresRoles
 _MIGRATION_SCHEMA: Final = "links_migrations"
 _OWNED_SCHEMAS: Final = ("access", "links", "platform")
 _MIGRATIONS: Final = tuple(sorted((Path(__file__).parent / "sql/migrations").glob("V*.sql")))
-_SQL: Final = "\n".join(path.read_text() for path in _MIGRATIONS)
 # Flyway CRC32 ignores line endings/BOM and is stored as a signed Java int.
 _EXPECTED_HISTORY: Final = (
     *(
@@ -35,14 +34,20 @@ _EXPECTED_HISTORY: Final = (
     ),
 )
 _FUNCTION_SECURITY: Final = {
-    (schema, name): (
-        body.strip(),
-        "SECURITY DEFINER" in header,
-        ("search_path=" + re.findall(r"SET search_path = ([^\n]+)", header)[0],),
-    )
-    for schema, name, header, body in re.findall(
-        r"CREATE FUNCTION (\w+)\.(\w+)(.*?)AS \$\$(.*?)\$\$;", _SQL, re.DOTALL
-    )
+    int(path.name.split("__")[0][1:]): {
+        (schema, name): (
+            body.strip(),
+            "SECURITY DEFINER" in header,
+            ("search_path=" + re.findall(r"SET search_path = ([^\n]+)", header)[0],),
+        )
+        for schema, name, header, body in re.findall(
+            r"CREATE (?:OR REPLACE )?FUNCTION (\w+)\.(\w+)(.*?)AS \$\$(.*?)\$\$;",
+            path.read_text(),
+            re.DOTALL,
+        )
+        if schema in _OWNED_SCHEMAS
+    }
+    for path in _MIGRATIONS
 }
 _EXPECTED_TABLES: Final = frozenset(
     {
@@ -285,11 +290,9 @@ class SchemaAuthority:
         }
         expected_functions = {
             key: value
-            for key, value in _FUNCTION_SECURITY.items()
-            if int(revision) >= 6 or key != ("links", "guard_policy")
-            if statistics or key != ("links", "record_visit")
-            if pixels
-            or key not in {("links", "resolve_public_pixel"), ("links", "record_pixel_request")}
+            for version, functions_at_version in _FUNCTION_SECURITY.items()
+            if version <= int(revision)
+            for key, value in functions_at_version.items()
         }
         if functions != expected_functions:
             raise SchemaError("Links security functions differ from the packaged migration")
@@ -334,7 +337,11 @@ class SchemaAuthority:
             ).fetchall()
         }
         if policies != self._policies(
-            worker, statistics=statistics, pixels=pixels, app=app if int(revision) >= 6 else None
+            worker,
+            statistics=statistics,
+            pixels=pixels,
+            app=app if int(revision) >= 6 else None,
+            revision=int(revision),
         ):
             raise SchemaError("Links tenant policies differ from the packaged migration")
         private_access = connection.execute(
@@ -513,7 +520,12 @@ class SchemaAuthority:
 
     @staticmethod
     def _policies(
-        worker: str, *, statistics: bool, pixels: bool = False, app: str | None = None
+        worker: str,
+        *,
+        statistics: bool,
+        pixels: bool = False,
+        app: str | None = None,
+        revision: int = 7,
     ) -> dict[tuple[str, str], tuple[object, ...]]:
         tenant = "(organization_id = platform.current_organization_id())"
         values: dict[tuple[str, str], tuple[object, ...]] = {
@@ -571,6 +583,8 @@ class SchemaAuthority:
             }
         )
         if app is not None:
+            # Only upgrade admission reads the immutable V6 policy names.
+            policy_owner = "workload" if revision == 6 else "client"
             private = (
                 "((visibility = 'organization'::text) OR "
                 "((owner_issuer = current_setting('plazia.issuer'::text, true)) AND "
@@ -581,18 +595,18 @@ class SchemaAuthority:
                 "(client_id = current_setting('plazia.client_id'::text, true)))"
             )
             for table, name in (
-                ("links.links", "links_workload_scope"),
-                ("links.pools", "pools_workload_scope"),
+                ("links.links", f"links_{policy_owner}_scope"),
+                ("links.pools", f"pools_{policy_owner}_scope"),
             ):
                 values[table, name] = ("*", False, (app,), private, private)
-            values["platform.command_receipts", "receipts_workload_scope"] = (
+            values["platform.command_receipts", f"receipts_{policy_owner}_scope"] = (
                 "*",
                 False,
                 (app,),
                 receipt,
                 receipt,
             )
-            values["links.statistics", "statistics_workload_scope"] = (
+            values["links.statistics", f"statistics_{policy_owner}_scope"] = (
                 "*",
                 False,
                 (app,),
