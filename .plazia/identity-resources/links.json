@@ -21,10 +21,18 @@
       "audience_path": "/api/v1",
       "visibility": "published",
       "scopes": [
-        {"ref": "read", "key": "links:read", "description": "Read organization links, pools and pixels."},
-        {"ref": "create", "key": "links:create", "description": "Create organization links, pools and pixels."},
-        {"ref": "update", "key": "links:update", "description": "Activate and edit organization links and rename pools."},
-        {"ref": "delete", "key": "links:delete", "description": "Delete organization links, pools and pixels."}
+        {"ref": "read", "key": "links:read", "description": "Read organization links."},
+        {"ref": "create", "key": "links:create", "description": "Create organization links."},
+        {"ref": "update", "key": "links:update", "description": "Activate and edit organization links."},
+        {"ref": "delete", "key": "links:delete", "description": "Delete organization links."},
+        {"ref": "pools-read", "key": "pools:read", "description": "Read organization pools."},
+        {"ref": "pools-create", "key": "pools:create", "description": "Reserve organization pools."},
+        {"ref": "pools-update", "key": "pools:update", "description": "Rename organization pools."},
+        {"ref": "pools-delete", "key": "pools:delete", "description": "Delete organization pools."},
+        {"ref": "pixels-read", "key": "pixels:read", "description": "Read organization pixels."},
+        {"ref": "pixels-create", "key": "pixels:create", "description": "Create organization pixels."},
+        {"ref": "pixels-delete", "key": "pixels:delete", "description": "Delete organization pixels."},
+        {"ref": "statistics-read", "key": "statistics:read", "description": "Read organization link statistics."}
       ]
     }
   ],
@@ -32,7 +40,11 @@
     {
       "application": "links",
       "api": {"ref": "links"},
-      "scopes": [{"ref": "read"}, {"ref": "create"}, {"ref": "update"}, {"ref": "delete"}]
+      "scopes": [
+        {"ref": "read"}, {"ref": "create"}, {"ref": "update"}, {"ref": "delete"},
+        {"ref": "pools-read"}, {"ref": "pools-create"}, {"ref": "pools-update"}, {"ref": "pools-delete"},
+        {"ref": "pixels-read"}, {"ref": "pixels-create"}, {"ref": "pixels-delete"}, {"ref": "statistics-read"}
+      ]
     }
   ],
   "outputs": [

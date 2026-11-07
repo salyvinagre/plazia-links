@@ -102,7 +102,8 @@ def test_ordered_deployment_projection_is_consumed_by_each_runtime(
     assert Settings().environment == WorkerSettings().environment == expected
     assert not IdentitySettings().allow_insecure_loopback
     assert WorkerSettings().smtp_security == "starttls"
-    assert config_file.stat().st_mode & 0o077 == 0
+    assert config_file.stat().st_mode & 0o777 == 0o444
+    assert tmp_path.stat().st_mode & 0o077 == 0
     assert not selected.enabled
     assert not config.resolve(environment=environment, destination="remote", env={}).enabled
 

@@ -50,7 +50,7 @@ class OpenFgaOrganizationAuthority:
             subject=subject,
             object=AuthzObjectRef("organization", str(actor.organization_id), AuthzRepo.identity),
             action=self._registry.action_for(
-                object_type="organization", action_name=attempt.permission.replace(":", ".")
+                object_type="organization", action_name="links." + attempt.permission.split(":")[1]
             ),
             audit_context=AuthzAuditContext(
                 request_id=operation.request_id,

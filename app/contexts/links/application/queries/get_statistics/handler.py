@@ -13,7 +13,7 @@ class GetStatisticsHandler:
     async def execute(
         self, query: GetStatisticsQuery, *, context: Invocation | None
     ) -> StatisticsDto:
-        organization = await self._access.require(query.actor, "links:read")
+        organization = await self._access.require(query.actor, "statistics:read")
         return (await self._repository.statistics(organization.id, (organization.id,)))[
             organization.id
         ]

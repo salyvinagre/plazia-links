@@ -15,7 +15,7 @@
 {% macro library_actions() %}
 <details class="dropdown dropdown-end shrink-0" name="resource-actions" data-library-actions>
   {{ action_trigger('Pool actions' if pool else 'Link actions') }}
-  {% if pool and 'links:delete' in session.principal.scopes %}
+  {% if pool and 'pools:delete' in session.principal.scopes %}
   <form id="delete-pool-form" hidden method="post" action="/dashboard/pools/{{ pool.id }}/delete{% if pools.page > 1 %}?pool_page={{ pools.page }}{% endif %}"
         hx-disabled-elt="#delete-pool-action" data-confirm="Delete this pool and all {{ pool.size }} of its links? Subscriptions and queued notifications will also be removed.">
     <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
@@ -23,14 +23,14 @@
   </form>
   {% endif %}
   <ul class="dropdown-content menu menu-md z-20 w-64 rounded-box border border-base-300 bg-base-100 shadow-lg">
-    {% if pool and 'links:update' in session.principal.scopes %}
+    {% if pool and 'pools:update' in session.principal.scopes %}
     <li><button class="min-h-11 content-center justify-between hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary" type="button" aria-controls="rename-pool-panel" data-rename-pool>Rename pool</button></li>
     {% endif %}
     {% if links.items and 'links:delete' in session.principal.scopes %}
     <li><button class="min-h-11 content-center justify-between hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary" type="button" aria-controls="delete-selection" data-select-links>Delete links</button></li>
     {% endif %}
     {{ statistics_item(statistics) }}
-    {% if pool and 'links:delete' in session.principal.scopes %}
+    {% if pool and 'pools:delete' in session.principal.scopes %}
     <li class="mt-1 border-t border-base-300 pt-1">
       <button class="min-h-11 content-center justify-between text-danger hover:bg-danger/10 focus:bg-danger/10" type="submit"
               id="delete-pool-action" form="delete-pool-form">Delete pool</button>
@@ -52,7 +52,7 @@
   </a>
   {% endif %}
 </div>
-{% if 'links:create' in session.principal.scopes %}
+{% if 'pools:create' in session.principal.scopes %}
 <section class="card mb-8 grid grid-cols-1 gap-6 border border-base-300 bg-base-100 p-5 sm:mb-10 sm:p-7 lg:grid-cols-[1fr_1.6fr] lg:gap-10"
          aria-labelledby="reserve-heading">
   <div>
@@ -115,7 +115,7 @@
       </div>
       {{ library_actions() }}
     </div>
-    {% if 'links:update' in session.principal.scopes %}
+    {% if 'pools:update' in session.principal.scopes %}
     <form id="rename-pool-panel"{% if not pool_error %} hidden{% endif %} class="flex flex-col gap-3 sm:flex-row sm:items-end" method="post"
           action="/dashboard/pools/{{ pool.id }}{% if pools.page > 1 %}?pool_page={{ pools.page }}{% endif %}" hx-disabled-elt="find button">
       <input type="hidden" name="idempotency_key" value="{{ creation_key() }}">
@@ -254,7 +254,7 @@
   {% else %}
   <div class="card border border-base-300 bg-base-100 px-7 py-7 text-center sm:px-6 sm:py-12">
     <h2>{{ 'No links in this pool' if pool_id else 'No links yet' }}</h2>
-    {% if 'links:create' in session.principal.scopes %}<p class="text-muted">Reserve a pool or create a link to get started.</p>{% endif %}
+    {% if 'pools:create' in session.principal.scopes or 'links:create' in session.principal.scopes %}<p class="text-muted">Reserve a pool or create a link to get started.</p>{% endif %}
   </div>
   {% endif %}
   <nav class="flex items-center justify-center gap-6 pt-6 text-sm text-muted" aria-label="Pagination">

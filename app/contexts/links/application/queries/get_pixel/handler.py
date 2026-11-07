@@ -11,5 +11,5 @@ class GetPixelHandler:
         self._repository, self._access = repository, access
 
     async def execute(self, query: GetPixelQuery, *, context: Invocation | None) -> PixelReadDto:
-        organization = await self._access.require(query.actor, "links:read")
+        organization = await self._access.require(query.actor, "pixels:read")
         return await self._repository.get(organization.id, query.id)

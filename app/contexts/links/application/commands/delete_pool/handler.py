@@ -10,6 +10,6 @@ class DeletePoolHandler:
         self._repository, self._access = repository, access
 
     async def execute(self, command: DeletePoolCommand, *, context: Invocation) -> None:
-        organization = await self._access.require(command.actor, "links:delete")
+        organization = await self._access.require(command.actor, "pools:delete")
         await self._repository.delete_pool(organization.id, command.pool_id)
         await self._repository.audit(organization.id, "delete", (command.pool_id,), context)

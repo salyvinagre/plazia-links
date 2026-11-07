@@ -15,7 +15,7 @@ class CreatePixelHandler:
         self._repository, self._access, self._audit = repository, access, audit
 
     async def execute(self, command: CreatePixelCommand, *, context: Invocation) -> PixelDto:
-        organization = await self._access.require(command.actor, "links:create")
+        organization = await self._access.require(command.actor, "pixels:create")
         for _ in range(5):
             try:
                 pixel = await self._repository.create(

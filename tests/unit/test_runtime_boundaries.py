@@ -46,6 +46,20 @@ async def test_openfga_reader_manager_machine_and_denial(principal):
     authority._authorization._client.check.return_value.allowed = True
     await authority.require(AuthorizationAttempt(principal, "links:read", context))
     assert authority._authorization._client.check.await_args.args[0].relation == "reader"
+    for permission in (
+        "pools:read",
+        "pixels:read",
+        "statistics:read",
+        "pools:create",
+        "pixels:delete",
+    ):
+        await authority.require(
+            AuthorizationAttempt(
+                replace(principal, scopes=frozenset({permission})), permission, context
+            )
+        )
+        relation = authority._authorization._client.check.await_args.args[0].relation
+        assert relation == ("reader" if permission.endswith(":read") else "manager")
     await authority.require(
         AuthorizationAttempt(
             replace(principal, subject="mch_0199a112345670008000000000000004"),

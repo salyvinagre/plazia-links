@@ -13,7 +13,7 @@ class ListPoolsHandler:
     async def execute(
         self, query: ListPoolsQuery, *, context: Invocation | None
     ) -> PageDto[PoolReadDto]:
-        organization = await self._access.require(query.actor, "links:read")
+        organization = await self._access.require(query.actor, "pools:read")
         page = await self._repository.pools(organization.id, query.page, query.page_size)
         statistics = await self._repository.statistics(
             organization.id, tuple(pool.id for pool in page.items)

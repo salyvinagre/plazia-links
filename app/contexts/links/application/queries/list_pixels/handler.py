@@ -14,5 +14,5 @@ class ListPixelsHandler:
     async def execute(
         self, query: ListPixelsQuery, *, context: Invocation | None
     ) -> PageDto[PixelReadDto]:
-        organization = await self._access.require(query.actor, "links:read")
+        organization = await self._access.require(query.actor, "pixels:read")
         return await self._repository.list(organization.id, query.page, query.page_size)

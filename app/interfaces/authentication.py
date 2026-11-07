@@ -1,6 +1,6 @@
 """HTTP authentication adapters. Browser cookies are never API bearer credentials."""
 
-from typing import Annotated
+from typing import Annotated, get_args
 
 from fastapi import Header, HTTPException, Request, Security
 from fastapi.security import OAuth2AuthorizationCodeBearer
@@ -9,6 +9,7 @@ from app.contexts.access.contracts import (
     AccessUnavailableError,
     BrowserSession,
     InvalidCredentialsError,
+    Permission,
     Principal,
 )
 from app.platform.access import AccessRuntime
@@ -18,12 +19,7 @@ _config = IdentitySettings()
 oauth = OAuth2AuthorizationCodeBearer(
     authorizationUrl=_config.authorization_endpoint,
     tokenUrl=_config.token_endpoint,
-    scopes={
-        "links:read": "Read links, pools and pixels",
-        "links:create": "Create links, pools and pixels",
-        "links:update": "Activate and edit links",
-        "links:delete": "Delete links, pools and pixels",
-    },
+    scopes={scope: " ".join(reversed(scope.split(":"))) for scope in get_args(Permission)},
     auto_error=False,
 )
 
@@ -95,6 +91,14 @@ Reader = Annotated[Principal, Security(api_principal, scopes=["links:read"])]
 Creator = Annotated[Principal, Security(api_principal, scopes=["links:create"])]
 Updater = Annotated[Principal, Security(api_principal, scopes=["links:update"])]
 Deleter = Annotated[Principal, Security(api_principal, scopes=["links:delete"])]
+PoolReader = Annotated[Principal, Security(api_principal, scopes=["pools:read"])]
+PoolCreator = Annotated[Principal, Security(api_principal, scopes=["pools:create"])]
+PoolUpdater = Annotated[Principal, Security(api_principal, scopes=["pools:update"])]
+PoolDeleter = Annotated[Principal, Security(api_principal, scopes=["pools:delete"])]
+PixelReader = Annotated[Principal, Security(api_principal, scopes=["pixels:read"])]
+PixelCreator = Annotated[Principal, Security(api_principal, scopes=["pixels:create"])]
+PixelDeleter = Annotated[Principal, Security(api_principal, scopes=["pixels:delete"])]
+StatisticsReader = Annotated[Principal, Security(api_principal, scopes=["statistics:read"])]
 
 
 async def browser_session(request: Request) -> BrowserSession:

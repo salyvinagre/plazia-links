@@ -7,7 +7,7 @@
   <h1>Pixels</h1>
   <p class="mb-0 text-muted">Embed one pixel per email delivery to observe image requests.</p>
 </div>
-{% if 'links:create' in session.principal.scopes %}
+{% if 'pixels:create' in session.principal.scopes %}
 <section class="card mb-8 gap-4 border border-base-300 bg-base-100 p-5 sm:p-7" aria-labelledby="create-heading">
   <h2 class="mb-0" id="create-heading">Create a pixel</h2>
   {% if error %}<p id="reference-error" class="alert border border-base-300 bg-base-100 text-sm" role="alert">{{ error }}</p>{% endif %}
@@ -39,7 +39,7 @@
           <h3 class="mb-1 font-semibold [overflow-wrap:anywhere]" id="pixel-{{ pixel.id }}">{{ label }}</h3>
           <p class="mb-0 text-sm text-muted">Created {{ pixel.created_at.strftime('%d %b %Y, %H:%M UTC') }}</p>
         </div>
-        {% if 'links:delete' in session.principal.scopes %}
+        {% if 'pixels:delete' in session.principal.scopes %}
         <details class="dropdown dropdown-end shrink-0" name="resource-actions">
           {{ action_trigger('Pixel actions for ' ~ label) }}
           <ul class="dropdown-content menu menu-md z-20 w-56 rounded-box border border-base-300 bg-base-100 shadow-lg">
@@ -73,7 +73,7 @@
       <p class="mb-0 text-sm text-muted" role="status" data-copy-status hidden></p>
     </article>
     {% else %}
-    <p class="col-span-full py-6 text-sm text-muted">No pixels yet.{% if 'links:create' in session.principal.scopes %} Create one to embed in an email.{% endif %}</p>
+    <p class="col-span-full py-6 text-sm text-muted">No pixels yet.{% if 'pixels:create' in session.principal.scopes %} Create one to embed in an email.{% endif %}</p>
     {% endfor %}
   </div>
   {% if pixels.items %}

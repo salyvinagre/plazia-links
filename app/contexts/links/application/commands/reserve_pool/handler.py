@@ -12,7 +12,7 @@ class ReservePoolHandler:
         self._repository, self._access = repository, access
 
     async def execute(self, command: ReservePoolCommand, *, context: Invocation) -> PoolDto:
-        organization = await self._access.require(command.actor, "links:create")
+        organization = await self._access.require(command.actor, "pools:create")
         policy = LinkPolicy.select(
             command.entropy,
             command.visibility,

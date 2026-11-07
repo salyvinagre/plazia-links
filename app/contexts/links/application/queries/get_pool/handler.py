@@ -11,7 +11,7 @@ class GetPoolHandler:
         self._repository, self._access = repository, access
 
     async def execute(self, query: GetPoolQuery, *, context: Invocation | None) -> PoolReadDto:
-        organization = await self._access.require(query.actor, "links:read")
+        organization = await self._access.require(query.actor, "pools:read")
         pool = await self._repository.get_pool(organization.id, query.pool_id)
         statistics = await self._repository.statistics(organization.id, (pool.id,))
         return PoolReadDto.from_application(pool, statistics[pool.id])

@@ -6,7 +6,11 @@ from typing import Annotated, Literal
 from shared_identity.canonical_ids import OrganizationId
 from shared_kernel.fields import AnnotatedFields, CanonicalIdField, Text
 
-Permission = Literal["links:read", "links:create", "links:update", "links:delete"]
+Permission = Literal[
+    Literal["links:read", "links:create", "links:update", "links:delete"],
+    Literal["pools:read", "pools:create", "pools:update", "pools:delete"],
+    Literal["pixels:read", "pixels:create", "pixels:delete", "statistics:read"],
+]
 
 
 class InvalidCredentialsError(Exception):

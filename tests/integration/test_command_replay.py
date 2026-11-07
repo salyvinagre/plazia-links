@@ -29,7 +29,7 @@ async def test_same_key_concurrency_produces_one_pool_and_original_result(postgr
     issuer = "https://identity.example.test"
     database = PostgresDatabase(postgres_urls.app)
     actor = Principal(
-        issuer, "subject", "client", org, frozenset({"links:create"}), 9999999999, "jwt-id"
+        issuer, "subject", "client", org, frozenset({"pools:create"}), 9999999999, "jwt-id"
     )
     context = RequestContext(
         ActorContext("subject", "user"), OperationContext("req-1", idempotency_key="reserve-1")
@@ -67,7 +67,7 @@ async def test_pool_management_and_bulk_delete_are_tenant_scoped_and_durable(pos
         "subject",
         "client",
         org,
-        frozenset({"links:create", "links:update", "links:delete"}),
+        frozenset({"pools:create", "pools:update", "pools:delete", "links:update", "links:delete"}),
         9999999999,
         "jwt-id",
     )
@@ -207,7 +207,7 @@ async def test_pixel_replay_survives_capture_and_deletion(postgres_urls):
         "subject",
         "client",
         org,
-        frozenset({"links:create", "links:delete"}),
+        frozenset({"pixels:create", "pixels:delete"}),
         9999999999,
         "jwt-id",
     )

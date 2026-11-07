@@ -191,7 +191,7 @@ def test_openapi_statistics_are_reads_with_existing_pagination(application):
     document = application.openapi()
     operation = document["paths"]["/api/v1/statistics"]["get"]
     assert operation["operationId"] == "get_statistics"
-    assert operation["security"] == [{"OAuth2AuthorizationCodeBearer": ["links:read"]}]
+    assert operation["security"] == [{"OAuth2AuthorizationCodeBearer": ["statistics:read"]}]
     assert "post" not in document["paths"]["/api/v1/statistics"]
     assert not any(
         p["name"] in {"organization_id", "offset", "page"} for p in operation.get("parameters", [])

@@ -3,6 +3,7 @@
 import hmac
 import secrets
 import time
+from typing import get_args
 
 from app.contexts.access.application.dto.session import LoginAttemptDto
 from app.contexts.access.application.ports.session import (
@@ -10,11 +11,11 @@ from app.contexts.access.application.ports.session import (
     BrowserStateStore,
     TokenVerifier,
 )
-from app.contexts.access.domain.principal import BrowserSession, InvalidCredentialsError
+from app.contexts.access.domain.principal import BrowserSession, InvalidCredentialsError, Permission
 
 
 class BrowserAuth:
-    SCOPES = "openid links:read links:create links:update links:delete"
+    SCOPES = "openid " + " ".join(get_args(Permission))
     ATTEMPT_TTL = 600
 
     def __init__(

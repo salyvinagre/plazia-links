@@ -11,7 +11,7 @@ class RenamePoolHandler:
         self._repository, self._access = repository, access
 
     async def execute(self, command: RenamePoolCommand, *, context: Invocation) -> PoolDto:
-        organization = await self._access.require(command.actor, "links:update")
+        organization = await self._access.require(command.actor, "pools:update")
         pool = await self._repository.rename_pool(organization.id, command.pool_id, command.name)
         await self._repository.audit(organization.id, "rename", (pool.id,), context)
         return pool

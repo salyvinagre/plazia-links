@@ -13,6 +13,6 @@ class DeletePixelHandler:
         self._repository, self._access, self._audit = repository, access, audit
 
     async def execute(self, command: DeletePixelCommand, *, context: Invocation) -> None:
-        organization = await self._access.require(command.actor, "links:delete")
+        organization = await self._access.require(command.actor, "pixels:delete")
         await self._repository.delete(organization.id, command.id)
         await self._audit.audit(organization.id, "delete", (command.id,), context)

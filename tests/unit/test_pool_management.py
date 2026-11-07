@@ -121,7 +121,11 @@ async def test_pool_authority_and_organization_isolation(identity_client, issuer
         await identity_client.patch(path, headers=foreign, json={"name": "Foreign"})
     ).status_code == 404
     assert (await identity_client.delete(path, headers=foreign)).status_code == 404
-    reader = bearer(issuer, scope="links:read")
+    assert (
+        await identity_client.get(path, headers=bearer(issuer, scope="links:read"))
+    ).status_code == 403
+    reader = bearer(issuer, scope="pools:read")
+    assert (await identity_client.get(path, headers=reader)).status_code == 200
     assert (
         await identity_client.patch(path, headers=reader, json={"name": "Denied"})
     ).status_code == 403
@@ -272,9 +276,9 @@ async def test_openapi_pool_and_selection_contract(identity_client):
     schema = (await identity_client.get("/openapi.json")).json()
     for path, methods in {
         "/api/v1/pools/{pool_id}": {
-            "get": "links:read",
-            "patch": "links:update",
-            "delete": "links:delete",
+            "get": "pools:read",
+            "patch": "pools:update",
+            "delete": "pools:delete",
         },
         "/api/v1/links": {"delete": "links:delete"},
     }.items():

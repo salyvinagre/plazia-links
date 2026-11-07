@@ -59,12 +59,12 @@ Company brand book, edition 1.3; see `app/static/brand/README.md` for asset prov
 
 | API | Capability |
 | --- | --- |
-| POST /api/v1/pools | links:create |
-| GET /api/v1/pools | links:read |
-| GET /api/v1/pools/{pool_id} | links:read |
-| GET /api/v1/statistics | links:read |
-| PATCH /api/v1/pools/{pool_id} | links:update |
-| DELETE /api/v1/pools/{pool_id} | links:delete |
+| POST /api/v1/pools | pools:create |
+| GET /api/v1/pools | pools:read |
+| GET /api/v1/pools/{pool_id} | pools:read |
+| GET /api/v1/statistics | statistics:read |
+| PATCH /api/v1/pools/{pool_id} | pools:update |
+| DELETE /api/v1/pools/{pool_id} | pools:delete |
 | GET /api/v1/links?pool_id=lpl_… | links:read |
 | POST /api/v1/links | links:create |
 | GET /api/v1/links/{link_id} | links:read |
@@ -72,10 +72,10 @@ Company brand book, edition 1.3; see `app/static/brand/README.md` for asset prov
 | DELETE /api/v1/links/{link_id} | links:delete |
 | DELETE /api/v1/links?ids=lnk_…&ids=lnk_… | links:delete |
 | DELETE /api/v1/links?all=true[&pool_id=lpl_…] | links:delete |
-| POST /api/v1/pixels | links:create |
-| GET /api/v1/pixels | links:read |
-| GET /api/v1/pixels/{pixel_id} | links:read |
-| DELETE /api/v1/pixels/{pixel_id} | links:delete |
+| POST /api/v1/pixels | pixels:create |
+| GET /api/v1/pixels | pixels:read |
+| GET /api/v1/pixels/{pixel_id} | pixels:read |
+| DELETE /api/v1/pixels/{pixel_id} | pixels:delete |
 
 Each management request also requires OpenFGA organization authority and an active local binding. Pool ownership comes exclusively from the verified org claim. Pool creation returns its id, name and size; its Location header identifies the canonical pool read. List its links with the pool_id filter. PATCH destination_url activates a reserved link. POST /{code}/subscriptions accepts a form email. Disabled links return 410, unknown links 404, reserved links a waiting page, and active links 307.
 
@@ -114,7 +114,7 @@ visit record. Subscriber counts expose no recipient identities.
 Deleting a link or pool deletes its aggregates and reduces the retained totals.
 Unavailable statistics return 503 with `statistics_unavailable`, rather than
 inventing zeros. Statistics reads require the same organization authority and
-`links:read` scope as other management reads; no caller-supplied tenant is accepted.
+`statistics:read` scope; no caller-supplied tenant is accepted.
 
 Email pixels have their own lifecycle under `/api/v1/pixels`. POST accepts an
 optional `reference` of up to 200 characters and requires `Idempotency-Key`.
@@ -127,7 +127,7 @@ GET collection/item reads add `statistics.requests`, `first_requested_at`,
 before any capture. Collection reads use the same `limit`, opaque `token` and
 HAL navigation as links. DELETE requires a key and removes the pixel and its
 aggregate; the public URL then returns 404. Authority uses the existing
-`links:read/create/delete` capabilities and verified organization binding.
+`pixels:read/create/delete` capabilities and verified organization binding.
 
 Embed the returned URL in the HTML part of an email:
 
