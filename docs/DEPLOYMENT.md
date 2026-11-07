@@ -76,9 +76,11 @@ Live create/reserve receipt fingerprints and original snapshots migrate together
 unrecognized live fingerprints abort and roll back the upgrade. No receipts are
 discarded, replay windows extended or links reallocated.
 
-Stop old Links writers and Printer workers before migration. Change operator
-invocations to `--private-client` and Printer TOML to `[[access.credentials]]`; retain the same client IDs and mounted
-secret contents. Apply V7 through `make migrate`, verify it with `make schema-check`,
+Stop old Links writers and Printer workers before migration. List additional
+trusted issuers in Links TOML under `[identity].machine_issuers`. Use
+`--private-client` for operator invocations and `[[access.credentials]]` in
+Printer TOML. Retain the registered client IDs and mounted secret contents.
+Apply V7 through `make migrate`, verify it with `make schema-check`,
 then restart both owners with the matching binaries. The API accepts only
 `client_private`; there are no old-name aliases or mixed-version rolling path.
 V2 adds pool UPDATE/DELETE privileges for the API role and cascades

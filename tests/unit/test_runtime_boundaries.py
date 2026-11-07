@@ -125,10 +125,14 @@ def test_plzk_secret_file_toml_precedence_and_guard(monkeypatch, tmp_path):
     from shared_settings.secrets import SettingsError
 
     config = tmp_path / "runtime.toml"
-    config.write_text("[worker]\ninterval=9\n[identity]\nsession_ttl=600\n")
+    config.write_text(
+        "[worker]\ninterval=9\n[identity]\nsession_ttl=600\n"
+        'machine_issuers=["https://machine.example"]\n'
+    )
     config.chmod(0o600)
     monkeypatch.setenv("PLZK_CONFIG_FILE", str(config))
     assert WorkerSettings().interval == 9 and IdentitySettings().session_ttl == 600
+    assert IdentitySettings().machine_issuers == ("https://machine.example",)
     monkeypatch.setenv("PLZK_WORKER_INTERVAL", "7")
     assert WorkerSettings().interval == 7 and WorkerSettings(interval=3).interval == 3
     secret = tmp_path / "database-url"

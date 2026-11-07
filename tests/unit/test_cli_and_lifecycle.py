@@ -66,6 +66,36 @@ async def test_operator_usage_and_target_failures_are_redacted(monkeypatch, caps
     assert await OperatorCli.router().run_async(["bind-organization"]) == 2
 
 
+async def test_operator_selects_only_configured_organization_issuers(
+    monkeypatch, issuer, database, identity_db
+):
+    machine = "https://tradescale.identity.example"
+    config = issuer.config().model_copy(update={"machine_issuers": (machine,)})
+    monkeypatch.setattr(cli, "PublicSettings", lambda: config)
+    monkeypatch.setattr(composition, "PostgresDatabase", lambda *args, **kwargs: database)
+    database.close = AsyncMock()
+    monkeypatch.setattr(composition, "PostgresUowFactory", MemoryUowFactory)
+    bind = AsyncMock(wraps=identity_db.bind)
+    disable = AsyncMock(wraps=identity_db.disable)
+    monkeypatch.setattr(identity_db, "bind", bind)
+    monkeypatch.setattr(identity_db, "disable", disable)
+    org = OrganizationId.new()
+    args = ["bind-organization", str(org), "--name", "Printer", "--private-client", "printer"]
+    assert await OperatorCli.router().run_async([*args, "--issuer", machine]) == 0
+    bind.assert_awaited_once_with(machine, org, "Printer", ("printer",))
+    assert (
+        await OperatorCli.router().run_async(
+            ["disable-organization", str(org), "--issuer", machine]
+        )
+        == 0
+    )
+    disable.assert_awaited_once_with(machine, org)
+    assert (
+        await OperatorCli.router().run_async([*args, "--issuer", "https://untrusted.example"]) == 1
+    )
+    assert bind.await_count == 1
+
+
 async def test_redis_runtime_uses_shared_secret_pool_and_closes_once(monkeypatch):
     from app.platform import redis
 

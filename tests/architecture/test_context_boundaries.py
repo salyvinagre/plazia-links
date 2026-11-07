@@ -54,14 +54,24 @@ def test_application_drawers_and_interface_dispatch_keep_ownership():
         assert {path.name for path in (root / "application").glob("*.py")} <= allowed
     for path in Path("app/interfaces").rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
+            imports = [name.name for name in node.names] if isinstance(node, ast.Import) else []
             if isinstance(node, ast.ImportFrom):
-                assert not (node.module or "").startswith("app.contexts.") or (
-                    node.module or ""
-                ).endswith(".contracts"), path
+                module = node.module or ""
+                # Both `from owner.contracts import Intent` and
+                # `from owner import contracts` use the same public boundary.
+                imports = (
+                    [f"{module}.{name.name}" for name in node.names]
+                    if module.startswith("app.contexts.") and len(module.split(".")) == 3
+                    else [module]
+                )
                 assert not (
                     node.module == "shared_messaging"
                     and any(name.name.startswith("InProcess") for name in node.names)
                 ), path
+            for module in imports:
+                assert not module.startswith("app.contexts.") or module.split(".")[3:] == [
+                    "contracts"
+                ], path
 
 
 def test_legacy_runtime_paths_and_dependencies_are_removed():

@@ -15,13 +15,16 @@ from app.contexts.access.domain.principal import (
 
 
 class IdentityTokenVerifier:
-    def __init__(self, issuer: str, audience: str) -> None:
+    def __init__(self, issuer: str, audience: str, machine_issuers: tuple[str, ...] = ()) -> None:
         self.issuer = issuer
         self.audience = audience
+        self._issuers = tuple(dict.fromkeys((issuer, *machine_issuers)))
         self._http_client = HttpxTextClient(follow_redirects=False)
         self._verifier = DiscoveryBackedSharedIdentityVerifier(
             http_client=self._http_client,
-            openid_configuration_urls=(issuer.rstrip("/") + "/.well-known/openid-configuration",),
+            openid_configuration_urls=tuple(
+                value.rstrip("/") + "/.well-known/openid-configuration" for value in self._issuers
+            ),
             human_audience=audience,
             timeout_seconds=5,
         )
@@ -36,9 +39,14 @@ class IdentityTokenVerifier:
             )
             subject = cast(str, claims["sub"])
             canonical = MachineId(subject) if subject.startswith("mch_") else UserId(subject)
+            issuer = cast(str, claims["iss"])
+            if issuer not in self._issuers or (
+                issuer != self.issuer and not isinstance(canonical, MachineId)
+            ):
+                raise InvalidCredentialsError
             confirmation = cast(dict[str, str], claims.get("cnf", {}))
             return Principal(
-                self.issuer,
+                issuer,
                 str(canonical),
                 cast(str, claims["client_id"]),
                 OrganizationId(claims.get("org")),
@@ -58,6 +66,8 @@ class IdentityTokenVerifier:
         self, token: str, client_id: str, nonce: str, access_token: str, principal: Principal
     ) -> int:
         try:
+            if principal.issuer != self.issuer:
+                raise InvalidCredentialsError
             claims = await self._verifier.verify_id_token(
                 token=token,
                 client_id=client_id,
@@ -65,6 +75,8 @@ class IdentityTokenVerifier:
                 access_token=access_token,
                 subject=principal.subject,
             )
+            if claims["iss"] != self.issuer:
+                raise InvalidCredentialsError
             return cast(int, claims["exp"])
         except SharedIdentityRejectedError as error:
             if error.code == "shared_identity_document_unavailable":

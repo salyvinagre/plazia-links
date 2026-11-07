@@ -44,7 +44,7 @@ jobs:
         token: ${{ secrets.PLAZIA_GIT_TOKEN }}
         github-server-url: https://git.home.arpa
         persist-credentials: false
-        ref: 50adbbc2014723e5e8156483b0ae665c2ae74994
+        ref: 5fc6c1974c5e17098c272a135054e5037cc9a2cd
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       with:
         repository: salyvinagre/plazia-identity
@@ -99,7 +99,7 @@ jobs:
         token: ${{ secrets.PLAZIA_GIT_TOKEN }}
         github-server-url: https://git.home.arpa
         persist-credentials: false
-        ref: 50adbbc2014723e5e8156483b0ae665c2ae74994
+        ref: 5fc6c1974c5e17098c272a135054e5037cc9a2cd
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       with:
         repository: salyvinagre/plazia-identity

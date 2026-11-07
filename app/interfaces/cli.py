@@ -14,6 +14,7 @@ from plazia_cli.commands import (
 from plazia_cli.routing import Route, Router
 from shared_identity import OrganizationId
 from shared_kernel import RequestContext
+from shared_kernel.fields import HttpOrigin
 
 from app.contexts.access.contracts import BindOrganizationCommand, DisableOrganizationCommand
 from app.platform.composition import Container
@@ -54,15 +55,22 @@ class OperatorCli:
             handler=self._invoke,
             arguments=(CommandArgument("organization"),) if organization else (),
             options=(
-                CommandOption("--name", required=True, help="Organization display name."),
-                CommandOption(
-                    "--private-client",
-                    multiple=True,
-                    help="Client ID required to use private links.",
-                ),
+                (CommandOption("--issuer", help="Configured organization issuer."),)
+                if organization
+                else ()
             )
-            if self.action == "bind-organization"
-            else (),
+            + (
+                (
+                    CommandOption("--name", required=True, help="Organization display name."),
+                    CommandOption(
+                        "--private-client",
+                        multiple=True,
+                        help="Client ID required to use private links.",
+                    ),
+                )
+                if self.action == "bind-organization"
+                else ()
+            ),
         )
 
     async def _invoke(self, invocation: CommandInvocation) -> int:
@@ -80,10 +88,15 @@ class OperatorCli:
                 identity = PublicSettings()
                 if not identity.issuer:
                     raise CommandError("PLZK_IDENTITY_ISSUER is required")
+                issuer = HttpOrigin().normalize(
+                    invocation.optional_str("issuer") or identity.issuer, "Organization issuer"
+                )
+                if issuer not in (identity.issuer, *identity.machine_issuers):
+                    raise CommandError("Organization issuer must be explicitly configured")
                 org = OrganizationId(invocation.str("organization"))
                 command = (
                     BindOrganizationCommand(
-                        identity.issuer,
+                        issuer,
                         org,
                         invocation.str("name"),
                         tuple(
@@ -94,7 +107,7 @@ class OperatorCli:
                         ),
                     )
                     if self.action == "bind-organization"
-                    else DisableOrganizationCommand(identity.issuer, org)
+                    else DisableOrganizationCommand(issuer, org)
                 )
                 async with Container.operator() as bus:
                     await bus.dispatch(

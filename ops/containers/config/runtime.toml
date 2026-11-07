@@ -4,6 +4,7 @@ trusted_proxy_ips = []
 telemetry_export_driver = "noop"
 
 [identity]
+machine_issuers = []
 session_ttl = 900
 allow_insecure_loopback = false
 

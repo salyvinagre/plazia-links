@@ -26,7 +26,7 @@ class AccessRuntime:
     @classmethod
     def build(cls, config: IdentitySettings, store: EphemeralStore | None = None) -> AccessRuntime:
         state = store if store is not None else RedisState(get_redis)
-        tokens = IdentityTokenVerifier(config.issuer, config.audience)
+        tokens = IdentityTokenVerifier(config.issuer, config.audience, config.machine_issuers)
         client = OidcCodeClient(
             config.client_id,
             config.client_secret.get_secret_value(),

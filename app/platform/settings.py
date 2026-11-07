@@ -3,7 +3,7 @@
 from ipaddress import IPv4Address, IPv6Address
 from typing import ClassVar, Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 from shared_kernel.fields import HttpOrigin
 from shared_settings import RuntimeSettingsSources
@@ -99,8 +99,19 @@ class PublicSettings(RuntimeSettings):
     model_config = SettingsConfigDict(env_prefix="PLZK_IDENTITY_")
     section: ClassVar[str] = "identity"
     issuer: str = ""
+    machine_issuers: tuple[str, ...] = Field(default=(), max_length=16)
     public_base_url: str = "http://localhost:8000"
     allow_insecure_loopback: bool = False
+
+    @field_validator("issuer")
+    @classmethod
+    def canonical_issuer(cls, value: str) -> str:
+        return HttpOrigin().normalize(value, "Identity issuer") if value else value
+
+    @field_validator("machine_issuers")
+    @classmethod
+    def canonical_machine_issuers(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(HttpOrigin().normalize(value, "Machine issuer") for value in values)
 
     def validate_public_origin(self, *, production: bool) -> None:
         self._validate_origins((self.public_base_url,), production=production)
@@ -160,7 +171,11 @@ class IdentitySettings(PublicSettings):
             )
         if self.audience == self.client_id or not 60 <= self.session_ttl <= 3600:
             raise ValueError("Distinct API audience and bounded session lifetime are required")
-        self._validate_origins((self.issuer, self.public_base_url), production=production)
+        if len(set(self.machine_issuers)) != len(self.machine_issuers):
+            raise ValueError("Machine issuers must be unique")
+        self._validate_origins(
+            (self.issuer, self.public_base_url, *self.machine_issuers), production=production
+        )
         ApiContract.validate_base(self.audience)
 
 

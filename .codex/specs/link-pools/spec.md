@@ -33,9 +33,9 @@ Production activation and worker qualification remain deferred until Identity de
 `client_private` identifies pools/links owned by the verified issuer, organization
 and client ID. `private_clients` is the organization policy requiring those
 clients to use private high-entropy links; it grants no authority. The operator
-uses `--private-client`. The browser issuer, scopes, active bindings and OpenFGA
-checks retain their existing responsibilities. Additional machine-issuer trust
-is separate Wave 0 work, whose setting is named `machine_issuers`.
+uses `--private-client`. Additional trusted `machine_issuers` admit only machine
+access tokens; the browser issuer, scopes, active bindings and OpenFGA checks
+retain their existing responsibilities.
 
 The clean cutover has no legacy wire/configuration aliases. Forward migration
 V7 preserves ownership, codes, original receipt results and seven-day expiry,

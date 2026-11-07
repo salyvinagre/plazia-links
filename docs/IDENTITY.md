@@ -9,6 +9,18 @@ The portfolio OpenFGA organization model must contain reader and manager relatio
 
 The API also checks an active local issuer+org binding. The operator binds the canonical organization directly; no local user, workspace, role or synthetic tenant is created at login. Existing management sessions lose access when authority or binding is revoked.
 
+For a machine token issued by another Identity business, configure its exact HTTPS
+issuer in `[identity].machine_issuers` in the mounted TOML (at most 16). The
+browser issuer and login endpoints stay unchanged. Additional issuers admit only
+machine access tokens for the Links audience; the verified `iss` remains the
+organization binding and part of private-pool ownership. Audience grants alone
+do not add issuer trust. Bind the organization and require private links for the
+client with the existing owner command using
+`bind-organization <org> --issuer <machine-issuer> --name <name> --private-client <client>`;
+`disable-organization <org> --issuer <machine-issuer>` revokes that binding. The
+issuer must be configured, and the owner credential remains required. Printer
+uses `pools:create`, `links:read`, `links:update` and `links:delete` on this audience.
+
 `private_clients` records clients required to use high-entropy `client_private`
 links. It is a privacy policy, not an authorization allowlist. Private ownership
 is the verified issuer, organization and client ID; a machine subject does not

@@ -302,7 +302,7 @@ wheels = [
 
 [[package]]
 name = "cloudflare"
-version = "5.8.0"
+version = "5.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -312,9 +312,9 @@ dependencies = [
     { name = "sniffio" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a2/67/66f7ba0227d7e36cb00008ffae58ce7d8ab1628839b2035ef84e1530edf5/cloudflare-5.8.0.tar.gz", hash = "sha256:d6537b331f0d061ccafd21501741b812d4f458d76f7ea62ce13f080126c4f0a6", size = 3574841, upload-time = "2026-09-25T19:40:00.727Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0c/e8/5188c42b346a29f018b397d3b4cd587cf386902b459d04bed5774915c525/cloudflare-5.10.0.tar.gz", hash = "sha256:3e1ac8f71f5098dc3541bfd77ae0d3abd710aebef48093021e7d37f6bb584ca0", size = 3797753, upload-time = "2026-11-05T21:53:28.667Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e2/ad/7eb377a890b862c69af9e3a39a485c1d7281405e6ba7eea13903be5a52f6/cloudflare-5.8.0-py3-none-any.whl", hash = "sha256:d7ad46ae33f6641b951c2a385e0e68aa92ecc2c2fc61e3668e739d63e7f30c0f", size = 7517087, upload-time = "2026-09-25T19:40:03.126Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/99/79f0a4b4c578aba2900101ac7dafc1e14a4c9c27d851e0e0eaeba04510fa/cloudflare-5.10.0-py3-none-any.whl", hash = "sha256:a5441bf00050e35fcf589123ecbfb740c22b54207d3ee27b0b1857fc7427e525", size = 7935466, upload-time = "2026-11-05T21:53:26.503Z" },
 ]
 
 [[package]]
@@ -471,11 +471,11 @@ wheels = [
 
 [[package]]
 name = "dnspython"
-version = "2.8.0"
+version = "2.9.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/8c/8b/57666417c0f90f08bcafa776861060426765fdb422eb10212086fb811d26/dnspython-2.8.0.tar.gz", hash = "sha256:181d3c6996452cb1189c4046c61599b84a5a86e099562ffde77d26984ff26d0f", size = 368251, upload-time = "2025-09-07T18:58:00.022Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/49/900383b471c645a3c397f47b3211d1fcecb3a540c98f683494cdf86b33de/dnspython-2.9.2.tar.gz", hash = "sha256:8d4d39a513e649d634004ce4d39ade2352efcea472a0247535a5c2d18a9d7ba9", size = 455484, upload-time = "2026-11-03T23:56:53.601Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl", hash = "sha256:01d9bbc4a2d76bf0db7c1f729812ded6d912bd318d3b1cf81d30c0f845dbf3af", size = 331094, upload-time = "2025-09-07T18:57:58.071Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/0c/5346358b3a20275d256978c35203ddc2c8617f78c1b23795b79ba22ced6d/dnspython-2.9.2-py3-none-any.whl", hash = "sha256:af15f7d385a6ae2fb35a796fde2138004c8c42c7389090e2addc83e3b3340fd8", size = 360455, upload-time = "2026-11-03T23:56:52.088Z" },
 ]
 
 [[package]]
@@ -654,15 +654,15 @@ wheels = [
 
 [[package]]
 name = "httpcore2"
-version = "2.13.1"
+version = "2.16.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h11" },
     { name = "truststore" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cb/f3/1db7aa2bc2524062192bb0e0323969492d1883152a232fe36eea65f4e35c/httpcore2-2.13.1.tar.gz", hash = "sha256:e0aa977abe17e69a3b820a24542a6fa88702676d83880b8d194dcd18408e5103", size = 68071, upload-time = "2026-09-23T07:47:22.372Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/61/afa9d6b7452f9eca73f73d45324eb0bb52f098fd5e6049bf6b8263be9b4e/httpcore2-2.16.0.tar.gz", hash = "sha256:c72cd0413563b17e1cd8354677dff887466f8ec2551679759e93126534428643", size = 69886, upload-time = "2026-10-21T07:09:45.31Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl", hash = "sha256:e1e05d4f25f7d7d496bfb96748f6f4b67657b03da069b3a68c36069f3db73d0a", size = 83423, upload-time = "2026-09-23T07:47:19.365Z" },
+    { url = "https://files.pythonhosted.org/packages/af/c2/ce417c397afa5181f0e3c6ff01a4d01639414e1adef08730d97571297151/httpcore2-2.16.0-py3-none-any.whl", hash = "sha256:5c4358319f2602d984ad93182c9fee5160f22e9da7babdda870a5e7c4e2dc34f", size = 85070, upload-time = "2026-10-21T07:09:42.802Z" },
 ]
 
 [[package]]
@@ -704,7 +704,7 @@ wheels = [
 
 [[package]]
 name = "httpx2"
-version = "2.13.1"
+version = "2.16.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio", marker = "sys_platform != 'emscripten'" },
@@ -713,9 +713,9 @@ dependencies = [
     { name = "idna" },
     { name = "truststore", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d5/44/474bef2a0e9d90f1715d32cb98b0738695ca17ba324095fb2497ed7fbd59/httpx2-2.13.1.tar.gz", hash = "sha256:e48744a19e3af5ee48313d0ce5fe941d5422fae5705ea922a4aabf94d7800dfa", size = 100405, upload-time = "2026-09-23T07:47:23.052Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/73/5ca2cedf5e4e50423d1c258877865a6b62793633b561c58499f8aeb33b7e/httpx2-2.16.0.tar.gz", hash = "sha256:0d54c98128e8f2ff7fbbde0fca8c359e5f032edeaaaac443cdb7f31f685bcd7f", size = 103116, upload-time = "2026-10-21T07:09:46.348Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d8/9c/6fe8931fd9f381042a9e4c7d5a7b4cbf7016b252bec0c99a49fce42c3326/httpx2-2.13.1-py3-none-any.whl", hash = "sha256:6dff50fabc270ee5fd25d845d0b078ed20564579744d6d962850975996d2f9a4", size = 95597, upload-time = "2026-09-23T07:47:20.995Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/3d/2e4bc4fd1ef9770871669adb348d612a6e4786b303a23f9935b81c48dd60/httpx2-2.16.0-py3-none-any.whl", hash = "sha256:fd2c5d7909e8d86fe92d53020c310ca0e4e431b838c207c5754b9bbf0308d49a", size = 97880, upload-time = "2026-10-21T07:09:44.01Z" },
 ]
 
 [[package]]
@@ -794,14 +794,14 @@ wheels = [
 
 [[package]]
 name = "joserfc"
-version = "1.7.5"
+version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/19/94/80fea1514b7c6d7d37804d3fe9ca81455f633347fc98731bd71ffe1faa17/joserfc-1.7.5.tar.gz", hash = "sha256:d5ff536e658e17664f8c1b1ab60dc4aa62aa973fcef1edd33cc44bda45d6f5ea", size = 234990, upload-time = "2026-08-29T13:05:42.057Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/74/31/5c3f27e82c92a7bbe1f028033ff19e0251540395c9be244c01a50de42bdb/joserfc-1.8.0.tar.gz", hash = "sha256:cbf03cb2c6db8cc5289f1ef8718842e53dba244b4c0de5fefa0c0eaee4bde8db", size = 241023, upload-time = "2026-11-03T10:45:57.948Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/67/c5/82addfd375e5ee6520644e0553e4aadde92d668c4fc99cc716d337fe7bb3/joserfc-1.7.5-py3-none-any.whl", hash = "sha256:add2c2c84e8373b084d526a8b53daba5d7a513a118cd2dcd9fc9f979d0922159", size = 71269, upload-time = "2026-08-29T13:05:40.718Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/7e/7ffaae13415e8f51c8e8d5d1845f2de7a27ebf2717e97a38d7e7446d6030/joserfc-1.8.0-py3-none-any.whl", hash = "sha256:176b836ac7ed9a46a88629e24076314b475f33a75d0bad7f26146e572eed7c79", size = 73147, upload-time = "2026-11-03T10:45:56.531Z" },
 ]
 
 [[package]]
@@ -1076,11 +1076,11 @@ wheels = [
 
 [[package]]
 name = "nats-py"
-version = "2.15.0"
+version = "2.16.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/02/f0/fc5e93f2b0dd14a202590ad9d30eda1955ea872039b5204357348d0f4b1e/nats_py-2.15.0.tar.gz", hash = "sha256:6622c547d9a7d2313d9c147d46c386188f4ec2c7b5c9f9a0438a4d1b55f54a93", size = 75995, upload-time = "2026-06-05T07:34:03.904Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/c8/739b72c9201081e48000884d476231873ac82f7247c43b33823eaf3c0bfb/nats_py-2.16.0.tar.gz", hash = "sha256:1d137ed7afc9b59033b3199324c6237df2016a5091935871344a787eba6b72fc", size = 79731, upload-time = "2026-09-16T07:47:21.843Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/db/a8/b55606c7c621fb813c8ec78baf201d2c78bf6051091ec0c7ada572999e95/nats_py-2.15.0-py3-none-any.whl", hash = "sha256:9f8d36aa52a9926a88b8f1d70cf1fdce0ad387941479b500ee9ab3e51073cefd", size = 90334, upload-time = "2026-06-05T07:34:02.81Z" },
+    { url = "https://files.pythonhosted.org/packages/48/a3/16cec37172144d3362d7551bb823a098b2b2903281fc095dfe4480b8c2fd/nats_py-2.16.0-py3-none-any.whl", hash = "sha256:aeb1ff123966c05833d26c7df7e1d54c1c6d32b612428b21677a2e921f1fecae", size = 93578, upload-time = "2026-09-16T07:47:20.799Z" },
 ]
 
 [[package]]
@@ -1260,11 +1260,11 @@ wheels = [
 
 [[package]]
 name = "phonenumberslite"
-version = "8.13.55"
+version = "9.0.43"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9c/b9/e37adc408dd605228020a5adc7f897353a90c597239bad52ac7fdf356f4c/phonenumberslite-8.13.55.tar.gz", hash = "sha256:b961bb36d32688bcf28ec308f8f11f502353c9aa5f9fb18261b215c6b0e6b898", size = 2296867, upload-time = "2025-02-15T08:05:36.835Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6b/7f/286d961f333ee8e7bd06b5150e01e90f32b2bf0ff46787239fcf7bc2fb59/phonenumberslite-9.0.43.tar.gz", hash = "sha256:829811eedb170ff8ecc7aefed2d91366e840daeb2811748adbdd15918916e2b1", size = 294673, upload-time = "2026-11-06T11:43:11.137Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/58/4a/8cf5566aed1e39f426d40ce6ba0b72d8c5fc1452feef6a64fb5127ebb996/phonenumberslite-8.13.55-py2.py3-none-any.whl", hash = "sha256:3daa107c7d89576effa8ecc0ed17f0e8845055836590a96fa5f1fdac5dd475e0", size = 472042, upload-time = "2025-02-15T08:05:32.039Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/1b/2c7f383af6afe7b9581445e43a545cae738c405d04241e5e485f7d9833c0/phonenumberslite-9.0.43-py2.py3-none-any.whl", hash = "sha256:986de6a460e9f67215b00d5ec68e7b909eb7f7830581e54269d413756033913e", size = 473659, upload-time = "2026-11-06T11:43:09.584Z" },
 ]
 
 [[package]]
@@ -1310,28 +1310,28 @@ testing = [
 
 [package.metadata]
 requires-dist = [
-    { name = "joserfc", marker = "extra == 'authn'", specifier = ">=1.6.4,<2" },
-    { name = "joserfc", marker = "extra == 'testing'", specifier = ">=1.6.4,<2" },
-    { name = "openfga-sdk", marker = "extra == 'authz'", specifier = ">=0.10.4,<0.11" },
+    { name = "joserfc", marker = "extra == 'authn'", specifier = ">=1.7.7,<2" },
+    { name = "joserfc", marker = "extra == 'testing'", specifier = ">=1.7.7,<2" },
+    { name = "openfga-sdk", marker = "extra == 'authz'", specifier = ">=0.10.5,<0.11" },
     { name = "plazia-authlib", extras = ["authn", "authz", "testing"], marker = "extra == 'all'", specifier = "==0.2.0" },
     { name = "plazia-contracts", marker = "extra == 'authz'", editable = "../plazia/packages/plazia-contracts" },
     { name = "plazia-http", marker = "extra == 'authn'", editable = "../plazia/packages/plazia-http" },
     { name = "plazia-kernel", marker = "extra == 'authn'", editable = "../plazia/packages/plazia-kernel" },
     { name = "plazia-kernel", marker = "extra == 'authz'", editable = "../plazia/packages/plazia-kernel" },
     { name = "pydantic", marker = "extra == 'authn'", specifier = ">=2.11,<3" },
-    { name = "pyyaml", marker = "extra == 'authz'", specifier = ">=6.0.2,<7" },
+    { name = "pyyaml", marker = "extra == 'authz'", specifier = ">=6.0.3,<7" },
 ]
 provides-extras = ["authn", "authz", "testing", "all"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "basedpyright", specifier = ">=1.31.2,<2" },
-    { name = "jsonschema", specifier = ">=4.23,<5" },
+    { name = "basedpyright", specifier = ">=1.40.2,<2" },
+    { name = "jsonschema", specifier = ">=4.26.0,<5" },
     { name = "plazia-authlib", extras = ["all"], specifier = "==0.2.0" },
     { name = "plazia-observability", editable = "../plazia/packages/plazia-observability" },
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "pytest-asyncio", specifier = ">=1.0.0,<2" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0,<2" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
 ]
 
 [[package]]
@@ -1349,21 +1349,21 @@ prompts = [
 
 [package.metadata]
 requires-dist = [
-    { name = "asyncclick", specifier = ">=8.1.8,<9" },
+    { name = "asyncclick", specifier = ">=8.4.2.1,<9" },
     { name = "inquirer", marker = "extra == 'prompts'", specifier = ">=3.4.1" },
-    { name = "prompt-toolkit", marker = "extra == 'shell'", specifier = ">=3.0.51,<4" },
-    { name = "rich", marker = "extra == 'markdown'", specifier = ">=14,<16" },
+    { name = "prompt-toolkit", marker = "extra == 'shell'", specifier = ">=3.0.53,<4" },
+    { name = "rich", marker = "extra == 'markdown'", specifier = ">=15.0.0,<16" },
 ]
 provides-extras = ["prompts", "markdown", "shell"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "inquirer", specifier = ">=3.4.1" },
-    { name = "prompt-toolkit", specifier = ">=3.0.51,<4" },
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "pytest-asyncio", specifier = ">=1.0.0,<2" },
-    { name = "rich", specifier = ">=14,<16" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
+    { name = "prompt-toolkit", specifier = ">=3.0.53,<4" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0,<2" },
+    { name = "rich", specifier = ">=15.0.0,<16" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
 ]
 
 [[package]]
@@ -1379,8 +1379,8 @@ requires-dist = [{ name = "plazia-kernel", editable = "../plazia/packages/plazia
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
 ]
 
 [[package]]
@@ -1411,15 +1411,15 @@ requires-dist = [
     { name = "plazia-observability", extras = ["otel"], editable = "../plazia/packages/plazia-observability" },
     { name = "plazia-persistence", editable = "../plazia/packages/plazia-persistence" },
     { name = "plazia-settings", editable = "../plazia/packages/plazia-settings" },
-    { name = "psycopg", specifier = ">=3.2,<4" },
-    { name = "pydantic-settings", specifier = ">=2.12,<3" },
-    { name = "uvicorn", specifier = ">=0.34,<1" },
+    { name = "psycopg", specifier = ">=3.3.6,<4" },
+    { name = "pydantic-settings", specifier = ">=2.16.1,<3" },
+    { name = "uvicorn", specifier = ">=0.54.0,<1" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
 ]
 
 [[package]]
@@ -1432,18 +1432,18 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "gofeatureflag-python-provider", marker = "extra == 'go-feature-flag'", specifier = ">=1.0.0,<2" },
-    { name = "openfeature-sdk", specifier = ">=0.8.3,<1" },
+    { name = "gofeatureflag-python-provider", marker = "extra == 'go-feature-flag'", specifier = ">=1.3.0,<2" },
+    { name = "openfeature-sdk", specifier = ">=0.10.0,<1" },
 ]
 provides-extras = ["go-feature-flag"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "basedpyright", specifier = ">=1.31.2,<2" },
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "pytest-cov", specifier = ">=7.0.0,<8" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
-    { name = "testcontainers", specifier = ">=4.13,<5" },
+    { name = "basedpyright", specifier = ">=1.40.2,<2" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest-cov", specifier = ">=7.1.0,<8" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
+    { name = "testcontainers", specifier = ">=4.15.0,<5" },
 ]
 
 [[package]]
@@ -1466,7 +1466,7 @@ httpx2 = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.115,<1" },
-    { name = "httpx2", marker = "extra == 'httpx2'", specifier = ">=2.7.0" },
+    { name = "httpx2", marker = "extra == 'httpx2'", specifier = ">=2.16.0" },
     { name = "plazia-feature", marker = "extra == 'feature'", editable = "../plazia/packages/plazia-feature" },
     { name = "plazia-kernel", editable = "../plazia/packages/plazia-kernel" },
     { name = "pydantic", marker = "extra == 'fastapi'", specifier = ">=2.12,<3" },
@@ -1480,10 +1480,10 @@ dev = [
     { name = "plazia-http", extras = ["httpx2"], specifier = "==0.2.0" },
     { name = "plazia-observability", editable = "../plazia/packages/plazia-observability" },
     { name = "pydantic", specifier = ">=2.12,<3" },
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "pytest-asyncio", specifier = ">=1.0.0,<2" },
-    { name = "pytest-cov", specifier = ">=7.0.0,<8" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0,<2" },
+    { name = "pytest-cov", specifier = ">=7.1.0,<8" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
 ]
 
 [[package]]
@@ -1501,22 +1501,22 @@ contacts = [
 
 [package.metadata]
 requires-dist = [
-    { name = "email-validator", marker = "extra == 'contacts'", specifier = ">=2,<3" },
+    { name = "email-validator", marker = "extra == 'contacts'", specifier = ">=2.3.0,<3" },
     { name = "id-validation", marker = "extra == 'contacts'", specifier = "==0.6.1" },
-    { name = "phonenumberslite", marker = "extra == 'contacts'", specifier = ">=8,<9" },
-    { name = "typing-extensions", marker = "extra == 'contacts'", specifier = ">=4.10,<5" },
+    { name = "phonenumberslite", marker = "extra == 'contacts'", specifier = ">=9.0.41,<10" },
+    { name = "typing-extensions", marker = "extra == 'contacts'", specifier = ">=4.16.0,<5" },
 ]
 provides-extras = ["contacts"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "email-validator", specifier = ">=2,<3" },
+    { name = "email-validator", specifier = ">=2.3.0,<3" },
     { name = "id-validation", specifier = "==0.6.1" },
-    { name = "phonenumberslite", specifier = ">=8,<9" },
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "pytest-cov", specifier = ">=7.0.0,<8" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
-    { name = "typing-extensions", specifier = ">=4.10,<5" },
+    { name = "phonenumberslite", specifier = ">=9.0.41,<10" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest-cov", specifier = ">=7.1.0,<8" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
+    { name = "typing-extensions", specifier = ">=4.16.0,<5" },
 ]
 
 [[package]]
@@ -1609,7 +1609,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "nats-py", specifier = ">=2.15,<2.16" },
+    { name = "nats-py", specifier = ">=2.16.0,<2.17" },
     { name = "plazia-feature", editable = "../plazia/packages/plazia-feature" },
     { name = "plazia-http", extras = ["httpx2"], editable = "../plazia/packages/plazia-http" },
     { name = "plazia-kernel", editable = "../plazia/packages/plazia-kernel" },
@@ -1617,10 +1617,10 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "pytest-asyncio", specifier = ">=1.0.0,<2" },
-    { name = "pytest-cov", specifier = ">=7.0.0,<8" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0,<2" },
+    { name = "pytest-cov", specifier = ">=7.1.0,<8" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
 ]
 
 [[package]]
@@ -1639,23 +1639,23 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "httpx2", specifier = ">=2.7.0" },
+    { name = "httpx2", specifier = ">=2.16.0" },
     { name = "plazia-http", extras = ["httpx2"], editable = "../plazia/packages/plazia-http" },
     { name = "plazia-kernel", extras = ["contacts"], editable = "../plazia/packages/plazia-kernel" },
     { name = "plazia-messaging", editable = "../plazia/packages/plazia-messaging" },
     { name = "plazia-observability", editable = "../plazia/packages/plazia-observability" },
     { name = "plazia-settings", editable = "../plazia/packages/plazia-settings" },
     { name = "pydantic", specifier = ">=2.0,<3" },
-    { name = "telethon", marker = "extra == 'mtproto'", specifier = ">=1.44,<2" },
+    { name = "telethon", marker = "extra == 'mtproto'", specifier = ">=1.45.0,<2" },
 ]
 provides-extras = ["mtproto"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "pytest-asyncio", specifier = ">=1.0.0,<2" },
-    { name = "pytest-cov", specifier = ">=7.0.0,<8" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0,<2" },
+    { name = "pytest-cov", specifier = ">=7.1.0,<8" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
 ]
 
 [[package]]
@@ -1689,9 +1689,9 @@ dev = [
     { name = "opentelemetry-api", specifier = ">=1.35.0,<2" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.35.0,<2" },
     { name = "opentelemetry-sdk", specifier = ">=1.35.0,<2" },
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "pytest-cov", specifier = ">=7.0.0,<8" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest-cov", specifier = ">=7.1.0,<8" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
 ]
 
 [[package]]
@@ -1700,6 +1700,7 @@ version = "0.1.0"
 source = { editable = "../plazia/packages/plazia-persistence" }
 dependencies = [
     { name = "plazia-kernel" },
+    { name = "plazia-messaging" },
     { name = "plazia-observability" },
     { name = "psycopg", extra = ["binary"] },
     { name = "psycopg-pool" },
@@ -1708,17 +1709,18 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "plazia-kernel", editable = "../plazia/packages/plazia-kernel" },
+    { name = "plazia-messaging", editable = "../plazia/packages/plazia-messaging" },
     { name = "plazia-observability", editable = "../plazia/packages/plazia-observability" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
-    { name = "psycopg-pool", specifier = ">=3.2,<4" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6,<4" },
+    { name = "psycopg-pool", specifier = ">=3.3.3,<4" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "basedpyright", specifier = ">=1.31.2,<2" },
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "pytest-cov", specifier = ">=7.0.0,<8" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
+    { name = "basedpyright", specifier = ">=1.40.2,<2" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest-cov", specifier = ">=7.1.0,<8" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
 ]
 
 [[package]]
@@ -1730,12 +1732,12 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pydantic-settings", specifier = ">=2.14.2,<3" }]
+requires-dist = [{ name = "pydantic-settings", specifier = ">=2.16.1,<3" }]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
 ]
 
 [[package]]
@@ -1755,7 +1757,6 @@ dependencies = [
     { name = "plazia-messaging" },
     { name = "plazia-persistence" },
     { name = "plazia-settings" },
-    { name = "pycryptodome" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyfiglet" },
@@ -1769,11 +1770,11 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cloudflare", specifier = ">=5.6,<6" },
+    { name = "cloudflare", specifier = ">=5.9.0,<6" },
     { name = "cryptography", specifier = ">=46,<50" },
-    { name = "dependency-injector", specifier = ">=4.49,<5" },
-    { name = "dnspython", specifier = ">=2.8,<3" },
-    { name = "jinja2", specifier = ">=3.1,<4" },
+    { name = "dependency-injector", specifier = ">=4.49.1,<5" },
+    { name = "dnspython", specifier = ">=2.9.0,<3" },
+    { name = "jinja2", specifier = ">=3.1.6,<4" },
     { name = "plazia-authlib", extras = ["authn", "authz"], editable = "../plazia/packages/plazia-authlib" },
     { name = "plazia-cli", extras = ["prompts"], editable = "../plazia/packages/plazia-cli" },
     { name = "plazia-http", extras = ["httpx2"], editable = "../plazia/packages/plazia-http" },
@@ -1781,25 +1782,24 @@ requires-dist = [
     { name = "plazia-messaging", editable = "../plazia/packages/plazia-messaging" },
     { name = "plazia-persistence", editable = "../plazia/packages/plazia-persistence" },
     { name = "plazia-settings", editable = "../plazia/packages/plazia-settings" },
-    { name = "pycryptodome", specifier = ">=3.23,<4" },
     { name = "pydantic", specifier = ">=2.12,<3" },
-    { name = "pydantic-settings", specifier = ">=2.12,<3" },
-    { name = "pyfiglet", specifier = ">=1.0.2,<2" },
-    { name = "pyyaml", specifier = ">=6.0.2,<7" },
+    { name = "pydantic-settings", specifier = ">=2.16.1,<3" },
+    { name = "pyfiglet", specifier = ">=1.0.4,<2" },
+    { name = "pyyaml", specifier = ">=6.0.3,<7" },
     { name = "qrcode", specifier = ">=8.2,<9" },
     { name = "radon", specifier = ">=6.0.1,<7" },
-    { name = "structlog", specifier = ">=25,<26" },
+    { name = "structlog", specifier = ">=26.1.0,<27" },
     { name = "tomli-w", specifier = ">=1.2,<2" },
-    { name = "vulture", specifier = ">=2.14,<3" },
+    { name = "vulture", specifier = ">=2.16,<3" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "jsonschema", specifier = ">=4.0.0,<5" },
-    { name = "pytest", specifier = ">=9.0.0,<10" },
-    { name = "pytest-asyncio", specifier = ">=1.0.0,<2" },
-    { name = "pytest-cov", specifier = ">=7.0.0,<8" },
-    { name = "ruff", specifier = ">=0.11.13,<1" },
+    { name = "jsonschema", specifier = ">=4.26.0,<5" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0,<2" },
+    { name = "pytest-cov", specifier = ">=7.1.0,<8" },
+    { name = "ruff", specifier = ">=0.17.2,<1" },
 ]
 
 [[package]]
@@ -1971,25 +1971,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pycryptodome"
-version = "3.23.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/8e/a6/8452177684d5e906854776276ddd34eca30d1b1e15aa1ee9cefc289a33f5/pycryptodome-3.23.0.tar.gz", hash = "sha256:447700a657182d60338bab09fdb27518f8856aecd80ae4c6bdddb67ff5da44ef", size = 4921276, upload-time = "2025-05-17T17:21:45.242Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/db/6c/a1f71542c969912bb0e106f64f60a56cc1f0fabecf9396f45accbe63fa68/pycryptodome-3.23.0-cp37-abi3-macosx_10_9_universal2.whl", hash = "sha256:187058ab80b3281b1de11c2e6842a357a1f71b42cb1e15bce373f3d238135c27", size = 2495627, upload-time = "2025-05-17T17:20:47.139Z" },
-    { url = "https://files.pythonhosted.org/packages/6e/4e/a066527e079fc5002390c8acdd3aca431e6ea0a50ffd7201551175b47323/pycryptodome-3.23.0-cp37-abi3-macosx_10_9_x86_64.whl", hash = "sha256:cfb5cd445280c5b0a4e6187a7ce8de5a07b5f3f897f235caa11f1f435f182843", size = 1640362, upload-time = "2025-05-17T17:20:50.392Z" },
-    { url = "https://files.pythonhosted.org/packages/50/52/adaf4c8c100a8c49d2bd058e5b551f73dfd8cb89eb4911e25a0c469b6b4e/pycryptodome-3.23.0-cp37-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:67bd81fcbe34f43ad9422ee8fd4843c8e7198dd88dd3d40e6de42ee65fbe1490", size = 2182625, upload-time = "2025-05-17T17:20:52.866Z" },
-    { url = "https://files.pythonhosted.org/packages/5f/e9/a09476d436d0ff1402ac3867d933c61805ec2326c6ea557aeeac3825604e/pycryptodome-3.23.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c8987bd3307a39bc03df5c8e0e3d8be0c4c3518b7f044b0f4c15d1aa78f52575", size = 2268954, upload-time = "2025-05-17T17:20:55.027Z" },
-    { url = "https://files.pythonhosted.org/packages/f9/c5/ffe6474e0c551d54cab931918127c46d70cab8f114e0c2b5a3c071c2f484/pycryptodome-3.23.0-cp37-abi3-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:aa0698f65e5b570426fc31b8162ed4603b0c2841cbb9088e2b01641e3065915b", size = 2308534, upload-time = "2025-05-17T17:20:57.279Z" },
-    { url = "https://files.pythonhosted.org/packages/18/28/e199677fc15ecf43010f2463fde4c1a53015d1fe95fb03bca2890836603a/pycryptodome-3.23.0-cp37-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:53ecbafc2b55353edcebd64bf5da94a2a2cdf5090a6915bcca6eca6cc452585a", size = 2181853, upload-time = "2025-05-17T17:20:59.322Z" },
-    { url = "https://files.pythonhosted.org/packages/ce/ea/4fdb09f2165ce1365c9eaefef36625583371ee514db58dc9b65d3a255c4c/pycryptodome-3.23.0-cp37-abi3-musllinux_1_2_i686.whl", hash = "sha256:156df9667ad9f2ad26255926524e1c136d6664b741547deb0a86a9acf5ea631f", size = 2342465, upload-time = "2025-05-17T17:21:03.83Z" },
-    { url = "https://files.pythonhosted.org/packages/22/82/6edc3fc42fe9284aead511394bac167693fb2b0e0395b28b8bedaa07ef04/pycryptodome-3.23.0-cp37-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:dea827b4d55ee390dc89b2afe5927d4308a8b538ae91d9c6f7a5090f397af1aa", size = 2267414, upload-time = "2025-05-17T17:21:06.72Z" },
-    { url = "https://files.pythonhosted.org/packages/59/fe/aae679b64363eb78326c7fdc9d06ec3de18bac68be4b612fc1fe8902693c/pycryptodome-3.23.0-cp37-abi3-win32.whl", hash = "sha256:507dbead45474b62b2bbe318eb1c4c8ee641077532067fec9c1aa82c31f84886", size = 1768484, upload-time = "2025-05-17T17:21:08.535Z" },
-    { url = "https://files.pythonhosted.org/packages/54/2f/e97a1b8294db0daaa87012c24a7bb714147c7ade7656973fd6c736b484ff/pycryptodome-3.23.0-cp37-abi3-win_amd64.whl", hash = "sha256:c75b52aacc6c0c260f204cbdd834f76edc9fb0d8e0da9fbf8352ef58202564e2", size = 1799636, upload-time = "2025-05-17T17:21:10.393Z" },
-    { url = "https://files.pythonhosted.org/packages/18/3d/f9441a0d798bf2b1e645adc3265e55706aead1255ccdad3856dbdcffec14/pycryptodome-3.23.0-cp37-abi3-win_arm64.whl", hash = "sha256:11eeeb6917903876f134b56ba11abe95c0b0fd5e3330def218083c7d98bbcb3c", size = 1703675, upload-time = "2025-05-17T17:21:13.146Z" },
-]
-
-[[package]]
 name = "pydantic"
 version = "2.13.5"
 source = { registry = "https://pypi.org/simple" }
@@ -2047,16 +2028,17 @@ wheels = [
 
 [[package]]
 name = "pydantic-settings"
-version = "2.15.0"
+version = "2.16.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/68/ca/31c57507b13119d7d3cfa1576dad2911a4861e3be07b579395f4e9d393f9/pydantic_settings-2.15.0.tar.gz", hash = "sha256:694b793e84f766ba76a90ebdefc01d0a9a045dab0382bee70393da93712ad117", size = 261253, upload-time = "2026-08-07T09:24:57.419Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/31/21d21e0e38a8f5f7a7f0cde22820117b6d17d6bc36f348129527f915d7f4/pydantic_settings-2.16.2.tar.gz", hash = "sha256:3dc08ffabed2bbd5dc2dd55ead7b78b4e4c5cd776aecd04310db5f1224caaf46", size = 309225, upload-time = "2026-10-28T11:14:28.066Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/30/a4/2bffa9f8e804325a09867f0e9d30795c80ea9f8d62560bd1b6ad6220eb2f/pydantic_settings-2.15.0-py3-none-any.whl", hash = "sha256:0ba092c291c94baceb5eff768aa0d56400a457585bc0175925a5a5510303da42", size = 69413, upload-time = "2026-08-07T09:24:55.839Z" },
+    { url = "https://files.pythonhosted.org/packages/39/88/4131c51ff87b7cd7f82a1194d0c0a2b7ca68c72d9da04c3b7e69ab91a79f/pydantic_settings-2.16.2-py3-none-any.whl", hash = "sha256:8d523e5c129b097686bde019bd6109bff53f4c8c3f63f1ddf9933ffa42e5ab4f", size = 81994, upload-time = "2026-10-28T11:14:26.716Z" },
 ]
 
 [[package]]
@@ -2329,11 +2311,11 @@ wheels = [
 
 [[package]]
 name = "structlog"
-version = "25.5.0"
+version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ef/52/9ba0f43b686e7f3ddfeaa78ac3af750292662284b3661e91ad5494f21dbc/structlog-25.5.0.tar.gz", hash = "sha256:098522a3bebed9153d4570c6d0288abf80a031dfdb2048d59a49e9dc2190fc98", size = 1460830, upload-time = "2025-10-27T08:28:23.028Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5e/89/b4a0bcfdf4f71a3dea31379f095929613d7e4528a0996bca6aa964cd0dca/structlog-26.1.0.tar.gz", hash = "sha256:f63a716cbd1b1291cf7661de7794b455acfa4c43c5bcf1630e6ad5ddc1adb3b7", size = 1459881, upload-time = "2026-06-06T07:33:39.348Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a8/45/a132b9074aa18e799b891b91ad72133c98d8042c70f6240e4c5f9dabee2f/structlog-25.5.0-py3-none-any.whl", hash = "sha256:a8453e9b9e636ec59bd9e79bbd4a72f025981b3ba0f5837aebf48f02f37a7f9f", size = 72510, upload-time = "2025-10-27T08:28:21.535Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/18/489c97b834dfff9cf2fc2507cede4bcd4b11e67f84bc462acd1992496f86/structlog-26.1.0-py3-none-any.whl", hash = "sha256:e081a26d6c373e6d201eca24eede26d8ffab07f88f477822e679183428d3d91e", size = 73764, upload-time = "2026-06-06T07:33:38.046Z" },
 ]
 
 [[package]]
