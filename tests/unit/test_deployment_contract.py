@@ -200,6 +200,23 @@ def test_identity_enrollment_matches_the_browser_and_api_contract(environment):
         urlsplit(url).path in routes for url in [*client.logout_urls, client.initiate_login_uri]
     )
     assert api.audience == selected.application_origin + "/api/v1"
+    scope_keys = {scope.ref: scope.key for scope in api.scopes}
+    assert {
+        "read": "links:read",
+        "update": "links:update",
+        "delete": "links:delete",
+        "pools-create": "pools:create",
+    }.items() <= scope_keys.items()
+    selectors = {
+        output.key: (output.source, output.ref, output.scope) for output in document.outputs
+    }
+    assert {
+        "PLZK_IDENTITY_API_ID": ("api.id", "links", None),
+        "PLZK_IDENTITY_LINK_READ_SCOPE_ID": ("api_scope.id", "links", "read"),
+        "PLZK_IDENTITY_LINK_UPDATE_SCOPE_ID": ("api_scope.id", "links", "update"),
+        "PLZK_IDENTITY_LINK_DELETE_SCOPE_ID": ("api_scope.id", "links", "delete"),
+        "PLZK_IDENTITY_POOL_CREATE_SCOPE_ID": ("api_scope.id", "links", "pools-create"),
+    }.items() <= selectors.items()
     assert any(
         output.key == "PLZK_IDENTITY_AUDIENCE" and output.source == "api.audience"
         for output in document.outputs

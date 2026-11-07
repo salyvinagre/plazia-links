@@ -10,6 +10,7 @@ from plazia_tooling.release.env_model import (
     EnvRegistry,
     EnvSurface,
     EnvVariable,
+    EnvVisibility,
 )
 from plazia_tooling.release.stack_environment import RegistryOnlyStackEnvironment
 from pydantic import SecretStr
@@ -79,6 +80,25 @@ def build_registry() -> EnvRegistry:
             )
     return EnvRegistry(
         variables=tuple(variables)
+        + tuple(
+            EnvVariable(
+                name=name,
+                env_class=EnvClass.GENERATED,
+                purpose="Identity API and scope IDs for approved external grants.",
+                producer=EnvProducer.BOOTSTRAP,
+                consumer=EnvConsumer.ENVIRONMENT_PROVIDER,
+                surface=EnvSurface.INTERNAL,
+                category=EnvCategory.DOMAIN,
+                visibility=EnvVisibility.EXPORTED,
+            )
+            for name in (
+                "PLZK_IDENTITY_API_ID",
+                "PLZK_IDENTITY_LINK_READ_SCOPE_ID",
+                "PLZK_IDENTITY_LINK_UPDATE_SCOPE_ID",
+                "PLZK_IDENTITY_LINK_DELETE_SCOPE_ID",
+                "PLZK_IDENTITY_POOL_CREATE_SCOPE_ID",
+            )
+        )
         + (
             EnvVariable(
                 name="PLZK_IDENTITY_OWNER_EMAIL",

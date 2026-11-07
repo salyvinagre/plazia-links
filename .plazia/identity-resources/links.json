@@ -49,6 +49,11 @@
   ],
   "outputs": [
     {"key": "PLZK_IDENTITY_AUDIENCE", "source": "api.audience", "ref": "links"},
+    {"key": "PLZK_IDENTITY_API_ID", "source": "api.id", "ref": "links"},
+    {"key": "PLZK_IDENTITY_LINK_READ_SCOPE_ID", "source": "api_scope.id", "ref": "links", "scope": "read"},
+    {"key": "PLZK_IDENTITY_LINK_UPDATE_SCOPE_ID", "source": "api_scope.id", "ref": "links", "scope": "update"},
+    {"key": "PLZK_IDENTITY_LINK_DELETE_SCOPE_ID", "source": "api_scope.id", "ref": "links", "scope": "delete"},
+    {"key": "PLZK_IDENTITY_POOL_CREATE_SCOPE_ID", "source": "api_scope.id", "ref": "links", "scope": "pools-create"},
     {"key": "PLZK_IDENTITY_ISSUER", "source": "environment.preferred_issuer", "ref": "selected"},
     {"key": "PLZK_IDENTITY_CLIENT_ID", "source": "application.client_id", "ref": "links"},
     {"key": "PLZK_IDENTITY_CLIENT_SECRET", "source": "application.client_secret", "ref": "links", "missing": "rotate_once"}

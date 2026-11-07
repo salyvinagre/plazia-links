@@ -34,7 +34,7 @@ async def test_private_workload_scope_activation_replay_and_expiry(postgres_urls
         "printer",
         "printer-client",
         org,
-        frozenset({"pools:create", "links:create", "links:read", "links:update"}),
+        frozenset({"pools:create", "links:read", "links:update", "links:delete"}),
         9999999999,
         "jwt",
     )
