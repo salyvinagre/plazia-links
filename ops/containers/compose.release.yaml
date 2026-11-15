@@ -7,6 +7,10 @@ services:
     networks: [postgres]
   api:
     networks: [postgres, plazia-edge, plazia-services]
+    volumes:
+      - pki_root:/run/plazia/pki-root:ro
+    environment:
+      PLZK_IDENTITY_MACHINE_ISSUERS: ${PLZK_IDENTITY_MACHINE_ISSUERS:-[]}
   worker:
     networks: [postgres, plazia-services]
     environment:
@@ -15,6 +19,10 @@ services:
       PLZK_WORKER_SMTP_USER:
       PLZK_WORKER_SMTP_PORT:
       PLZK_WORKER_SMTP_SECURITY:
+volumes:
+  pki_root:
+    name: ${PLZ_PKI_ROOT_VOLUME:?Select the Root workload CA}
+    external: true
 networks:
   postgres:
     name: ${PLZ_POSTGRES_NETWORK:?Select the admitted PostgreSQL network}

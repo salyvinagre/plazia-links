@@ -19,13 +19,19 @@ from app.platform.settings import IdentitySettings, OwnerSettings, Settings, Wor
 
 _GENERATED = frozenset(
     {
-        "PLZK_IDENTITY_ISSUER",
         "PLZK_IDENTITY_AUDIENCE",
         "PLZK_IDENTITY_CLIENT_ID",
         "PLZK_IDENTITY_CLIENT_SECRET",
     }
 )
-_PROVIDED = frozenset({"PLZK_OPENFGA_URL", "PLZK_OPENFGA_STORE_ID", "PLZK_OPENFGA_MODEL_ID"})
+_PROVIDED = frozenset(
+    {
+        "PLZK_OPENFGA_URL",
+        "PLZK_OPENFGA_STORE_ID",
+        "PLZK_OPENFGA_MODEL_ID",
+        "PLZK_SCHEMA_DATABASE_ID",
+    }
+)
 _REQUIRED = frozenset(
     {
         "PLZK_WORKER_DATABASE_URL",
@@ -92,6 +98,7 @@ def build_registry() -> EnvRegistry:
                 visibility=EnvVisibility.EXPORTED,
             )
             for name in (
+                "PLZK_IDENTITY_DOMAIN",
                 "PLZK_IDENTITY_API_ID",
                 "PLZK_IDENTITY_LINK_READ_SCOPE_ID",
                 "PLZK_IDENTITY_LINK_UPDATE_SCOPE_ID",

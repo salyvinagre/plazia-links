@@ -1752,6 +1752,7 @@ dependencies = [
     { name = "jinja2" },
     { name = "plazia-authlib", extra = ["authn", "authz"] },
     { name = "plazia-cli", extra = ["prompts"] },
+    { name = "plazia-contracts" },
     { name = "plazia-http", extra = ["httpx2"] },
     { name = "plazia-kernel", extra = ["contacts"] },
     { name = "plazia-messaging" },
@@ -1777,9 +1778,12 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1.6,<4" },
     { name = "plazia-authlib", extras = ["authn", "authz"], editable = "../plazia/packages/plazia-authlib" },
     { name = "plazia-cli", extras = ["prompts"], editable = "../plazia/packages/plazia-cli" },
+    { name = "plazia-contracts", editable = "../plazia/packages/plazia-contracts" },
+    { name = "plazia-fixtures", marker = "extra == 'fixtures'", editable = "../plazia/packages/plazia-fixtures" },
     { name = "plazia-http", extras = ["httpx2"], editable = "../plazia/packages/plazia-http" },
     { name = "plazia-kernel", extras = ["contacts"], editable = "../plazia/packages/plazia-kernel" },
     { name = "plazia-messaging", editable = "../plazia/packages/plazia-messaging" },
+    { name = "plazia-observability", extras = ["otel"], marker = "extra == 'progress'", editable = "../plazia/packages/plazia-observability" },
     { name = "plazia-persistence", editable = "../plazia/packages/plazia-persistence" },
     { name = "plazia-settings", editable = "../plazia/packages/plazia-settings" },
     { name = "pydantic", specifier = ">=2.12,<3" },
@@ -1792,10 +1796,12 @@ requires-dist = [
     { name = "tomli-w", specifier = ">=1.2,<2" },
     { name = "vulture", specifier = ">=2.16,<3" },
 ]
+provides-extras = ["fixtures", "progress"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "jsonschema", specifier = ">=4.26.0,<5" },
+    { name = "plazia-fixtures", editable = "../plazia/packages/plazia-fixtures" },
     { name = "pytest", specifier = ">=9.1.1,<10" },
     { name = "pytest-asyncio", specifier = ">=1.4.0,<2" },
     { name = "pytest-cov", specifier = ">=7.1.0,<8" },

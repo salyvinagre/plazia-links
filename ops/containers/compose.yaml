@@ -18,6 +18,7 @@ x-schema: &schema
   healthcheck: {disable: true}
   environment:
     PLZK_SCHEMA_DATABASE_URL_FILE: /run/secrets/plzk_schema_database_url
+    PLZK_SCHEMA_DATABASE_ID: ${PLZK_SCHEMA_DATABASE_ID:-}
 services:
   schema-prepare:
     <<: *schema
@@ -31,13 +32,10 @@ services:
     restart: "no"
     working_dir: /flyway/project
     environment:
-      FLYWAY_CONFIG_FILES: /flyway/project/flyway.toml,/run/secrets/flyway-user.toml
+      FLYWAY_CONFIG_FILES: /flyway/project/flyway.toml,/run/secrets/plzk_flyway_user.toml
       HOME: /tmp
       REDGATE_DISABLE_TELEMETRY: "true"
     volumes: ["${PLZK_FLYWAY_PROJECT:-../../app/platform/persistence/sql}:/flyway/project:ro"]
-    secrets:
-      - source: plzk_flyway_user_toml
-        target: flyway-user.toml
     command: [migrate]
     depends_on:
       schema-prepare: {condition: service_completed_successfully}
@@ -50,9 +48,9 @@ services:
     <<: *runtime
     restart: unless-stopped
     environment:
-      PLZK_IDENTITY_ISSUER: ${PLZK_IDENTITY_ISSUER:?Select the Identity issuer}
-      PLZK_IDENTITY_AUDIENCE: ${PLZK_IDENTITY_AUDIENCE:?Select the API audience}
-      PLZK_IDENTITY_CLIENT_ID: ${PLZK_IDENTITY_CLIENT_ID:?Select the browser client}
+      PLZK_IDENTITY_ISSUER:
+      PLZK_IDENTITY_AUDIENCE:
+      PLZK_IDENTITY_CLIENT_ID:
       PLZK_IDENTITY_PUBLIC_BASE_URL: ${PLZK_IDENTITY_PUBLIC_BASE_URL:?Select the public origin}
       PLZK_OPENFGA_URL: ${PLZK_OPENFGA_URL:?Select the OpenFGA endpoint}
     depends_on:
@@ -66,6 +64,3 @@ services:
       PLZK_IDENTITY_PUBLIC_BASE_URL: ${PLZK_IDENTITY_PUBLIC_BASE_URL:?Select the public origin}
     depends_on:
       schema-finish: {condition: service_completed_successfully}
-secrets:
-  plzk_flyway_user_toml:
-    file: ${PLZK_FLYWAY_USER_TOML_FILE:?Select the owner Flyway secret}

@@ -1,8 +1,11 @@
 """Owner operator intents through the shared CLI and CQRS boundaries."""
 
+import hashlib
+import json
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Literal, cast
+from uuid import UUID
 
 from plazia_cli.commands import (
     CommandArgument,
@@ -22,12 +25,18 @@ from app.platform.persistence.schema import SchemaAuthority, SchemaError
 from app.platform.settings import OwnerSettings, PublicSettings
 
 Action = Literal[
-    "schema-prepare", "schema-finish", "schema-check", "bind-organization", "disable-organization"
+    "schema-prepare",
+    "schema-finish",
+    "schema-check",
+    "release-qualify",
+    "bind-organization",
+    "disable-organization",
 ]
 _HELP: dict[Action, str] = {
     "schema-prepare": "Verify the owner target before literal Flyway migration.",
     "schema-finish": "Verify the complete schema after Flyway migration.",
     "schema-check": "Read schema readiness without changing it.",
+    "release-qualify": "Verify the selected preview database for a release operation.",
     "bind-organization": "Enable an Identity organization using the owner credential.",
     "disable-organization": "Revoke management access for an organization.",
 }
@@ -70,12 +79,23 @@ class OperatorCli:
                 )
                 if self.action == "bind-organization"
                 else ()
+            )
+            + (
+                (
+                    CommandOption("--operation-id", required=True),
+                    CommandOption("--control-revision", required=True, value_type=int),
+                    CommandOption("--action", required=True, choices=("prepare", "verify")),
+                )
+                if self.action == "release-qualify"
+                else ()
             ),
         )
 
     async def _invoke(self, invocation: CommandInvocation) -> int:
         try:
-            if self.action.startswith("schema-"):
+            if self.action == "release-qualify":
+                self._qualify(invocation)
+            elif self.action.startswith("schema-"):
                 authority = SchemaAuthority(OwnerSettings().database_url.get_secret_value())
                 method = {
                     "schema-prepare": authority.prepare,
@@ -129,6 +149,35 @@ class OperatorCli:
                 "Operator action failed; check configuration and target readiness."
             ) from error
         return 0
+
+    @staticmethod
+    def _qualify(invocation: CommandInvocation) -> None:
+        settings = OwnerSettings()
+        database_id = str(UUID(settings.database_id))
+        operation_id = str(UUID(invocation.str("operation_id")))
+        revision = invocation.optional_int("control_revision")
+        if revision is None or revision < 0:
+            raise CommandError("The control revision must be nonnegative")
+        status = SchemaAuthority(settings.database_url.get_secret_value()).check()
+        evidence = json.dumps(asdict(status), sort_keys=True, separators=(",", ":")).encode()
+        result = {
+            "version": 1,
+            "repository": "salyvinagre/plazia-links",
+            "command": "runtime",
+            "operation_id": operation_id,
+            "control_revision": revision,
+            "action": invocation.str("action"),
+            "outcome": "ready",
+            "capabilities": [
+                {
+                    "name": "database",
+                    "authority_id": database_id,
+                    "revision": status.revision,
+                    "evidence_digest": "sha256:" + hashlib.sha256(evidence).hexdigest(),
+                }
+            ],
+        }
+        print(json.dumps(result, sort_keys=True))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

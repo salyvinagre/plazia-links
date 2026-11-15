@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from plazia_tooling.release.compose_stack import ComposeStackConfig
 from plazia_tooling.release.config import ReleaseConfig
 from plazia_tooling.release.configuration import (
     ReleaseConfiguration,
@@ -78,17 +79,19 @@ def test_public_origins_reject_invalid_ports(port):
         )
 
 
-@pytest.mark.parametrize("environment", ["dev", "pr-42", "staging", "production"])
+@pytest.mark.parametrize("environment", ["preview", "isolated", "production"])
 def test_ordered_deployment_projection_is_consumed_by_each_runtime(
     monkeypatch, tmp_path, environment
 ):
     config = ReleaseConfig.from_repo(ROOT)
-    selected = config.resolve(environment=environment, env={})
+    env = {"RELEASE_ISOLATED": "1"} if environment == "isolated" else {}
+    selected = config.resolve(environment=environment, env=env)
+    stack = ComposeStackConfig.from_mapping(selected.release.values["stack"], env=env)
     configurations = ReleaseConfiguration.from_sequence(
         selected.release.values["configuration"],
         env={},
         label="Links configuration",
-        stack_services=selected.release.values["stack"]["services"],
+        stack_services=stack.services,
     )
     projection = ReleaseConfigurationProjection.materialize(
         repo_root=ROOT,
@@ -105,7 +108,7 @@ def test_ordered_deployment_projection_is_consumed_by_each_runtime(
     assert config_file.stat().st_mode & 0o777 == 0o444
     assert tmp_path.stat().st_mode & 0o077 == 0
     assert not selected.enabled
-    assert not config.resolve(environment=environment, destination="remote", env={}).enabled
+    assert not config.resolve(environment=environment, destination="remote", env=env).enabled
 
 
 @pytest.mark.parametrize("environment", ["pr-42", "production"])
@@ -211,6 +214,7 @@ def test_identity_enrollment_matches_the_browser_and_api_contract(environment):
         output.key: (output.source, output.ref, output.scope) for output in document.outputs
     }
     assert {
+        "PLZK_IDENTITY_DOMAIN": ("environment.preferred_issuer", "selected", None),
         "PLZK_IDENTITY_API_ID": ("api.id", "links", None),
         "PLZK_IDENTITY_LINK_READ_SCOPE_ID": ("api_scope.id", "links", "read"),
         "PLZK_IDENTITY_LINK_UPDATE_SCOPE_ID": ("api_scope.id", "links", "update"),
@@ -285,6 +289,11 @@ def test_release_topology_keeps_worker_and_owner_off_public_ingress():
     }
     assert all(value["external"] for value in topology["networks"].values())
     base = yaml.safe_load((ROOT / "ops/containers/compose.yaml").read_text())
+    migration = base["services"]["schema-migrate"]
+    assert "secrets" not in migration
+    assert migration["environment"]["FLYWAY_CONFIG_FILES"].endswith(
+        ",/run/secrets/plzk_flyway_user.toml"
+    )
     assert "/health" in base["services"]["api"]["healthcheck"]["test"][-1]
     assert base["services"]["worker"]["healthcheck"]["disable"]
     assert "ports" not in base["services"]["api"]
@@ -301,3 +310,18 @@ def test_release_topology_keeps_worker_and_owner_off_public_ingress():
     )
     assert artifact.target == "/retained/links/flyway"
     assert artifact.source_path(ROOT).joinpath("migrations/V2__pool_management.sql").is_file()
+
+
+def test_release_runtime_toml_loads_for_the_worker(monkeypatch, tmp_path):
+    config = tmp_path / "links.toml"
+    config.write_bytes((ROOT / "ops/containers/config/runtime.toml").read_bytes())
+    config.chmod(0o600)
+    monkeypatch.setenv("PLZK_CONFIG_FILE", str(config))
+
+    assert PublicSettings().machine_issuers == ()
+
+
+def test_printer_preview_enables_only_the_remote_links_release():
+    config = ReleaseConfig.from_repo(ROOT)
+    assert config.resolve(environment="id-5", destination="remote").enabled
+    assert not config.resolve(environment="id-5", destination="local").enabled

@@ -1,3 +1,10 @@
 services:
+  schema-migrate:
+    secrets:
+      - source: plzk_flyway_user_toml
+        target: plzk_flyway_user.toml
   api:
     ports: ['127.0.0.1:8000:8000']
+secrets:
+  plzk_flyway_user_toml:
+    file: ${PLZK_FLYWAY_USER_TOML_FILE:?Select the owner Flyway secret}

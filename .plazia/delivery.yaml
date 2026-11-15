@@ -3,6 +3,10 @@ delivery:
     machine_env: PLZ_STACK_PODMAN_MACHINE
     compose_dir: ops/containers
     label: Links owner stack
+    secrets:
+      files:
+      - selector: PLZK_FLYWAY_USER_TOML
+        name: plzk_flyway_user.toml
     env_defaults:
       PLZ_STACK_PODMAN_MACHINE: podman-machine-default
     image_builds:
@@ -84,6 +88,22 @@ delivery:
     common:
       enabled: false
       dependencies: [plazia-postgres-links, identity]
+      owner_lifecycle:
+        stateless: false
+        capabilities: [database]
+        qualify:
+        - name: runtime
+          service: schema-finish
+          image_selector: PLZK_IMAGE
+          arguments:
+          - plazia-links
+          - release-qualify
+          - --operation-id
+          - '{operation_id}'
+          - --control-revision
+          - '{control_revision}'
+          - --action
+          - '{action}'
       environment_provider: tools.environment:LinksEnvironment
       profile:
         scope: runtime
@@ -92,6 +112,12 @@ delivery:
         remote: remote
       destinations:
         remote:
+          remote:
+            env:
+              PLZ_EDGE_NETWORK: ${PLZ_EDGE_NETWORK}
+              PLZK_IDENTITY_ISSUER: https://${PLZK_IDENTITY_DOMAIN:-}
+              PLZK_IDENTITY_AUDIENCE: ${PLZK_IDENTITY_AUDIENCE:-}
+              PLZK_IDENTITY_CLIENT_ID: ${PLZK_IDENTITY_CLIENT_ID:-}
           stack:
             env:
               PLZK_FLYWAY_PROJECT: ./flyway
@@ -152,14 +178,13 @@ delivery:
         - ${PLZ_POSTGRES_NETWORK}
         env:
           PLZK_IDENTITY_PUBLIC_BASE_URL: https://${PLZ_RELEASE_HOSTNAME}
-        services: &runtime_services
-        - schema-prepare
-        - schema-migrate
-        - schema-finish
-        - api
-        - worker
         units:
-          runtime: *runtime_services
+          runtime:
+          - schema-prepare
+          - schema-migrate
+          - schema-finish
+          - api
+          - worker
         up:
           steps:
           - kind: secrets_ensure
@@ -218,6 +243,24 @@ delivery:
               path: /health
               status: 200
     environments:
+      id-5:
+        destinations:
+          remote:
+            enabled: true
+        required_env:
+        - PLZK_IDENTITY_OWNER_EMAIL
+        - PLZK_OPENFGA_URL
+        - PLZK_IDENTITY_MACHINE_ISSUERS
+        - PLZ_PKI_ROOT_VOLUME
+        - PLZK_WORKER_SMTP_HOST
+        - PLZK_WORKER_SMTP_FROM
+        dependencies: [plazia-postgres-links, identity, sessions, mailpit]
+        stack:
+          env:
+            PLZK_WORKER_SMTP_HOST: mailpit
+            PLZK_WORKER_SMTP_FROM: links@plazia.test
+            PLZK_WORKER_SMTP_PORT: '1025'
+            PLZK_WORKER_SMTP_SECURITY: plain
       production:
         policy: production
     policies:
@@ -240,6 +283,23 @@ delivery:
         backend_network: plazia-edge
         deploy_dir: /var/tmp/plazia-links
   dependencies:
+    sessions:
+      phase: before
+      infrastructure:
+        repository: ../plazia
+        capability: services
+        unit: main-sessions
+      outputs:
+        PLAZIA_SERVICES_NETWORK: PLAZIA_SERVICES_NETWORK
+        PLZ_PKI_ROOT_VOLUME: PLZ_PKI_ROOT_VOLUME
+      secret_outputs:
+        PLZK_REDIS_URL: PLZK_REDIS_URL
+    mailpit:
+      phase: before
+      infrastructure:
+        repository: ../plazia
+        capability: services
+        unit: mailpit
     plazia-postgres-links:
       phase: before
       infrastructure:
@@ -253,6 +313,7 @@ delivery:
         PLZK_FLYWAY_USER_TOML: PLZK_FLYWAY_USER_TOML
       outputs:
         PLZ_POSTGRES_NETWORK: PLZ_POSTGRES_NETWORK
+        PLZK_SCHEMA_DATABASE_ID: PLZ_POSTGRES_LINKS_DATABASE_ID
     identity:
       repository: ../plazia-identity
       lifecycle: false

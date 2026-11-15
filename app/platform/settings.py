@@ -93,6 +93,7 @@ class OwnerSettings(RuntimeSettings):
     model_config = SettingsConfigDict(env_prefix="PLZK_SCHEMA_")
     section: ClassVar[str] = "owner"
     database_url: SecretStr = Field(default=SecretStr(""), exclude=True, repr=False)
+    database_id: str = ""
 
 
 class PublicSettings(RuntimeSettings):
