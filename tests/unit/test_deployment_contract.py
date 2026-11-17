@@ -4,6 +4,10 @@ from pathlib import Path
 
 import pytest
 import yaml
+from plazia_tooling.delivery.application.commands.ensure_dependency.handler import (
+    DependencyCatalog,
+    DependencyPhase,
+)
 from plazia_tooling.release.compose_stack import ComposeStackConfig
 from plazia_tooling.release.config import ReleaseConfig
 from plazia_tooling.release.configuration import (
@@ -13,6 +17,7 @@ from plazia_tooling.release.configuration import (
 from plazia_tooling.release.secrets import ReleaseSecretProjection
 
 from app.platform.settings import IdentitySettings, PublicSettings, Settings, WorkerSettings
+from tools.environment import LinksEnvironment
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -321,7 +326,22 @@ def test_release_runtime_toml_loads_for_the_worker(monkeypatch, tmp_path):
     assert PublicSettings().machine_issuers == ()
 
 
-def test_printer_preview_enables_only_the_remote_links_release():
+@pytest.mark.parametrize("environment", ("id-5", "id-6", "id-7"))
+def test_printer_preview_enables_only_the_remote_links_release(environment):
     config = ReleaseConfig.from_repo(ROOT)
-    assert config.resolve(environment="id-5", destination="remote").enabled
-    assert not config.resolve(environment="id-5", destination="local").enabled
+    remote = config.resolve(environment=environment, destination="remote")
+    assert remote.enabled
+    assert not config.resolve(environment=environment, destination="local").enabled
+    dependencies = DependencyCatalog.from_repo(ROOT).for_plan(environment, DependencyPhase.BEFORE)
+    identity, = (dependency for dependency in dependencies if dependency.name == "identity")
+    assert not identity.lifecycle
+    steps = remote.release.values["stack"]["up"]["steps"]
+    assert all(step["kind"] != "secrets_ensure" for step in steps)
+
+
+@pytest.mark.parametrize("database_id", ("links-a", "links-b"))
+def test_links_credentials_are_scoped_to_the_admitted_database(database_id):
+    provider = LinksEnvironment(
+        ROOT, {"PLZK_SCHEMA_DATABASE_ID": database_id}, plan_environment="preview"
+    )
+    assert provider.generated_secret_scope() == database_id

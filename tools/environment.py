@@ -169,6 +169,7 @@ def build_registry() -> EnvRegistry:
 class LinksEnvironment(RegistryOnlyStackEnvironment):
     """Expose release metadata; Identity's hooks issue the generated bindings."""
 
+    secret_scope_selectors = ("PLZK_SCHEMA_DATABASE_ID",)
     registry = EnvRegistry(
         variables=tuple(
             variable

@@ -187,7 +187,6 @@ delivery:
           - worker
         up:
           steps:
-          - kind: secrets_ensure
           - kind: compose
             args:
             - up
@@ -243,7 +242,7 @@ delivery:
               path: /health
               status: 200
     environments:
-      id-5:
+      id-5: &printer_preview
         destinations:
           remote:
             enabled: true
@@ -261,6 +260,8 @@ delivery:
             PLZK_WORKER_SMTP_FROM: links@plazia.test
             PLZK_WORKER_SMTP_PORT: '1025'
             PLZK_WORKER_SMTP_SECURITY: plain
+      id-6: *printer_preview
+      id-7: *printer_preview
       production:
         policy: production
     policies:
@@ -316,6 +317,7 @@ delivery:
         PLZK_SCHEMA_DATABASE_ID: PLZ_POSTGRES_LINKS_DATABASE_ID
     identity:
       repository: ../plazia-identity
+      phase: before
       lifecycle: false
       registries: [domain]
       outputs:
