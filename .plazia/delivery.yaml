@@ -16,9 +16,11 @@ delivery:
         image: plazia-links:local
         containerfile: ops/containers/Containerfile
         base_images:
+          PLZ_STEP_CLI_IMAGE: ${PLZ_STEP_CLI_IMAGE:-}
           PLZ_UV_IMAGE: ${PLZ_UV_IMAGE:-}
           PLZ_PYTHON_IMAGE: ${PLZ_PYTHON_IMAGE:-}
         copy:
+        - {source: ../plazia/ops/compose/pki/step-tls.sh, target: step-tls.sh}
         - source: pyproject.toml
           target: plazia-links/pyproject.toml
         - source: uv.lock
@@ -250,7 +252,8 @@ delivery:
         - PLZK_IDENTITY_OWNER_EMAIL
         - PLZK_OPENFGA_URL
         - PLZK_IDENTITY_MACHINE_ISSUERS
-        - PLZ_PKI_ROOT_VOLUME
+        - PLZ_PKI_ROOT_FINGERPRINT
+        - PLZ_PKI_CA_URL
         - PLZK_WORKER_SMTP_HOST
         - PLZK_WORKER_SMTP_FROM
         dependencies: [plazia-postgres-links, identity, sessions, mailpit]
@@ -292,7 +295,8 @@ delivery:
         unit: main-sessions
       outputs:
         PLAZIA_SERVICES_NETWORK: PLAZIA_SERVICES_NETWORK
-        PLZ_PKI_ROOT_VOLUME: PLZ_PKI_ROOT_VOLUME
+        PLZ_PKI_ROOT_FINGERPRINT: PLZ_PKI_ROOT_FINGERPRINT
+        PLZ_PKI_CA_URL: PLZ_PKI_CA_URL
       secret_outputs:
         PLZK_REDIS_URL: PLZK_REDIS_URL
     mailpit:

@@ -1,5 +1,7 @@
 ARG PLZ_UV_IMAGE
 ARG PLZ_PYTHON_IMAGE
+ARG PLZ_STEP_CLI_IMAGE
+FROM ${PLZ_STEP_CLI_IMAGE} AS step
 FROM ${PLZ_UV_IMAGE} AS uv
 FROM ${PLZ_PYTHON_IMAGE} AS builder
 COPY --from=uv /uv /bin/uv
@@ -16,6 +18,9 @@ WORKDIR /app
 RUN useradd --uid 10001 --create-home app
 COPY --from=builder --chown=app:app /plazia-links/.venv /plazia-links/.venv
 ENV PATH="/plazia-links/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+COPY --from=step /usr/local/bin/step /usr/local/bin/step
+COPY step-tls.sh /usr/local/bin/step-tls
+
 USER app
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--no-proxy-headers"]

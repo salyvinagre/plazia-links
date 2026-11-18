@@ -6,11 +6,13 @@ services:
   schema-finish:
     networks: [postgres]
   api:
-    networks: [postgres, plazia-edge, plazia-services]
-    volumes:
-      - pki_root:/run/plazia/pki-root:ro
+    entrypoint: [/bin/sh, /usr/local/bin/step-tls, root]
+    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, '8000', --no-access-log, --no-proxy-headers]
     environment:
+      PLZ_PKI_CA_URL: ${PLZ_PKI_CA_URL:?CA binding required}
+      PLZ_PKI_ROOT_FINGERPRINT: ${PLZ_PKI_ROOT_FINGERPRINT:?CA root fingerprint required}
       PLZK_IDENTITY_MACHINE_ISSUERS: ${PLZK_IDENTITY_MACHINE_ISSUERS:-[]}
+    networks: [postgres, plazia-edge, plazia-services]
   worker:
     networks: [postgres, plazia-services]
     environment:
@@ -19,10 +21,6 @@ services:
       PLZK_WORKER_SMTP_USER:
       PLZK_WORKER_SMTP_PORT:
       PLZK_WORKER_SMTP_SECURITY:
-volumes:
-  pki_root:
-    name: ${PLZ_PKI_ROOT_VOLUME:?Select the Root workload CA}
-    external: true
 networks:
   postgres:
     name: ${PLZ_POSTGRES_NETWORK:?Select the admitted PostgreSQL network}
