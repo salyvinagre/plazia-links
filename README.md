@@ -32,7 +32,7 @@ CRAP is currently deferred from this combined gate. Coverage supports the `fast`
 
 The acceptance lane creates isolated local PostgreSQL, Redis, OpenFGA and Mailpit containers, migrates with pinned Flyway, exercises real Chromium and removes its test resources. It uses a local signed OAuth fixture. It does not establish live Identity provisioning or production inbox delivery.
 
-Start the API with uv run uvicorn app.main:app --port 8000 and the persistent worker with uv run python -m worker.run. /login opens the organization management interface. Reserve 1–100 links, share a public URL, then use Activate to assign a valid HTTP(S) destination. Visitors receive one activation email for that link.
+Start the API with `uv run uvicorn app.main:app --port 8000`. Open `/login`, reserve 1–100 links and share a public URL. Use Activate to assign a valid HTTP(S) destination and queue an email to subscribers. Run `uv run python -m worker.run` to process one batch locally.
 
 Use the pool navigation pages to reach all reserved pools. Choose a pool to inspect
 its links. The three-dot “Pool actions” menu offers “Rename pool”, “Delete links”

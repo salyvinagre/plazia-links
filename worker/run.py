@@ -1,7 +1,7 @@
-"""Run the durable activation queue independently of the API process."""
+"""Run a bounded activation email or retention job."""
 
 import asyncio
-from time import monotonic
+from argparse import ArgumentParser
 
 from shared_notifications.email_smtp import SmtpEmailTransport, SmtpEmailTransportConfiguration
 
@@ -14,7 +14,7 @@ from app.platform.telemetry import build_telemetry
 
 
 class WorkerRuntime:
-    """Own worker composition and telemetry for the lifetime of the queue loop."""
+    """Own worker composition and telemetry for one job invocation."""
 
     def __init__(self, settings: WorkerSettings, origin: PublicSettings) -> None:
         setup_logging()
@@ -28,7 +28,6 @@ class WorkerRuntime:
         self._workflow = ActivationEmailsWorkflow(
             self._queue, transport, origin.public_base_url, self._telemetry
         )
-        self._interval = settings.interval
 
     @staticmethod
     def transport(settings: WorkerSettings) -> SmtpEmailTransport:
@@ -46,33 +45,22 @@ class WorkerRuntime:
             )
         )
 
-    async def run(self) -> None:
-        iterations = 0
-        sample_due = 0.0
+    async def run(self, *, cleanup: bool = False) -> None:
         try:
-            while True:
-                if monotonic() >= sample_due:
-                    try:
-                        await self._queue.sample(self._telemetry)
-                    except Exception as error:
-                        get_logger(__name__).warning(
-                            "Activation queue sample failed",
-                            extra={"error_type": type(error).__name__},
-                        )
-                    sample_due = monotonic() + 60
+            async with asyncio.timeout(90):
+                if cleanup:
+                    await self._queue.cleanup()
+                    return
                 try:
-                    worked = await self._workflow.run_once()
-                    if iterations % 720 == 0:
-                        await self._queue.cleanup()
-                    iterations += 1
+                    await self._queue.sample(self._telemetry)
                 except Exception as error:
-                    get_logger(__name__).error(
-                        "Activation delivery iteration failed",
+                    get_logger(__name__).warning(
+                        "Activation queue sample failed",
                         extra={"error_type": type(error).__name__},
                     )
-                    worked = False
-                if not worked:
-                    await asyncio.sleep(self._interval)
+                for _ in range(16):
+                    if not await self._workflow.run_once():
+                        break
         finally:
             try:
                 self._telemetry.force_flush()
@@ -81,4 +69,11 @@ class WorkerRuntime:
 
 
 if __name__ == "__main__":
-    asyncio.run(WorkerRuntime(WorkerSettings(), PublicSettings()).run())
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument("--cleanup", action="store_true")
+    options = parser.parse_args()
+    try:
+        asyncio.run(WorkerRuntime(WorkerSettings(), PublicSettings()).run(cleanup=options.cleanup))
+    except Exception as error:
+        get_logger(__name__).error("Links job failed", extra={"error_type": type(error).__name__})
+        raise SystemExit(1) from None

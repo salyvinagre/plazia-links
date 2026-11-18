@@ -173,11 +173,23 @@ complete Links' stateful worker qualification/fencing and admit its workload
 into the root production suite. Production operations enter from the Plazia
 root aggregate; a leaf `make plan RELEASE_ENV=production` is intentionally
 rejected by shared tooling. The API remains stateless across container
-replicas with external PostgreSQL/Redis; the durable email worker runs
-separately. No deployment, DNS/tunnel
-change, stateful rollout or restore qualification was performed here.
+replicas with external PostgreSQL and Redis.
 
-Run the persistent worker separately: uv run python -m worker.run. API processes do not drain email jobs. Worker settings use PLZK_WORKER_ selectors and the [worker] TOML section. SMTP security is starttls (default), tls or plain for isolated local capture only; plain SMTP is rejected in production. Timeout 10 seconds, worker idle interval 5 seconds, retry limit 5, exponential delays 30/60/120/240 seconds and cap 3600 seconds. Pending messages survive restart; SMTP acceptance immediately before a crash can duplicate delivery.
+Bind `links-activation-email` and `links-subscription-cleanup` in the
+[scheduled release jobs plan](../../plazia/ops/compose/nats/README.md#scheduled-release-jobs)
+when activating the Links runtime. Compose uses the retained image and
+worker credentials from the zero-replica `activation-email` service.
+Kubernetes uses the same image and commands in native Jobs. A delivery
+run processes up to 16 due emails within 90 seconds. Run retention
+hourly with `python -m worker.run --cleanup`. Both operations run
+independently of the API.
+
+Job settings use `PLZK_WORKER_` and the `[worker]` TOML section. SMTP
+defaults to STARTTLS with a 10-second timeout. Implicit TLS is also
+supported, and plain SMTP is available for isolated preview capture.
+The five attempts use retry delays of 30, 60, 120 and 240 seconds.
+Pending messages survive restart. A crash immediately after SMTP
+acceptance can duplicate delivery.
 
 Delivery incident diagnosis starts with the worker role: count unsent jobs, attempts>=5 and next_attempt_at, without selecting email addresses. Repair SMTP/configuration first. Manual dead-letter replay changes delivery state and must be a targeted operator action. Retention purges delivered/dead subscribers after 30 days and old unactivated subscriptions after 365 days, cascading their jobs. Link deletion cancels waiting work.
 

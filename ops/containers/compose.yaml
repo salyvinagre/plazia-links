@@ -55,12 +55,11 @@ services:
       PLZK_OPENFGA_URL: ${PLZK_OPENFGA_URL:?Select the OpenFGA endpoint}
     depends_on:
       schema-finish: {condition: service_completed_successfully}
-  worker:
+  activation-email:
     <<: *runtime
-    restart: unless-stopped
+    scale: 0
+    restart: "no"
     command: [python, -m, worker.run]
     healthcheck: {disable: true}
     environment:
       PLZK_IDENTITY_PUBLIC_BASE_URL: ${PLZK_IDENTITY_PUBLIC_BASE_URL:?Select the public origin}
-    depends_on:
-      schema-finish: {condition: service_completed_successfully}

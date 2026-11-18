@@ -114,7 +114,7 @@ def test_smtp_security_modes_are_mutually_exclusive():
 
 
 @pytest.mark.parametrize("flush_failure", [False, True])
-async def test_worker_failures_retry_without_exposing_recipient(monkeypatch, caplog, flush_failure):
+async def test_job_failure_closes_telemetry_and_can_be_retried(monkeypatch, caplog, flush_failure):
     import worker.run as worker
 
     configured = worker.WorkerSettings(database_url="postgresql://worker")
@@ -128,12 +128,29 @@ async def test_worker_failures_retry_without_exposing_recipient(monkeypatch, cap
         telemetry.force_flush.side_effect = OSError()
     monkeypatch.setattr(worker, "build_telemetry", lambda *args: telemetry)
     monkeypatch.setattr(worker, "PostgresDeliveryQueue", lambda *args: AsyncMock())
-    monkeypatch.setattr(
-        worker.asyncio, "sleep", AsyncMock(side_effect=[None, asyncio.CancelledError])
-    )
-    with pytest.raises(OSError if flush_failure else asyncio.CancelledError):
+    with pytest.raises(OSError):
         await worker.WorkerRuntime(configured, public).run()
-    assert workflow.run_once.await_count == 2
+    workflow.run_once.assert_awaited_once()
     telemetry.force_flush.assert_called_once_with()
     telemetry.shutdown.assert_called_once_with()
     assert "subscriber@example.com" not in caplog.text
+
+
+@pytest.mark.parametrize("cleanup", [False, True])
+async def test_job_runs_a_bounded_batch_or_retention(monkeypatch, cleanup):
+    import worker.run as worker
+
+    monkeypatch.setattr(worker, "SchemaAuthority", Mock())
+    monkeypatch.setattr(worker, "build_telemetry", Mock())
+    queue = AsyncMock()
+    workflow = AsyncMock()
+    workflow.run_once.return_value = True
+    monkeypatch.setattr(worker, "PostgresDeliveryQueue", lambda *args: queue)
+    monkeypatch.setattr(worker, "ActivationEmailsWorkflow", lambda *args: workflow)
+    runtime = WorkerRuntime(
+        worker.WorkerSettings(database_url="postgresql://worker"),
+        worker.PublicSettings(public_base_url="https://links.example"),
+    )
+    await runtime.run(cleanup=cleanup)
+    assert workflow.run_once.await_count == (0 if cleanup else 16)
+    assert queue.cleanup.await_count == int(cleanup)

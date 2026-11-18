@@ -81,7 +81,6 @@ class WorkerSettings(ServiceSettings):
     smtp_from_name: str = "Plazia Links"
     smtp_security: Literal["starttls", "tls", "plain"] = "starttls"
     smtp_timeout: float = Field(default=10, gt=0, le=60)
-    interval: float = Field(default=5, ge=0.1, le=3600)
 
     def validate_runtime(self) -> None:
         super().validate_runtime()

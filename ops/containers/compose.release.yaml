@@ -13,7 +13,7 @@ services:
       PLZ_PKI_ROOT_FINGERPRINT: ${PLZ_PKI_ROOT_FINGERPRINT:?CA root fingerprint required}
       PLZK_IDENTITY_MACHINE_ISSUERS: ${PLZK_IDENTITY_MACHINE_ISSUERS:-[]}
     networks: [postgres, plazia-edge, plazia-services]
-  worker:
+  activation-email:
     networks: [postgres, plazia-services]
     environment:
       PLZK_WORKER_SMTP_HOST: ${PLZK_WORKER_SMTP_HOST:?Select the SMTP endpoint}

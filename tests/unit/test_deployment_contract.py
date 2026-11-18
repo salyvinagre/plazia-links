@@ -62,7 +62,7 @@ def test_smtp_configuration_survives_release_projection(monkeypatch, tmp_path, o
     for key in fields:
         selector = "PLZK_WORKER_" + key
         monkeypatch.delenv(selector, raising=False)
-        value = bindings["services"]["worker"]["environment"][selector]
+        value = bindings["services"]["activation-email"]["environment"][selector]
         resolved = (
             ReleaseExpansion.text(value, env=environment)
             if value is not None
@@ -263,7 +263,7 @@ def test_shared_secret_projection_mounts_credentials_only_into_their_consumers(t
     )
     payload = yaml.safe_load(projection.compose_file.read_text())["services"]
     api = payload["api"]["environment"]
-    worker = payload["worker"]["environment"]
+    worker = payload["activation-email"]["environment"]
     assert api["PLZK_DATABASE_URL_FILE"].endswith("plzk_database_url")
     assert worker["PLZK_WORKER_DATABASE_URL_FILE"].endswith("plzk_worker_database_url")
     assert "PLZK_SCHEMA_DATABASE_URL_FILE" not in api | worker
@@ -281,10 +281,10 @@ def test_release_topology_keeps_worker_and_owner_off_public_ingress():
     topology = yaml.safe_load((ROOT / "ops/containers/compose.release.yaml").read_text())
     services = topology["services"]
     assert set(services["api"]["networks"]) == {"postgres", "plazia-edge", "plazia-services"}
-    assert set(services["worker"]["networks"]) == {"postgres", "plazia-services"}
+    assert set(services["activation-email"]["networks"]) == {"postgres", "plazia-services"}
     for name in ("schema-prepare", "schema-migrate", "schema-finish"):
         assert services[name]["networks"] == ["postgres"]
-    worker = services["worker"]["environment"]
+    worker = services["activation-email"]["environment"]
     assert set(worker) == {
         "PLZK_WORKER_SMTP_HOST",
         "PLZK_WORKER_SMTP_FROM",
@@ -300,7 +300,10 @@ def test_release_topology_keeps_worker_and_owner_off_public_ingress():
         ",/run/secrets/plzk_flyway_user.toml"
     )
     assert "/health" in base["services"]["api"]["healthcheck"]["test"][-1]
-    assert base["services"]["worker"]["healthcheck"]["disable"]
+    assert "worker" not in base["services"]
+    job = base["services"]["activation-email"]
+    assert job["healthcheck"]["disable"]
+    assert job["scale"] == 0 and job["restart"] == "no"
     assert "ports" not in base["services"]["api"]
     assert (
         base["services"]["api"]["depends_on"]["schema-finish"]["condition"]
@@ -315,6 +318,26 @@ def test_release_topology_keeps_worker_and_owner_off_public_ingress():
     )
     assert artifact.target == "/retained/links/flyway"
     assert artifact.source_path(ROOT).joinpath("migrations/V2__pool_management.sql").is_file()
+
+
+def test_release_captures_activation_and_retention_for_the_runtime_unit():
+    from plazia_tooling.release.hooks.command import ReleaseHookCommand
+
+    selected = ReleaseConfig.from_repo(ROOT).resolve(environment="id-7", destination="remote")
+    image = "example.invalid/links@sha256:" + "a" * 64
+    jobs = ReleaseHookCommand.capture(
+        repo_root=ROOT,
+        selection=selected,
+        environment={"PLZK_IMAGE": image, "PLZK_SCHEMA_DATABASE_ID": "fixture-links-db"},
+        unit="runtime",
+        operations=True,
+    )
+    assert jobs is not None
+    assert {job.name: job.arguments for job in jobs} == {
+        "links-activation-email": ("python", "-m", "worker.run"),
+        "links-subscription-cleanup": ("python", "-m", "worker.run", "--cleanup"),
+    }
+    assert all(job.service == "activation-email" and job.inputs["image"] == image for job in jobs)
 
 
 def test_release_runtime_toml_loads_for_the_worker(monkeypatch, tmp_path):
@@ -333,7 +356,7 @@ def test_printer_preview_enables_only_the_remote_links_release(environment):
     assert remote.enabled
     assert not config.resolve(environment=environment, destination="local").enabled
     dependencies = DependencyCatalog.from_repo(ROOT).for_plan(environment, DependencyPhase.BEFORE)
-    identity, = (dependency for dependency in dependencies if dependency.name == "identity")
+    (identity,) = (dependency for dependency in dependencies if dependency.name == "identity")
     assert not identity.lifecycle
     steps = remote.release.values["stack"]["up"]["steps"]
     assert all(step["kind"] != "secrets_ensure" for step in steps)

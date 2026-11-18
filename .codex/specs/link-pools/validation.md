@@ -421,3 +421,21 @@ The OpenAPI style warnings include the deliberate difference between changing
 read projections and immutable mutation/replay representations. No validator
 exclusions or compatibility response branches were introduced. The review does
 not claim a general exact diff of every catalog property or ACL.
+
+## Scheduled release jobs — 2026-11-18
+
+The shared release controller at Plazia `355a2f749` launched the Links
+image through the retained Compose runner and the native Kubernetes Job
+launcher. Both used a five-second JetStream schedule, fresh PG18 databases,
+fixture Identity authority and an isolated SMTP inbox.
+
+| Disposable target | Activate HTTP response | Activate to email receipt | SMTP 451 to accepted retry | Activate to retry settled |
+| --- | ---: | ---: | ---: | ---: |
+| Podman Compose | 36 ms | 5.30 s | 34.53 s | 43.60 s |
+| Kubernetes (kind) | 18 ms | 5.60 s | 33.37 s | 39.10 s |
+
+Both targets stopped the API before the first SMTP attempt for the retry case.
+SMTP returned 451 once, PostgreSQL recorded the existing 30-second backoff,
+and the next attempt delivered one email with the expected short URL. The
+separate cleanup firing removed an aged subscription and retained the fresh
+one while the API was still stopped. All data and services were disposable.

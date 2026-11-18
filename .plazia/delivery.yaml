@@ -129,7 +129,7 @@ delivery:
           - schema-prepare
           - schema-finish
           - api
-          - worker
+          - activation-email
           env_name: PLZK_IMAGE
         flyway:
           services:
@@ -143,7 +143,7 @@ delivery:
       - selector: PLZK_CONFIG
         services:
         - api
-        - worker
+        - activation-email
         - schema-prepare
         - schema-finish
         sources:
@@ -162,7 +162,7 @@ delivery:
         - PLZK_OPENFGA_STORE_ID
         - PLZK_OPENFGA_MODEL_ID
         - PLZK_IDENTITY_CLIENT_SECRET
-        worker:
+        activation-email:
         - PLZK_WORKER_DATABASE_URL
         - PLZK_WORKER_SMTP_PASSWORD
       optional_secrets:
@@ -186,7 +186,7 @@ delivery:
           - schema-migrate
           - schema-finish
           - api
-          - worker
+          - activation-email
         up:
           steps:
           - kind: compose
@@ -197,6 +197,15 @@ delivery:
             - '{services}'
       preflight:
         compose_health: true
+      operations:
+        links-activation-email:
+          provider: links-activation-email
+          module: tools.jobs
+          units: [runtime]
+        links-subscription-cleanup:
+          provider: links-subscription-cleanup
+          module: tools.jobs
+          units: [runtime]
       hooks:
         links-identity-session:
           provider: identity-session
@@ -274,7 +283,7 @@ delivery:
         kind: production
         configuration:
         - selector: PLZK_CONFIG
-          services: [api, worker, schema-prepare, schema-finish]
+          services: [api, activation-email, schema-prepare, schema-finish]
           sources:
           - ops/containers/config/runtime.toml
           - ops/containers/config/production.toml
