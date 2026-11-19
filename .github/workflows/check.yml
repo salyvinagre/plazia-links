@@ -27,7 +27,7 @@ jobs:
         echo "GIT_CONFIG_GLOBAL=$GIT_CONFIG_GLOBAL" >> "$GITHUB_ENV"
         # Defer secret expansion until Git requests a credential.
         # shellcheck disable=SC2016
-        git config --global credential.https://git.home.arpa.helper '!f() { printf "%s\n" "username=ci-saly" "password=$PLAZIA_GIT_TOKEN"; }; f'
+        git config --global credential.https://git.home.arpa.helper '!f() { printf "%s\n" "username=ci" "password=$PLAZIA_GIT_TOKEN"; }; f'
         git config --global url.https://git.home.arpa/salyvinagre/.insteadOf https://github.com/salyvinagre/
     - name: Require the private source credential
       env:
@@ -82,7 +82,7 @@ jobs:
         echo "GIT_CONFIG_GLOBAL=$GIT_CONFIG_GLOBAL" >> "$GITHUB_ENV"
         # Defer secret expansion until Git requests a credential.
         # shellcheck disable=SC2016
-        git config --global credential.https://git.home.arpa.helper '!f() { printf "%s\n" "username=ci-saly" "password=$PLAZIA_GIT_TOKEN"; }; f'
+        git config --global credential.https://git.home.arpa.helper '!f() { printf "%s\n" "username=ci" "password=$PLAZIA_GIT_TOKEN"; }; f'
         git config --global url.https://git.home.arpa/salyvinagre/.insteadOf https://github.com/salyvinagre/
     - name: Require the private source credential
       env:
